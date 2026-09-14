@@ -34,28 +34,27 @@ WAIT  Shrieking: Swap in use is red — 35.6 GB in use, climbing 74 MB/min (held
 ```
 
 **Agent-first.** One local Rust daemon owns the database. The menu bar app, the
-`banshee` CLI and the MCP server are peer clients of it. Nine reads exist on all
-three surfaces: `pressure`, `headroom`, `census`, `alerts`, `deltas`, `samples`,
-`rollups`, `stats` and `health`. An end-to-end test fails the build if HTTP, CLI
-and MCP disagree by one byte. The MCP server also offers
-`reap_stale_sessions_preview` and `reap_orphans_preview`; the execute variants
-appear only when the operator enables them. Everything stays on the machine: a
-Unix socket in your own data directory, key-file auth, and no network traffic
-except an update check you can turn off ([SECURITY.md](SECURITY.md)).
+`banshee` CLI and the MCP server are peer clients of it, and the same nine reads
+exist on all three: `pressure`, `headroom`, `census`, `alerts`, `deltas`,
+`samples`, `rollups`, `stats` and `health`. By default the MCP server is read-only
+and safe to hand to any agent; it can preview a cleanup but not perform one. If you
+want your agent to reap stale sessions and orphaned helpers on your behalf, you
+enable the execute tools explicitly. Everything stays on the machine: a Unix socket
+in your own data directory, key-file auth, and no network traffic except an update
+check you can turn off ([SECURITY.md](SECURITY.md)).
 
 **It knows about agents.** Beyond load, memory, swap, thrash, thermal and disk, it
 measures two things a general-purpose monitor does not: agent sprawl (stale
 interactive sessions, IDE-spawned helpers, orphaned helpers) and managed agents
-(always-on monitoring software, counted once against one denominator). Every
-finding names who is responsible, by program, with counts and sizes. The reap
-actions are preview first, then confirm, against exactly that list.
+(the always-on monitoring software on a managed machine). Every finding names who
+is responsible, by program, with counts and sizes, and the reap actions work
+against exactly that list.
 
-**It is a daemon because the useful signals are rates.** Banshee replaced a shell
-script the author ran when the machine was already slow. By then the load average
-was in the dozens, swap was full, and days of forgotten agent sessions and orphaned
-helpers had built up unnoticed. Swap climbing at 74 MB a minute, CPU rising 25% a
-minute, a red condition held for an hour: a script run on demand cannot measure any
-of these, and they are the difference between a warning and a post-mortem.
+**It warns you before the crisis, not after.** Banshee runs all the time as a
+background service and notifies you when a condition has been red for long enough
+to matter. It can do that because it measures trends, not snapshots: swap climbing
+at 74 MB a minute is a warning an hour before swap is full, and no tool you open
+after the machine is already slow can see it.
 
 ## What you see
 
