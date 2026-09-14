@@ -11,16 +11,16 @@ of those answers with the same authority the menu bar has.
 
 ## Why another system monitor?
 
-A Mac already has many ways to show a person a CPU graph. None of them was built
+A Mac already has many ways to show you a CPU graph. None of them was built
 for a machine whose biggest consumers are agents: a dozen coding sessions, hundreds
 of MCP helper processes, some of them orphaned when the session that started them
 died. The agent is also the party best placed to fix this, and it cannot ask
 Activity Monitor anything. Existing monitors are a GUI first, with scripting added
 later if at all.
 
-Banshee is built the other way round. Every operation the person has is available
-to the agent: the verdict, the census of running processes, the alert history, what
-changed since an alert opened, and the reap actions. All of it is on the CLI and
+Banshee is built the other way round. Every operation you have, your agent has:
+the verdict, the census of running processes, the alert history, what changed since
+an alert opened, and the reap actions. All of it is on the CLI and
 over MCP, byte for byte what the app renders. `headroom` goes one step further and
 turns the verdict into the decision an agent needs: wait or go, how many more
 workers, and when to ask again.
@@ -119,7 +119,7 @@ itself, so Banshee.app must be installed and the daemon running. Each tool's
 description states the mistakes agents make with it: `checking` is not headroom,
 the recommended parallelism is to be used as given, and a delta across an
 observation gap is arithmetic on a hole. `headroom` is advice, not enforcement. The
-daemon informs, and your human decides ([ADR-0010](docs/adr/0010-headroom-is-a-decision.md)).
+daemon informs, and you decide ([ADR-0010](docs/adr/0010-headroom-is-a-decision.md)).
 
 ## Ask it
 
@@ -218,8 +218,8 @@ re-derived without meeting the argument. The full list is in
   invites tuning the number instead of the machine.
 - **Memory "purge", "clean" or "optimise".** macOS reclaims its own caches. Forcing
   it trades a real signal for a cosmetic one.
-- **An auto-kill mode.** Every reap is preview then confirm, by a person, against
-  the set they just read. A monitor that kills on its own is the incident.
+- **An auto-kill mode.** Every reap is preview then confirm, by you, against the
+  set you just read. A monitor that kills on its own is the incident.
 - **An LLM in the verdict loop.** The severity is a deterministic replay of stored
   history. The MCP server is how agents ask, never how the verdict is made.
 - **Widgets, multi-metric menu bars, fan speeds, SMC writes, private IOReport.**
