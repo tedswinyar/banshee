@@ -5,13 +5,29 @@ continuously and tells you *before* it falls over — a menu bar glyph that enco
 both how bad it is and which pressure source is winning, a window for the detail,
 and an MCP server so agents can ask.
 
-Banshee grew out of `perf-scan`, a one-shot shell survey the author ran when the
-machine was already slow. That script only ever answered the question *after* it
-hurt. On 2026-08-04 this machine reached load 76 on 8 cores with swap at
-35.6/36 GB before anyone looked; the causes — 17 multi-day `claude` sessions and
-~500 MCP helper processes, 45 of them orphaned — had been accumulating silently
-for days. **Every interesting signal here is a rate, and an on-demand script
-structurally cannot compute one.** That is the whole reason this is a daemon.
+<p align="center">
+  <img src="docs/images/popover.png" width="346" alt="The menu bar popover: the verdict, the dimensions out of band, and the best action">
+</p>
+
+<p align="center">
+  <img src="docs/images/window-verdict.png" width="360" alt="The Verdict tab: findings, best action first, each naming who is responsible">
+  <img src="docs/images/window-history.png" width="360" alt="The History tab: five-minute rollups of load with the bucket maximum drawn over the average">
+</p>
+<p align="center">
+  <img src="docs/images/window-census.png" width="360" alt="The Census tab: stale agent sessions, tmux, orphaned helpers, the biggest apps and the managed agents">
+  <img src="docs/images/window-alerts.png" width="360" alt="The Alerts tab: alert episodes with their peak, who was responsible and how long each ran">
+</p>
+
+*Every name and number in these screenshots comes from the shared test fixtures
+(`scripts/fixture-server.py` serves them to the real app), not from a real machine.*
+
+Banshee grew out of a one-shot shell survey the author ran whenever the machine
+was already slow. That script only ever answered the question *after* it hurt: by
+the time anyone looked, the load average was in the dozens, swap was full, and the
+cause — days of forgotten agent sessions and hundreds of orphaned helper processes —
+had been accumulating silently the whole time. **Every interesting signal here is a
+rate, and an on-demand script structurally cannot compute one.** That is the whole
+reason this is a daemon.
 
 ```
 🫧  Checking      not enough data yet — NOT a claim that anything is fine

@@ -56,6 +56,17 @@ in about a second:
 ./scripts/dev-build.sh   # debug build + warm the dev database + launch (dev profile)
 ```
 
+No daemon at all, or you want the app to show something other than this machine?
+`scripts/fixture-server.py` serves the shared wire fixtures in `tests/fixtures/` over a
+Unix socket, so the real app renders synthetic data (it is how the README's screenshots
+were taken):
+
+```bash
+mkdir -p /tmp/fx && printf fixture > /tmp/fx/key
+python3 scripts/fixture-server.py --socket /tmp/fx/api.sock --pressure shrieking &
+BANSHEE_API_SOCKET=/tmp/fx/api.sock BANSHEE_KEY_FILE=/tmp/fx/key build/Banshee.app/Contents/MacOS/Banshee
+```
+
 ## 4. Poke it from the command line
 
 ```bash
