@@ -5,10 +5,13 @@
 </head>
 <body>
 <h1>Third-party notices</h1>
-<p>This software bundles the following third-party components.</p>
+<p>This software bundles the following third-party components. Each is used unmodified;
+its source is available from <a href="https://crates.io">crates.io</a> under the name and
+version given, and from the repository linked where the crate declares one. Each license
+text below is reproduced once per distinct text, with the crates it covers.</p>
 {{#each licenses}}
 <h2>{{name}}</h2>
-<p>Used by: {{#each used_by}}{{crate.name}} {{crate.version}}{{#unless @last}}, {{/unless}}{{/each}}</p>
+<p>Used by: {{#each used_by}}{{#if crate.repository}}<a href="{{crate.repository}}">{{crate.name}} {{crate.version}}</a>{{else}}{{crate.name}} {{crate.version}}{{/if}}{{#unless @last}}, {{/unless}}{{/each}}</p>
 <pre>{{text}}</pre>
 {{/each}}
 </body>
