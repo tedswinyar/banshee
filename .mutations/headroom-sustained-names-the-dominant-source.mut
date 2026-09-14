@@ -1,0 +1,17 @@
+# When the LEVEL forces the wait, the reason names the dominant source's worst
+# dimension — what the menu bar names — not whichever zeroing red is declared
+# first. In the 2026-08-04 fixture that is swap, not cpu.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: the_shrieking_fixture_waits_five_minutes_and_names_the_dominant_source
+---OLD---
+        let cause = if sustained {
+            p.source
+                .and_then(|s| {
+                    worst_reading(p, |r| r.dimension.source() == s && r.band > Band::Green)
+                })
+                .or(zeroing_red)
+        } else {
+            zeroing_red
+        };
+---NEW---
+        let cause = worst_reading(p, |r| r.band == Band::Red);

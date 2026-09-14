@@ -1,0 +1,9 @@
+# With no BANSHEE_CLI and no `banshee` on PATH, the drill must still find the installed
+# CLI (banshee-xt5). Deleting that branch reproduces the first real release run:
+# `banshee: command not found` from the non-interactive shell release.sh ran in.
+file: scripts/restore-drill.sh
+test: test-release-checklist
+---OLD---
+elif [ -x "$BANSHEE_INSTALLED_CLI" ]; then
+---NEW---
+elif false; then

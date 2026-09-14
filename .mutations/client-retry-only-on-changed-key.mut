@@ -1,0 +1,9 @@
+# The 401 retry is CONDITIONAL on the re-read key differing (banshee-dqh). Pairs with
+# client-rereads-rotated-key: "always retry once on 401" passes that test while doubling
+# every request on a machine whose key is simply wrong — two requests for one answer.
+file: swift/Sources/BansheeCore/APIClient.swift
+test: testAnUnchangedKeyIsNotRetried
+---OLD---
+            if fresh != key, !fresh.isEmpty {
+---NEW---
+            if true {

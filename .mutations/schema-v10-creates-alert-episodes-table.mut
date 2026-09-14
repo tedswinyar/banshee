@@ -1,0 +1,13 @@
+# The v10 arm creates the alert_episodes table by that exact name (ADR-0009).
+# Misnaming it lets the migration and version bump succeed while the table the
+# episode store will read/write is absent — the a_v1 table-list check and the
+# interrupted-migration recovery check both catch it. Guards the JSON-in-detail
+# episode store WS1a builds on this table.
+file: rust/banshee-core/src/schema.rs
+test: schema
+---OLD---
+            conn.execute_batch(
+                "CREATE TABLE alert_episodes (
+---NEW---
+            conn.execute_batch(
+                "CREATE TABLE alert_epsiodes (

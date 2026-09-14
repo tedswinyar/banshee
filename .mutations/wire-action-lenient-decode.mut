@@ -1,0 +1,15 @@
+# A wire Action value this build doesn't know (a since-renamed/added action from
+# a daemon on a different version — the unknown-action crash) must decode to
+# .unknown, NOT throw and blank the whole verdict. Sparkle auto-update makes
+# version skew inevitable, so the lenient init(from:) is load-bearing.
+file: swift/Sources/BansheeCore/Models.swift
+test: testUnknownActionDecodesToUnknownNotThrow
+---OLD---
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Action(rawValue: raw) ?? .unknown
+---NEW---
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let a = Action(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "unknown action \(raw)"))
+        }
+        self = a

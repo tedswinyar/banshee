@@ -1,0 +1,15 @@
+# An open episode whose dimension has NO reading this tick is left alone: "not
+# measured" is not "below red". Treat absence as a step against a synthetic green
+# and a restart before the first census starts every census episode's recovery clock.
+file: rust/banshee-core/src/pressure/episode.rs
+test: an_unobserved_dimension_leaves_its_episode_untouched
+---OLD---
+            (Some(_), None) | (None, None) => None,
+---NEW---
+            (Some(e), None) => {
+                let mut next = e.clone();
+                next.state = EpisodeState::Recovering;
+                next.recovering_since = Some(now);
+                Some((next, true))
+            }
+            (None, None) => None,

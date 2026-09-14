@@ -1,0 +1,19 @@
+# One SUSTAINED dimension catastrophically past its red line rings the top bell
+# (Shrieking) on its own (banshee-m5y). Before this, magnitude stopped mattering
+# the instant a dimension went red: swap 28 GB into the red escalated no further
+# than swap a hair past the 12 GB line — both Wailing, because the top level was
+# reachable only by TWO sustained reds. Collapsing the escalation branch to a bare
+# `Level::Wailing` restores that blindness: a single swap dimension at severity 3.5
+# (well past the 3.0 ceiling), sustained an hour, reports Wailing instead of
+# Shrieking. The sustain requirement (is_sustained_red, upstream) is what keeps a
+# spike from ringing it — see core-a-catastrophic-spike-does-not-shriek.mut.
+file: rust/banshee-core/src/pressure/level.rs
+test: a_single_catastrophic_sustained_red_shrieks
+---OLD---
+        if worst_sustained >= catastrophic_severity {
+            Level::Shrieking
+        } else {
+            Level::Wailing
+        }
+---NEW---
+        Level::Wailing

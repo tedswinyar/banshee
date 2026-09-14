@@ -1,0 +1,16 @@
+# The restore drill runs the INSTALLED CLI before any `banshee` on PATH (banshee-xt5):
+# the installed copy is the one that matches the running daemon, and PATH is what a
+# non-interactive release shell does not have. Swapping the order makes the drill run
+# a failing PATH binary while a good installed one sits unused.
+file: scripts/restore-drill.sh
+test: test-release-checklist
+---OLD---
+elif [ -x "$BANSHEE_INSTALLED_CLI" ]; then
+  CLI="$BANSHEE_INSTALLED_CLI"
+elif command -v banshee >/dev/null 2>&1; then
+  CLI="banshee"
+---NEW---
+elif command -v banshee >/dev/null 2>&1; then
+  CLI="banshee"
+elif [ -x "$BANSHEE_INSTALLED_CLI" ]; then
+  CLI="$BANSHEE_INSTALLED_CLI"

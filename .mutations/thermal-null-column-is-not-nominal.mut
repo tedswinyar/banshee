@@ -1,0 +1,10 @@
+# A pre-v11 row has NULL in thermal_pressure_level, and 0 is a REAL reading
+# (nominal), so the store must surface None — never Some(0) — or migrated history
+# claims the kernel said the machine was cool when nobody had looked. The catching
+# test walks the real chain to v10, inserts a v10-shaped row, migrates, and reads it.
+file: rust/banshee-core/src/sample_store.rs
+test: a_pre_v11_row_reads_back_with_unrecorded_thermal_fields
+---OLD---
+        thermal_pressure_level: row.get(22)?,
+---NEW---
+        thermal_pressure_level: row.get::<_, Option<u32>>(22)?.or(Some(0)),

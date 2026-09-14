@@ -1,0 +1,12 @@
+# The daemon's stdout/stderr logs must be pre-created 0600 (banshee-a4i). launchd
+# creates StandardOutPath/StandardErrorPath honouring the inherited umask — measured
+# 0644 on a real machine 2026-09-06 — so anything the daemon logged about a failed
+# request or a webhook delivery was readable by exactly the local users the 0600 API
+# key file exists to exclude, making the key file's mode decorative. Pre-creating is
+# what makes it stick: launchd APPENDS to an existing file rather than recreating it.
+file: scripts/install-launchd.sh
+test: test-service
+---OLD---
+    chmod 600 "$_log" 2>/dev/null || true
+---NEW---
+    chmod 644 "$_log" 2>/dev/null || true

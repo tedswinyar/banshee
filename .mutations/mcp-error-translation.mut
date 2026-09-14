@@ -1,0 +1,14 @@
+# The MCP server must surface an API 5xx to the agent as isError (not relay the
+# error body as a success); this is the body_or_error status check.
+file: rust/banshee-mcp/src/main.rs
+test: a_5xx_error_reaches
+# Target text moved 2026-09-06: ADR-0008 made body_or_error take (status, text) rather
+# than a reqwest::Response, so `status.is_success()` became a `success` bool.
+---OLD---
+                if !success {
+                    let msg = value["error"].as_str().unwrap_or("unknown error");
+                    return Err(format!("{msg} ({status})"));
+                }
+                Ok(text)
+---NEW---
+                Ok(text)

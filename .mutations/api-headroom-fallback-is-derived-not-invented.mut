@@ -1,0 +1,25 @@
+# Before the first evaluation the API's headroom fallback is DERIVED from the
+# Checking placeholder by core, never hand-built in the API crate (ADR-0005,
+# ADR-0010 dec. 3). A hand-built "go" here is exactly the lie the read exists to
+# prevent.
+file: rust/banshee-api/src/lib.rs
+test: an_unevaluated_daemon_has_no_headroom
+---OLD---
+            .unwrap_or_else(|| {
+                banshee_core::pressure::headroom::derive(
+                    &Pressure::checking(now),
+                    None,
+                    &banshee_core::pressure::config::PressureConfig::default(),
+                )
+            })
+---NEW---
+            .unwrap_or_else(|| {
+                let mut h = banshee_core::pressure::headroom::derive(
+                    &Pressure::checking(now),
+                    None,
+                    &banshee_core::pressure::config::PressureConfig::default(),
+                );
+                h.should_wait = false;
+                h.recommended_parallelism = 1;
+                h
+            })

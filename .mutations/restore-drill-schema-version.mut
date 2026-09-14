@@ -1,0 +1,8 @@
+# The restore drill must reject a snapshot with no schema version (user_version=0)
+# — a pre-init or corrupt copy that opens but is not a real banshee database.
+file: scripts/restore-drill.sh
+test: test-release-checklist
+---OLD---
+[ "${version:-0}" -ge 1 ] || die "the snapshot has no schema version (user_version=$version)"
+---NEW---
+:

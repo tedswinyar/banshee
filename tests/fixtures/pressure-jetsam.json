@@ -1,0 +1,104 @@
+{
+    "evaluatedAt": "2026-09-09T11:22:33.456789Z",
+    "level": "shrieking",
+    "levelName": "Shrieking",
+    "source": "memory",
+    "glyph": "💀🧠",
+    "accessibilityLabel": "Banshee: Shrieking, memory",
+    "dimensions": [
+        {
+            "dimension": "memory",
+            "key": "memory",
+            "label": "Available memory",
+            "band": "green",
+            "value": 3600000000.0,
+            "unit": "bytes",
+            "severity": -1.8,
+            "heldSecs": 600,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "3.6 GB available",
+            "advisory": true,
+            "pending": null,
+            "recovering": false
+        },
+        {
+            "dimension": "kernelFree",
+            "key": "kernelFree",
+            "label": "Kernel reclaimable memory",
+            "band": "red",
+            "value": 11.0,
+            "unit": "percent",
+            "severity": 1.1,
+            "heldSecs": 300,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "11% reclaimable",
+            "advisory": true,
+            "pending": null,
+            "recovering": false
+        },
+        {
+            "dimension": "compressor",
+            "key": "compressor",
+            "label": "Compressed memory",
+            "band": "red",
+            "value": 9200000000.0,
+            "unit": "bytes",
+            "severity": 1.4,
+            "heldSecs": 300,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "9.2 GB held compressed",
+            "advisory": true,
+            "pending": null,
+            "recovering": false
+        },
+        {
+            "dimension": "jetsam",
+            "key": "jetsam",
+            "label": "Memory kills",
+            "band": "red",
+            "value": 2.0,
+            "unit": "count",
+            "severity": 1.5,
+            "heldSecs": 45,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "2 killed under memory pressure",
+            "advisory": false,
+            "pending": null,
+            "recovering": false
+        }
+    ],
+    "findings": [
+        {
+            "dimension": "jetsam",
+            "band": "red",
+            "message": "The kernel killed 2 process(es) under sustained memory pressure.",
+            "action": "relaunchApps",
+            "actionLabel": "Quit and relaunch the biggest apps",
+            "who": [
+                {
+                    "name": "Chrome",
+                    "count": 102,
+                    "detail": "8.9 GB"
+                },
+                {
+                    "name": "claude",
+                    "count": 10,
+                    "detail": "2.1 GB"
+                }
+            ],
+            "whoLine": "who: Chrome ×102 at 8.9 GB, claude ×10 at 2.1 GB"
+        }
+    ],
+    "sampleCount": 40,
+    "censusCount": 3,
+    "recovering": false,
+    "activity": {
+        "open": 1,
+        "lastHour": 1,
+        "lastDay": 1
+    }
+}

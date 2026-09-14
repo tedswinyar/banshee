@@ -1,0 +1,13 @@
+# A pre-v11 sample has no thermal level. The series builder must SKIP it, not read
+# it as 0: 0 is a real reading (nominal), so `unwrap_or(0)` would invent a calm
+# kernel from history that never looked — and a green "kernel reports nominal" row
+# where there should be NO row.
+file: rust/banshee-core/src/pressure/mod.rs
+test: an_unrecorded_thermal_level_produces_no_reading_not_a_nominal_one
+---OLD---
+            .filter_map(|s| {
+                s.thermal_pressure_level
+                    .map(|l| (s.sampled_at, f64::from(l)))
+---NEW---
+            .map(|s| {
+                (s.sampled_at, f64::from(s.thermal_pressure_level.unwrap_or(0)))

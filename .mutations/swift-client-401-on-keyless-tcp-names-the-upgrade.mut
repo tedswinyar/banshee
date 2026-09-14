@@ -1,0 +1,11 @@
+# A 401 on the keyless TCP fallback is "the daemon predates the socket", not "the key
+# was rotated"; the message must name the repair (update the daemon), because the two
+# states have different fixes and the rotation advice would send the user the wrong way.
+file: swift/Sources/BansheeCore/APIClient.swift
+test: testA401OnKeylessTCPNamesTheDaemonUpgrade
+---OLD---
+            if let lookedFor = fileKeyWithheldBecauseNoSocketAt {
+                // Not a rejected key — no key was sent. The daemon answered on TCP but
+---NEW---
+            if let lookedFor = Optional<String>.none {
+                // Not a rejected key — no key was sent. The daemon answered on TCP but

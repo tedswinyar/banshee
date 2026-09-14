@@ -1,0 +1,198 @@
+{
+  "evaluatedAt": "2026-08-30T14:41:25.000000Z",
+  "lookback": "1h",
+  "episodeId": null,
+  "requestedLookbackSecs": 585,
+  "anchorAt": "2026-08-30T14:31:40.000000Z",
+  "actualLookbackSecs": 585,
+  "verdict": {
+    "thenLevel": "restless",
+    "nowLevel": "restless",
+    "thenSource": "memory",
+    "nowSource": "memory",
+    "detail": "pressure unchanged at Restless"
+  },
+  "dimensions": [
+    {
+      "dimension": "cpu",
+      "key": "cpu",
+      "label": "CPU utilization",
+      "unit": "ratio",
+      "then": 0.2,
+      "now": 0.2,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "CPU 20% → 20% busy (+0 pts)"
+    },
+    {
+      "dimension": "thermal",
+      "key": "thermal",
+      "label": "Thermal pressure",
+      "unit": "count",
+      "then": 0.0,
+      "now": 0.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "thermal nominal → nominal"
+    },
+    {
+      "dimension": "memory",
+      "key": "memory",
+      "label": "Available memory",
+      "unit": "bytes",
+      "then": 1310720000.0,
+      "now": 991232000.0,
+      "delta": -319488000.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "available memory 1.3 GB → 991 MB (−319 MB)"
+    },
+    {
+      "dimension": "swap",
+      "key": "swap",
+      "label": "Swap in use",
+      "unit": "bytes",
+      "then": 6800000000.0,
+      "now": 8360000000.0,
+      "delta": 1560000000.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "swap 6.8 GB → 8.4 GB (+1.6 GB)"
+    },
+    {
+      "dimension": "kernelPressure",
+      "key": "kernelPressure",
+      "label": "Kernel memory pressure",
+      "unit": "count",
+      "then": 1.0,
+      "now": 1.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "kernel pressure normal → normal"
+    },
+    {
+      "dimension": "thrash",
+      "key": "thrash",
+      "label": "Swap thrash",
+      "unit": "perSecond",
+      "then": 0.0,
+      "now": 0.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "peak thrash 0 → 0 swap ops/sec (+0)"
+    },
+    {
+      "dimension": "agents",
+      "key": "agents",
+      "label": "Stale agent sessions",
+      "unit": "count",
+      "then": 0.0,
+      "now": 0.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "stale sessions 0 → 0 (+0)"
+    },
+    {
+      "dimension": "orphans",
+      "key": "orphans",
+      "label": "Orphaned helpers",
+      "unit": "count",
+      "then": 5.0,
+      "now": 5.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "orphaned helpers 5 → 5 (+0)"
+    },
+    {
+      "dimension": "corporate",
+      "key": "corporate",
+      "label": "Managed agents",
+      "unit": "percent",
+      "then": 49.2,
+      "now": 49.2,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "managed agents 49.2% → 49.2% of one core (+0.0)"
+    },
+    {
+      "dimension": "disk",
+      "key": "disk",
+      "label": "Disk headroom",
+      "unit": "bytes",
+      "then": 100000000000.0,
+      "now": 100000000000.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "free disk 100.0 GB → 100.0 GB (+0 B)"
+    },
+    {
+      "dimension": "uptime",
+      "key": "uptime",
+      "label": "Uptime",
+      "unit": "days",
+      "then": 0.003472222222222222,
+      "now": 0.010243055555555556,
+      "delta": 0.0067708333333333336,
+      "thenAt": "2026-08-30T14:31:40.000000Z",
+      "nowAt": "2026-08-30T14:41:25.000000Z",
+      "observationGapSecs": null,
+      "detail": "uptime 0.0 → 0.0 days"
+    }
+  ],
+  "consumers": [
+    {
+      "name": "Chrome",
+      "kind": "appGroup",
+      "thenCount": 100,
+      "nowCount": 34,
+      "thenBytes": 8000000000,
+      "nowBytes": 4000000000,
+      "deltaBytes": -4000000000,
+      "detail": "freed 4.0 GB from Chrome (×100 → ×34)"
+    },
+    {
+      "name": "claude",
+      "kind": "sessions",
+      "thenCount": 8,
+      "nowCount": 10,
+      "thenBytes": 1500000000,
+      "nowBytes": 2100000000,
+      "deltaBytes": 600000000,
+      "detail": "claude grew 600 MB (×8 → ×10)"
+    },
+    {
+      "name": "managed agents",
+      "kind": "rollup",
+      "thenCount": 13,
+      "nowCount": 13,
+      "thenBytes": 1000000000,
+      "nowBytes": 1400000000,
+      "deltaBytes": 400000000,
+      "detail": "managed agents grew 400 MB"
+    }
+  ],
+  "census": {
+    "thenAt": "2026-08-30T14:31:40.000000Z",
+    "nowAt": "2026-08-30T14:41:25.000000Z"
+  },
+  "observationGapSecs": null,
+  "summary": "vs 9m ago: freed 4.0 GB from Chrome (×100 → ×34); claude grew 600 MB (×8 → ×10); managed agents grew 400 MB; swap still grew 1.6 GB; available memory still fell 319 MB; pressure unchanged at Restless."
+}

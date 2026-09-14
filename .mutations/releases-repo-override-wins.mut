@@ -1,0 +1,8 @@
+# RELEASES_REPO is an OVERRIDE: when release.conf names a repository, publish.sh goes
+# there even on the runner, where GITHUB_REPOSITORY is also set. Dropping the override
+# branch would silently publish to the source repo and ignore the operator's choice.
+file: scripts/lib/releases-repo.sh
+test: test-releases-repo
+---OLD---
+  if [ -n "${RELEASES_REPO:-}" ]; then printf '%s\n' "$RELEASES_REPO"; return 0; fi
+---NEW---

@@ -1,0 +1,8 @@
+# episode_repeat_secs must be load-bearing. Hardcode the old cooldown and a 60s
+# configuration stops repeating at 90s.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_repeat_interval_is_load_bearing_config
+---OLD---
+    let repeat = Duration::seconds(config.episode_repeat_secs as i64);
+---NEW---
+    let repeat = Duration::seconds(3600);

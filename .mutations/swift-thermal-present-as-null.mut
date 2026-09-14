@@ -1,0 +1,13 @@
+# The wire contract is present-as-null: a nil thermal level must encode as a null
+# key, not vanish. encodeIfPresent is the tempting one-liner that drops it — the
+# same trap every other hand-written encoder in the Swift client guards against.
+file: swift/Sources/BansheeCore/SampleModels.swift
+test: RecordWireFormatTests/testThermalFieldsArePresentAsNullAndOptionalOnDecode
+---OLD---
+        if let thermalPressureLevel {
+            try c.encode(thermalPressureLevel, forKey: .thermalPressureLevel)
+        } else {
+            try c.encodeNil(forKey: .thermalPressureLevel)
+        }
+---NEW---
+        try c.encodeIfPresent(thermalPressureLevel, forKey: .thermalPressureLevel)

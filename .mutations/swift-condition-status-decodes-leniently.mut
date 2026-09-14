@@ -1,0 +1,11 @@
+# A condition status this build does not know decodes to .unknown — the honest
+# reading of "cannot tell" — rather than blanking the whole decision.
+file: swift/Sources/BansheeCore/HeadroomModels.swift
+test: testUnknownConditionStatusDecodesToUnknownNotThrow
+---OLD---
+        self = ConditionStatus(rawValue: raw) ?? .unknown
+---NEW---
+        guard let v = ConditionStatus(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: raw))
+        }
+        self = v

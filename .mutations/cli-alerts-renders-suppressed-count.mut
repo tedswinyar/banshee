@@ -1,0 +1,12 @@
+# "+N more" on the alerts view is the banshee-nvd fix on this surface: drop it and
+# forty storms read as one.
+file: rust/banshee-cli/src/main.rs
+test: alerts_renders_an_episode_with_its_span_peak_and_suppressed_count
+---OLD---
+        let more = if e.suppressed > 0 {
+            format!("  +{} more", e.suppressed)
+        } else {
+            String::new()
+        };
+---NEW---
+        let more = String::new();

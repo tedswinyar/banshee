@@ -1,0 +1,19 @@
+{
+  "_comment": "Generous-decode cross-implementation fixture (Rule 5 of the wire-format Five Rules). BOTH the Rust and Swift decode tests iterate this list: each `input` must decode, and re-encode to exactly `canonical`. This is what makes 'both sides accept every producer's format' a tested claim rather than a hope. Add a row whenever a new producer variant is found in the wild.",
+  "accept": [
+    { "input": "2026-03-17T14:30:00Z",              "canonical": "2026-03-17T14:30:00.000000Z" },
+    { "input": "2026-03-17T14:30:00.123Z",          "canonical": "2026-03-17T14:30:00.123000Z" },
+    { "input": "2026-03-17T14:30:00.123456Z",       "canonical": "2026-03-17T14:30:00.123456Z" },
+    { "input": "2026-03-17T14:30:00.123456+00:00",  "canonical": "2026-03-17T14:30:00.123456Z" },
+    { "input": "2026-03-17T15:30:00.123456+01:00",  "canonical": "2026-03-17T14:30:00.123456Z" },
+    { "input": "2026-03-17T20:00:00.000000+05:30",  "canonical": "2026-03-17T14:30:00.000000Z" },
+    { "input": "1969-12-31T23:59:59.000000Z",       "canonical": "1969-12-31T23:59:59.000000Z" }
+  ],
+  "reject": [
+    "",
+    "yesterday",
+    "2026-03-17",
+    "14:30:00",
+    "2026-13-01T00:00:00Z"
+  ]
+}

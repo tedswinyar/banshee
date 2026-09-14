@@ -1,0 +1,10 @@
+# Wire contract: UUIDs go out lowercased. Swift's `uuidString` is UPPERCASE, so
+# dropping `.lowercased()` on the delta's `episodeId` puts a mixed/upper-case UUID
+# on the wire that Rust would emit lower — a cross-language divergence the shared
+# fixture is meant to prevent. The episode-delta encode asserts the lowercase form.
+file: swift/Sources/BansheeCore/DeltaModels.swift
+test: testEpisodeDeltaEncodesItsIdLowercased
+---OLD---
+            try c.encode(episodeId.uuidString.lowercased(), forKey: .episodeId)
+---NEW---
+            try c.encode(episodeId.uuidString, forKey: .episodeId)

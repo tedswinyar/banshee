@@ -1,0 +1,8 @@
+# /alerts?since= must always include OPEN episodes however old: a three-day-old
+# episode still firing is exactly what a 24h read is asking about.
+file: rust/banshee-core/src/sample_store.rs
+test: a_window_excludes_old_closed_episodes_but_never_an_open_one
+---OLD---
+            "(started_at >= ?1 OR ended_at IS NULL) ORDER BY started_at DESC",
+---NEW---
+            "started_at >= ?1 ORDER BY started_at DESC",

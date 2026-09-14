@@ -1,0 +1,8 @@
+# assess() must decorate with the record AFTER this tick's transitions, or the
+# verdict lags the lifecycle by one evaluation on every transition.
+file: rust/banshee-core/src/pressure/mod.rs
+test: assess_decorates_with_the_post_reconcile_record
+---OLD---
+    pressure.attach_episodes(&record, now);
+---NEW---
+    pressure.attach_episodes(recent_episodes, now);

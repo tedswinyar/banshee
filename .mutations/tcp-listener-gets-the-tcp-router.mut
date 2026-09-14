@@ -1,0 +1,11 @@
+# THE PAIRING IS THE SECURITY DECISION (ADR-0008 Phase 3). The router cannot tell how
+# a request arrived, so main.rs builds one flavour per listener; hand the TCP listener
+# the socket flavour and the port accepts the key again while every unit test stays
+# green, because the unit tests build their own routers. Only the e2e harness drives
+# the shipped binary over both transports, which is why this entry runs it.
+file: rust/banshee-api/src/main.rs
+test: e2e
+---OLD---
+    let tcp = axum::serve(listener, build_router(state.clone(), Transport::Tcp))
+---NEW---
+    let tcp = axum::serve(listener, build_router(state.clone(), Transport::Unix))

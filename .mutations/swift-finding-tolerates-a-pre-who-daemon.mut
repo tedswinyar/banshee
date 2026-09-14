@@ -1,0 +1,8 @@
+# A daemon from before the who-line sends no `who` key; the Swift decoder must
+# read that as "names nobody", not fail and blank the verdict. WS2a.
+file: swift/Sources/BansheeCore/Models.swift
+test: testUnknownActionDecodesToUnknownNotThrow
+---OLD---
+        who = try c.decodeIfPresent([Consumer].self, forKey: .who) ?? []
+---NEW---
+        who = try c.decode([Consumer].self, forKey: .who)

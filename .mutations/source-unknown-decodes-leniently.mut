@@ -1,0 +1,14 @@
+# banshee-dnk: a daemon on a newer version naming a source this build has not
+# heard of (thermal, WS1b) must decode to .unknown, not throw and blank the whole
+# verdict. This mutation restores the derived decoder's behaviour — throw on an
+# unrecognised raw value — which is exactly the unknown-action crash shape on the
+# second strict String enum.
+file: swift/Sources/BansheeCore/Models.swift
+test: WireFormatTests/testUnknownSourceDecodesToUnknownNotThrow
+---OLD---
+        self = Source(rawValue: raw) ?? .unknown
+---NEW---
+        guard let known = Source(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: raw))
+        }
+        self = known

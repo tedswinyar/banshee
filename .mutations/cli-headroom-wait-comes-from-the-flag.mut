@@ -1,0 +1,9 @@
+# `banshee headroom` prints WAIT/GO from `shouldWait`, never re-derived from the
+# level (ADR-0005). The throttled fixture is Restless AND waiting, so a
+# level-based render prints GO.
+file: rust/banshee-cli/src/main.rs
+test: headroom_renders_wait_from_the_flag_not_the_level
+---OLD---
+    let verdict = if h.should_wait { "WAIT" } else { "GO" };
+---NEW---
+    let verdict = if h.level >= banshee_core::pressure::level::Level::Wailing { "WAIT" } else { "GO" };

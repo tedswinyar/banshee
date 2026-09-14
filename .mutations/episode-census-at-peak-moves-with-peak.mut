@@ -1,0 +1,10 @@
+# WS2d half 1: the stored census and the peak move TOGETHER — when a deeper red
+# resets the peak, the census behind it is re-captured. Freeze the assignment
+# (keep the old value) and `censusAtPeak` describes an earlier, milder moment
+# than the peak it is supposed to explain; the deeper-red assertion catches it.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_peak_census_tracks_the_worst_moment
+---OLD---
+    next.census_at_peak = census.map(summarise);
+---NEW---
+    next.census_at_peak = next.census_at_peak.clone();

@@ -1,0 +1,8 @@
+# The stale-sessions who names STALE sessions only; the fixture's live kiro-cli
+# must not appear beside the stale claude. WS2a.
+file: rust/banshee-core/src/pressure/who.rs
+test: the_stale_sessions_who_names_only_stale_sessions
+---OLD---
+        sessions_by_program(census, |s| s.is_stale)
+---NEW---
+        sessions_by_program(census, |_| true)

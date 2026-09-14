@@ -1,0 +1,12 @@
+# BANSHEE_HEADROOM_SLOT_BYTES reaches PressureConfig through from_env, the path
+# production uses (gotcha #9: a config knob tested only on a hand-built struct
+# proves nothing about the env).
+file: rust/banshee-api/src/sampler.rs
+test: the_resolved_cadence_is_propagated_to_the_pressure_model
+---OLD---
+        p.headroom_memory_per_slot_bytes = match env_secs(
+            "BANSHEE_HEADROOM_SLOT_BYTES",
+            p.headroom_memory_per_slot_bytes,
+        ) {
+---NEW---
+        p.headroom_memory_per_slot_bytes = match p.headroom_memory_per_slot_bytes {

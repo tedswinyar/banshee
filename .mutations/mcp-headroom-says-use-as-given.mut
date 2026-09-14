@@ -1,0 +1,9 @@
+# The headroom tool's description must tell the agent not to re-derive a
+# parallelism from raw numbers (ADR-0010) — the payload alone has not stopped
+# agents doing it.
+file: rust/banshee-mcp/src/main.rs
+test: the_headroom_tool_names_what_agents_get_wrong
+---OLD---
+                of that. Use `recommendedParallelism` AS GIVEN. \
+---NEW---
+                of that. \

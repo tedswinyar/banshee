@@ -1,0 +1,24 @@
+# gitleaks configuration — secret scanning before anything goes public.
+# Run: gitleaks detect --config .gitleaks.toml
+
+[extend]
+# Start from the battle-tested default ruleset.
+useDefault = true
+
+[allowlist]
+description = "Template allowlist"
+paths = [
+    # Issue-tracker exports are prose that trips entropy rules. Untracked in this tree,
+    # but a maintainer's checkout may keep pre-cutover history where they were tracked,
+    # and gitleaks scans every local commit.
+    '''\.beads/.*\.jsonl''',
+]
+regexes = [
+    # The sample key-file paths and header names are not secrets.
+    '''x-api-key''',
+    '''BANSHEE_API_KEY''',
+    # The canonical shared TEST UUID used across fixtures and unit tests
+    # (e.g. auth.rs's constant-time-compare test). A fixed, published test
+    # constant — not a credential. Scoped to the exact value, not a pattern.
+    '''e7ae86e2-308b-444c-8a3d-cd21467ab442''',
+]

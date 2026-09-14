@@ -1,0 +1,8 @@
+# The memory budget per worker is configuration, not a literal (ADR-0010). A
+# config value that silently does nothing is worse than no config value.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: the_memory_budget_per_slot_is_configuration_and_caps_the_answer
+---OLD---
+            Some((spendable / config.headroom_memory_per_slot_bytes as f64).floor() as u32)
+---NEW---
+            Some((spendable / (2u64 << 30) as f64).floor() as u32)

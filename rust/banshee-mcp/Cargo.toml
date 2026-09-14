@@ -1,0 +1,16 @@
+[package]
+name = "banshee-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+banshee-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+# Key-rotation tests need a real key file on disk to rewrite mid-test.
+tempfile = { workspace = true }

@@ -1,0 +1,13 @@
+# record_eval_ok must reset the consecutive-failure streak (not just stamp the
+# time); otherwise a recovered evaluation still reads as failing on /stats.
+file: rust/banshee-api/src/lib.rs
+test: ops_health_tracks_eval
+---OLD---
+    pub fn record_eval_ok(&mut self, now: DateTime<Utc>) {
+        self.last_evaluated_at = Some(now);
+        self.consecutive_eval_failures = 0;
+    }
+---NEW---
+    pub fn record_eval_ok(&mut self, now: DateTime<Utc>) {
+        self.last_evaluated_at = Some(now);
+    }

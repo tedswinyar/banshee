@@ -1,0 +1,7 @@
+# The plist is held at 0600 uniformly (the shell installer's can carry the Slack
+# credential; permissions must not depend on which installer ran last).
+file: swift/Sources/BansheeCore/DaemonInstaller.swift
+test: DaemonInstallerTests
+---OLD---
+            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: plistURL.path)
+---NEW---

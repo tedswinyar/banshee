@@ -1,0 +1,10 @@
+# Thrash must band on the WINDOW'S PEAK, not the newest interval (banshee-s4d).
+# The original bug: the verdict read GREEN at 24 ops/sec six minutes after an alert
+# fired RED at 1706, because de-escalation needs only 2 samples and `value` was the
+# newest one. Reverting to the raw rate series reproduces it exactly.
+file: rust/banshee-core/src/pressure/mod.rs
+test: thrash_bands_on_the_window_peak_so_a_storm_in_a_trough_still_reports_red
+---OLD---
+            windowed_peak(&rates, config.thrash_peak_window_secs)
+---NEW---
+            rates

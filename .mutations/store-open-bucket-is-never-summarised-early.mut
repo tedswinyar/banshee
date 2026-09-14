@@ -1,0 +1,9 @@
+# The bucket that holds `now` is not rolled up: a partial average recorded as final
+# is the failure the deferred design was right about. Include the open bucket and
+# the 12:00 bucket appears with one sample.
+file: rust/banshee-core/src/sample_store.rs
+test: sweep_rolls_up_closed_buckets_inside_the_raw_window_and_keeps_their_samples
+---OLD---
+        let recent_cutoff = bucket_start_of(now)?;
+---NEW---
+        let recent_cutoff = bucket_start_of(now)? + Duration::seconds(crate::sample::ROLLUP_BUCKET_SECS);

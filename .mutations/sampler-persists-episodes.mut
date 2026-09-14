@@ -1,0 +1,9 @@
+# The sampler must PERSIST the episodes the assessment produced, or the lifecycle
+# restarts from nothing on every tick and every restart (ADR-0009 dec. 9).
+file: rust/banshee-api/src/sampler.rs
+test: a_red_machine_records_a_persisted_alert
+---OLD---
+    for e in &assessment.episodes {
+        st.upsert_episode(e)?;
+    }
+---NEW---

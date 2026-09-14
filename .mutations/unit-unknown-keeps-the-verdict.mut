@@ -1,0 +1,13 @@
+# banshee-dnk: one dimension with a unit this build does not know (a thermal level
+# or a temperature from a newer daemon) must not take the other nine rows down. The
+# catching test injects the unknown unit into a REAL pressure fixture and asserts
+# the Pressure still decodes; making ReadingUnit strict again fails that decode.
+file: swift/Sources/BansheeCore/Models.swift
+test: WireFormatTests/testPressureWithUnknownSourceAndUnitStillDecodes
+---OLD---
+        self = ReadingUnit(rawValue: raw) ?? .unknown
+---NEW---
+        guard let known = ReadingUnit(rawValue: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: raw))
+        }
+        self = known

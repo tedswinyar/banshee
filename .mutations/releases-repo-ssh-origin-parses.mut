@@ -1,0 +1,7 @@
+# A developer checkout may name origin as ssh://git@github.com/owner/repo; the resolver
+# must read owner/repo out of that form too, not refuse it as "not GitHub".
+file: scripts/lib/releases-repo.sh
+test: test-releases-repo
+---OLD---
+    ssh://git@github.com/*/*) repo="${url#ssh://git@github.com/}" ;;
+---NEW---

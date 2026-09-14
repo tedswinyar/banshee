@@ -1,0 +1,18 @@
+# A jetsam kill rings the top bell AT ONCE, without the m5y sustain grace
+# (banshee-yk8). A kill is a confirmed past event — the kernel already destroyed
+# a process to survive — not a threshold spike that might recover, so the
+# `red_grace_secs` guard that stops transient spikes escalating does not apply.
+# Deleting the jetsam branch in `decide` drops a single FRESH red Jetsam (held 0s,
+# severity a hair past red, not sustained, nowhere near the catastrophic ceiling)
+# back through the ordinary ladder to Restless — where any other lone fresh red
+# lands — so `a_single_jetsam_kill_shrieks_without_the_sustain_grace` fails.
+file: rust/banshee-core/src/pressure/level.rs
+test: a_single_jetsam_kill_shrieks_without_the_sustain_grace
+---OLD---
+    if reds.iter().any(|c| c.dimension == Dimension::Jetsam) {
+        return Verdict {
+            level: Level::Shrieking,
+            source: dominant_source(&scoring),
+        };
+    }
+---NEW---

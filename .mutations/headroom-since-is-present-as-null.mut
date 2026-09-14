@@ -1,0 +1,11 @@
+# Condition.since goes out in the CANONICAL 6-digit form. Dropping the
+# wire_time::option attribute falls back to chrono's default, which agrees byte
+# for byte on a 6-significant-digit instant (a FALSE PIN, caught by mutate.sh)
+# and differs on a whole-second one — so the test pins `…00.000000Z`.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: the_wire_shape_is_camel_case_with_kubernetes_spellings_and_explicit_nulls
+---OLD---
+    #[serde(with = "crate::wire_time::option")]
+    pub since: Option<DateTime<Utc>>,
+---NEW---
+    pub since: Option<DateTime<Utc>>,

@@ -1,0 +1,11 @@
+# The daemon must REFUSE TO SERVE a socket that is group/other-accessible (ADR-0008).
+# bind() creates the socket 0755 under the usual umask — connectable by everybody — so
+# the chmod afterwards is the entire access control, and a silent failure to apply it
+# would leave the vulnerability this transport exists to close. Verified by execution
+# that macOS enforces the mode on connect: chmod 000 denies even the owner (EACCES).
+file: rust/banshee-api/src/main.rs
+test: the_socket_is_owner_only_or_the_daemon_refuses_to_serve
+---OLD---
+    if mode & 0o077 == 0 {
+---NEW---
+    if mode & 0o000 == 0 {

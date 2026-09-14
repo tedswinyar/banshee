@@ -1,0 +1,29 @@
+[package]
+name = "banshee-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+banshee-core = { workspace = true }
+chrono = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+constant_time_eq = { workspace = true }
+dirs = { workspace = true }
+# Credential-file hardening in auth.rs: O_NOFOLLOW so the key file cannot be
+# opened through a symlink, and geteuid so a file owned by another user is
+# refused rather than trusted.
+libc = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+# The Slack alert sink POSTs to a webhook from the async sampler, so this is
+# the async reqwest client — not the blocking one the CLI/MCP use.
+reqwest = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,60 @@
+{
+    "evaluatedAt": "2026-09-08T23:15:00.000000Z",
+    "level": "restless",
+    "shouldWait": true,
+    "recommendedParallelism": 0,
+    "retryAfterSecs": 60,
+    "cores": 8,
+    "reason": "Restless: Thermal pressure is red — kernel reports heavy (held 45s). Wait; retry in 60s.",
+    "conditions": [
+        {
+            "type": "Ready",
+            "status": "True",
+            "reason": "VerdictAvailable",
+            "message": "40 samples, 3 censuses in the window",
+            "since": null
+        },
+        {
+            "type": "CpuPressure",
+            "status": "False",
+            "reason": "AllGreen",
+            "message": "20% busy",
+            "since": "2026-09-08T23:05:00.000000Z"
+        },
+        {
+            "type": "MemoryPressure",
+            "status": "False",
+            "reason": "AllGreen",
+            "message": "12.0 GB available",
+            "since": "2026-09-08T23:05:00.000000Z"
+        },
+        {
+            "type": "ThermalPressure",
+            "status": "True",
+            "reason": "ThermalRed",
+            "message": "kernel reports heavy",
+            "since": "2026-09-08T23:14:15.000000Z"
+        },
+        {
+            "type": "DiskPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no disk reading yet",
+            "since": null
+        },
+        {
+            "type": "SprawlPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no agent sprawl reading yet",
+            "since": null
+        },
+        {
+            "type": "CorporatePressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no managed agents reading yet",
+            "since": null
+        }
+    ]
+}

@@ -1,0 +1,8 @@
+# replay must FAIL when any entry failed; the closing `[ "$fail" -eq 0 ]` is that
+# gate. Replacing it with `true` makes replay green over a rotted manifest.
+file: scripts/replay-mutations.sh
+test: test-mutations-manifest
+---OLD---
+[ "$fail" -eq 0 ]
+---NEW---
+true

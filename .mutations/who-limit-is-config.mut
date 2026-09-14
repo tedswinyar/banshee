@@ -1,0 +1,9 @@
+# who_limit is load-bearing config, not a constant: 2 and 5 must produce 2 and
+# 5 from seven candidates. A config value that silently does nothing is worse
+# than no config value (CLAUDE.md). WS2a.
+file: rust/banshee-core/src/pressure/who.rs
+test: the_who_limit_is_load_bearing_config
+---OLD---
+        .take(config.who_limit)
+---NEW---
+        .take(3)

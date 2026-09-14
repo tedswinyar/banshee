@@ -1,0 +1,13 @@
+# Stage 2 is a max over a TIME window, so the reported figure decays as a storm ages
+# out. Found by running the fixed daemon against a real machine (banshee-s4d): the
+# first implementation used an upper percentile and the live series climbed
+# 118 -> 523 ops/sec with no new storming, because a percentile's rank depends on how
+# many points are in the window and points merely LEAVING moved it to a higher order
+# statistic. Widening the window to a year makes the max cumulative and it never
+# decays again.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_storm_ageing_out_of_the_window_only_ever_decays
+---OLD---
+            let cutoff = at - window;
+---NEW---
+            let cutoff = at - chrono::Duration::days(365);

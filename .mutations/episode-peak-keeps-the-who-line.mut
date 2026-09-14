@@ -1,0 +1,9 @@
+# The episode's peak keeps the finding's who-line at that moment, so `banshee
+# alerts` can still say who it was after the census that knew has been swept.
+# WS2a.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_notice_reuses_the_findings_wording_then_says_how_long_and_who
+---OLD---
+        who_line: finding_for(r, pressure).and_then(|f| f.who_line.clone()),
+---NEW---
+        who_line: None,

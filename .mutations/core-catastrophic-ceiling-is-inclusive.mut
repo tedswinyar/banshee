@@ -1,0 +1,13 @@
+# The catastrophic-severity ceiling is INCLUSIVE (banshee-m5y): a sustained red
+# with severity EXACTLY at the ceiling shrieks, matching the band thresholds, which
+# are also >= (a value AT the red line is red). This is the boundary where Wailing
+# and Shrieking genuinely come apart — the co-varying-fixture trap (see CLAUDE.md)
+# is avoided only because the test pins the exactly-at and just-below cases side by
+# side. Weakening `>=` to `>` drops the exactly-at case to Wailing, and
+# the_catastrophic_ceiling_is_inclusive fails on its first assertion.
+file: rust/banshee-core/src/pressure/level.rs
+test: the_catastrophic_ceiling_is_inclusive
+---OLD---
+        if worst_sustained >= catastrophic_severity {
+---NEW---
+        if worst_sustained > catastrophic_severity {

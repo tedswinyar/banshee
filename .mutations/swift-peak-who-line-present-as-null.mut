@@ -1,0 +1,8 @@
+# EpisodePeak.whoLine is nullable and present-as-null; a stored pre-WS2a peak
+# re-encodes with the key present. WS2a.
+file: swift/Sources/BansheeCore/AlertModels.swift
+test: testAPeakWithoutAWhoLineDecodesAndEncodesItAsNull
+---OLD---
+            try c.encodeNil(forKey: .whoLine)
+---NEW---
+            _ = whoLine

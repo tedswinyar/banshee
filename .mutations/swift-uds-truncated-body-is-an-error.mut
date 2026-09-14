@@ -1,0 +1,14 @@
+# A body shorter than its own Content-Length is a TRUNCATED response and must be an
+# error. Returning the partial bytes would hand the decoder half a JSON document and the
+# failure would be reported as malformed JSON — pointing at the wrong thing. Mirrors
+# banshee_core::uds_http's decision (ADR-0008 Phase 2).
+file: swift/Sources/BansheeCore/UnixSocketHTTP.swift
+test: testABodyShorterThanItsContentLengthIsAnError
+---OLD---
+        case .some(let n):
+            // A body shorter than its own Content-Length is a TRUNCATED response.
+            throw APIError.decodingFailed(
+                "banshee-api response was truncated: \(bodyBytes.count) bytes of a declared \(n)")
+---NEW---
+        case .some:
+            body = Data(bodyBytes)

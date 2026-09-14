@@ -1,0 +1,8 @@
+# The default socket path, when it exists, is the transport. Ignoring it would leave
+# the app on keyless TCP against a current daemon — locked out for no reason.
+file: swift/Sources/BansheeCore/APIClient.swift
+test: testTheDefaultSocketIsUsedWhenPresent
+---OLD---
+        let socketPath: String? = fileExists(lookedFor) ? lookedFor : nil
+---NEW---
+        let socketPath: String? = nil

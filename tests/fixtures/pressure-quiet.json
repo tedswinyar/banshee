@@ -1,0 +1,51 @@
+{
+    "evaluatedAt": "2026-08-31T15:04:05.123456Z",
+    "level": "quiet",
+    "levelName": "Quiet",
+    "source": null,
+    "glyph": "😴🩹",
+    "accessibilityLabel": "Banshee: Quiet, recovering",
+    "dimensions": [
+        {
+            "dimension": "cpu",
+            "key": "cpu",
+            "label": "CPU utilization",
+            "band": "green",
+            "value": 0.53,
+            "unit": "ratio",
+            "severity": -3.2,
+            "heldSecs": 600,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "53% busy; 0.5× per core",
+            "advisory": false,
+            "pending": null,
+            "recovering": false
+        },
+        {
+            "dimension": "disk",
+            "key": "disk",
+            "label": "Disk headroom",
+            "band": "green",
+            "value": 71000000000.0,
+            "unit": "bytes",
+            "severity": -0.6,
+            "heldSecs": 600,
+            "observationGapSecs": null,
+            "trendPerSec": null,
+            "detail": "71.0 GB free",
+            "advisory": false,
+            "pending": null,
+            "recovering": true
+        }
+    ],
+    "findings": [],
+    "sampleCount": 40,
+    "censusCount": 3,
+    "recovering": true,
+    "activity": {
+        "open": 1,
+        "lastHour": 1,
+        "lastDay": 2
+    }
+}

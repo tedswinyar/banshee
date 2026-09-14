@@ -1,0 +1,21 @@
+    1     0  14608 21:43:13  10:59.18 ??       /sbin/launchd
+  504     1  15952 21:29:18  12:21.54 ??       /usr/libexec/logd
+ 2833  2801 276480 04:03:04   7:11.32 ttys005  claude
+ 4803  4790 141312 04:01:12   5:59.02 ttys007  claude
+22629 22610 139264 03:14:46   8:27.84 ttys009  claude
+63380 63001  60416 02:23:35   0:33.42 ??       claude
+77001 77000 204800 6-04:11:09  41:02.66 ttys012  claude
+88120 88100  96256 08-01:00:00  12:00.00 ttys014  claude
+91002 91000  71680 01:22:04   2:04.11 ??       kiro-cli
+33001     1  47104 03:10:00   0:44.20 ??       example-notes-mcp-server
+33002     1  38912 03:10:00   0:31.05 ??       example-tickets-mcp-server
+33003 22629  51200 03:14:00   0:52.10 ??       example-search-mcp-server
+44001     1  22528 02:00:00   0:09.00 ??       rust-language-server
+44002 22629  18432 02:00:00   0:09.00 ??       tree-sitter-cli
+55001     1 412672 21:40:00 176:45.22 ??       com.example.endpointagent
+55002     1  98304 21:40:00 206:53.07 ??       scan-helper
+55004     1  40960 02:00:00  30:00.00 ??       scan-helper
+55003     1  61440 21:40:00  82:36.81 ??       example-log-shipper
+66001 66000 3244032 05:12:44 234:07.42 ??       /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/152.0.7977.64/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper
+66002 66000 1048576 05:12:44  31:00.00 ??       /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+99100 99001   4096    00:03   0:00.02 ttys003  rg

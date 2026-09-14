@@ -1,0 +1,14 @@
+# attach_volumes must stay O(N) via the HashMap index; the O(N²) per-row scan
+# (linear find + to_string on every volume row) is the 626ms regression the perf
+# smoke test guards against.
+file: rust/banshee-core/src/sample_store.rs
+test: attaching_volumes_over_a_full_window
+---OLD---
+                if let Some(&i) = index.get(&id) {
+                    samples[i].volumes.push(vol);
+                }
+---NEW---
+                let _ = id;
+                if let Some(s) = samples.iter_mut().find(|s| s.id.to_string() == sample_id) {
+                    s.volumes.push(vol);
+                }

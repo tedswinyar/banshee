@@ -1,0 +1,11 @@
+# A recovery notice is delivered only when the peak warranted a notification AND
+# the machine is back at or below Stirring — the RECOVERY clause of
+# level_changed_materially, alone. Found by running the daemon: routing through the
+# whole function lets its escalation clause announce a Restless-peak episode's
+# recovery because ANOTHER dimension has since driven the machine to Shrieking.
+file: rust/banshee-core/src/pressure/episode.rs
+test: a_recovery_while_the_machine_has_since_got_worse_is_not_announced
+---OLD---
+                self.peak_level.warrants_notification() && self.level <= Level::Stirring
+---NEW---
+                level_changed_materially(Some(self.peak_level), self.level)

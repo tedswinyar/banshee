@@ -1,0 +1,9 @@
+# `banshee status` prints the server's who-line under each finding, verbatim.
+# WS2a.
+file: rust/banshee-cli/src/main.rs
+test: status_renders_the_shrieking_verdict_with_held_gap_and_findings
+---OLD---
+            if let Some(who) = &f.who_line {
+                let _ = writeln!(s, "     {who}");
+            }
+---NEW---

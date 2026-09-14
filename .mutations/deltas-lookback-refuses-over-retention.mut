@@ -1,0 +1,10 @@
+# WS2d: `vs` is REFUSED above the raw retention, never silently clamped — older
+# history is rollups with no census behind it, and an agent that asked for 48h
+# must be told no, not handed 24h dressed as 48h. Raise the ceiling to u64::MAX
+# and the out-of-bounds ask is accepted; the test asserts `48h` is an error.
+file: rust/banshee-core/src/pressure/deltas.rs
+test: parse_lookback_refuses_out_of_bounds_rather_than_clamping
+---OLD---
+    if secs > config.deltas_max_lookback_secs {
+---NEW---
+    if secs > u64::MAX {

@@ -1,0 +1,10 @@
+# CPU attribution follows the census's cumulative-CPU RULE — Σ cpu seconds over
+# the longest lifetime in the group — not raw cumulative seconds. In the fixture
+# claude has 62× kiro-cli's seconds but ran 82× longer, so the two orderings
+# swap positions two and three (WS2a).
+file: rust/banshee-core/src/pressure/who.rs
+test: the_cpu_who_uses_the_cumulative_cpu_rule_and_the_deduplicated_total
+---OLD---
+                cpu * 100.0 / life as f64,
+---NEW---
+                cpu,

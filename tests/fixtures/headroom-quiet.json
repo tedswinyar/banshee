@@ -1,0 +1,60 @@
+{
+    "evaluatedAt": "2026-08-31T15:04:05.123456Z",
+    "level": "quiet",
+    "shouldWait": false,
+    "recommendedParallelism": 3,
+    "retryAfterSecs": null,
+    "cores": 8,
+    "reason": "Quiet: room for 3 more workers on 8 cores — 53% busy; 0.5× per core.",
+    "conditions": [
+        {
+            "type": "Ready",
+            "status": "True",
+            "reason": "VerdictAvailable",
+            "message": "40 samples, 3 censuses in the window",
+            "since": null
+        },
+        {
+            "type": "CpuPressure",
+            "status": "False",
+            "reason": "AllGreen",
+            "message": "53% busy; 0.5× per core",
+            "since": "2026-08-31T14:54:05.123456Z"
+        },
+        {
+            "type": "MemoryPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no memory reading yet",
+            "since": null
+        },
+        {
+            "type": "ThermalPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no thermal reading yet",
+            "since": null
+        },
+        {
+            "type": "DiskPressure",
+            "status": "False",
+            "reason": "AllGreen",
+            "message": "71.0 GB free",
+            "since": "2026-08-31T14:54:05.123456Z"
+        },
+        {
+            "type": "SprawlPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no agent sprawl reading yet",
+            "since": null
+        },
+        {
+            "type": "CorporatePressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no managed agents reading yet",
+            "since": null
+        }
+    ]
+}

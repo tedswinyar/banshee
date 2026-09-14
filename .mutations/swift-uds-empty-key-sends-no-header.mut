@@ -1,0 +1,10 @@
+# An empty key must send NO X-Api-Key header at all: a blank header is an empty
+# credential (a failed auth attempt), not an unauthenticated probe of /health.
+file: swift/Sources/BansheeCore/UnixSocketHTTP.swift
+test: testAnEmptyKeySendsNoHeader
+---OLD---
+        if !key.isEmpty {
+            head += "X-Api-Key: \(key)\r\n"
+        }
+---NEW---
+        head += "X-Api-Key: \(key)\r\n"

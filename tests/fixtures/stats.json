@@ -1,0 +1,16 @@
+{
+    "schemaVersion": 10,
+    "samples": 5729,
+    "rollups": 8433,
+    "censuses": 288,
+    "alerts": 12,
+    "dbSizeBytes": 3560448,
+    "lastEvaluatedAt": "2026-09-01T15:04:05.123456Z",
+    "consecutiveEvalFailures": 0,
+    "lastSweptAt": "2026-09-01T15:00:00.000000Z",
+    "consecutiveSweepFailures": 0,
+    "selfFootprintBytes": 24117248,
+    "selfCpuSecs": 41.73,
+    "selfUptimeSecs": 15122.4,
+    "selfCpuPercent": 0.2759555615658
+}

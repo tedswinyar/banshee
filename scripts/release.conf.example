@@ -1,0 +1,43 @@
+# Release identity — copy to scripts/release.conf (gitignored) and fill in.
+# Without this file, builds are ad-hoc signed and notarization is skipped:
+# fine for local use, Gatekeeper will warn on other Macs.
+
+# Developer ID Application certificate, exactly as `security find-identity -p
+# codesigning -v` prints it:
+#SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID1234)"
+
+# Keychain profile for notarytool. One-time setup:
+#   xcrun notarytool store-credentials banshee-notarize \
+#       --apple-id <apple-id> --team-id <team-id>
+#NOTARIZE_PROFILE="banshee-notarize"
+
+# BUILD SERVER shape (a headless build machine): an App Store Connect API key instead
+# of the keychain profile — a file, works headless from launchd/ssh. When these
+# three are set they take precedence over NOTARIZE_PROFILE; setting only some of
+# them is a hard error, not a fall-through.
+#NOTARY_KEY_PATH="$HOME/.config/banshee-build/AuthKey.p8"
+#NOTARY_KEY_ID="XXXXXXXXXX"
+#NOTARY_ISSUER_ID="11111111-2222-3333-4444-555555555555"
+# The keychain FILE holding the Developer ID, for a machine where it is not in the
+# login keychain (codesign --keychain). Unlock it first (`security unlock-keychain`).
+#SIGNING_KEYCHAIN="$HOME/Library/Keychains/banshee-build.keychain-db"
+# The Sparkle EdDSA PRIVATE key as a file (generate_keys -x), for a machine whose
+# keychain does not hold it. Same key as everywhere else — never regenerate.
+#SPARKLE_PRIVATE_KEY_FILE="$HOME/.config/banshee-build/sparkle_private_key"
+# This file's location is overridable: BANSHEE_RELEASE_CONF=/path/to/release.conf.
+
+# Optional self-healing: when the keychain profile becomes inaccessible
+# (data-protection keychain locks after sleep/iCloud events), build-dmg.sh
+# re-provisions it if APPLE_ID and APPLE_TEAM_ID are exported — notarytool
+# prompts for the app-specific password interactively (never on the command
+# line, where `ps` could expose it).
+
+# Sparkle auto-update. The PUBLIC EdDSA key (the private key stays in the
+# keychain via Sparkle's generate_keys). build-dmg.sh REFUSES a real-identity
+# build without this (SKIP_SPARKLE=1 overrides) — a signed DMG that cannot
+# auto-update must be a deliberate act, never an accident.
+#SPARKLE_PUBLIC_KEY=""
+# Where publish.sh uploads the DMG + appcast. Normally UNSET: releases live on the
+# source repository itself (GITHUB_REPOSITORY on the runner, `origin` on a developer
+# machine). Set this only to publish somewhere else.
+#RELEASES_REPO="youruser/some-other-repo"

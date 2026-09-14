@@ -1,0 +1,9 @@
+# /stats says what Banshee itself costs (WS5, banshee-87l.13). A plausible constant
+# footprint would pass any "> 0" check; the catching test touches 64 MB and asserts
+# the footprint GREW, so only the real proc_pid_rusage read survives.
+file: rust/banshee-core/src/sys.rs
+test: self_usage_tracks_this_process
+---OLD---
+        footprint_bytes: info.ri_phys_footprint,
+---NEW---
+        footprint_bytes: 24 << 20,

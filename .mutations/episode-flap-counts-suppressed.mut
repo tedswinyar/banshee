@@ -1,0 +1,10 @@
+# A re-red inside the repeat interval reopens the SAME episode and is COUNTED as a
+# swallowed notification (banshee-nvd: one storm vs forty). Drop the increment and
+# the record can no longer tell them apart.
+file: rust/banshee-core/src/pressure/episode.rs
+test: a_flap_reopens_the_same_episode_and_counts_the_swallowed_notice
+---OLD---
+            if !escalated && !repeat_due {
+                next.suppressed = next.suppressed.saturating_add(1);
+            }
+---NEW---

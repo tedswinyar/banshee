@@ -1,0 +1,7 @@
+# Condition.since is nullable and present-as-null on the wire.
+file: swift/Sources/BansheeCore/HeadroomModels.swift
+test: testEncodesNullableFieldsAsPresentNulls
+---OLD---
+            try c.encodeNil(forKey: .since)
+---NEW---
+            _ = since

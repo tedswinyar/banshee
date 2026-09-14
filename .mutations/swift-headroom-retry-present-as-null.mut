@@ -1,0 +1,8 @@
+# Headroom.retryAfterSecs is nullable and present-as-null on the wire; the
+# hand-written encoder's encodeNil branch keeps the key when nothing is owed.
+file: swift/Sources/BansheeCore/HeadroomModels.swift
+test: testEncodesNullableFieldsAsPresentNulls
+---OLD---
+            try c.encodeNil(forKey: .retryAfterSecs)
+---NEW---
+            _ = retryAfterSecs

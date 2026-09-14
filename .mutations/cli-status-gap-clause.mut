@@ -1,0 +1,8 @@
+# The status view must show the "N gap before" clause when a held time was bounded
+# by a hole in observation (banshee-s6s honesty); dropping it hides that the red
+# run is shorter than "held" implies.
+file: rust/banshee-cli/src/main.rs
+test: status_renders_the_shrieking
+---OLD---
+                let _ = write!(s, ", {} gap before", fmt_secs(gap));
+---NEW---

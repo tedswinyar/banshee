@@ -1,0 +1,8 @@
+# The sweep must fold each aging census's scalars into its rollup before deleting
+# it; passing an empty set loses the month-scale sprawl trend permanently.
+file: rust/banshee-core/src/sample_store.rs
+test: sweep_folds_census_scalars
+---OLD---
+                let censuses = census_by_bucket.remove(&bucket).unwrap_or_default();
+---NEW---
+                let censuses: Vec<CensusScalars> = Vec::new();

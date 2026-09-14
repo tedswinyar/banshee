@@ -1,0 +1,18 @@
+{
+    "evaluatedAt": "2026-08-31T15:04:05.123456Z",
+    "level": "checking",
+    "levelName": "Checking",
+    "source": null,
+    "glyph": "🫧",
+    "accessibilityLabel": "Banshee: Checking",
+    "dimensions": [],
+    "findings": [],
+    "sampleCount": 0,
+    "censusCount": 0,
+    "recovering": false,
+    "activity": {
+        "open": 0,
+        "lastHour": 0,
+        "lastDay": 0
+    }
+}

@@ -1,0 +1,11 @@
+# The sampler publishes the headroom decision beside the verdict on every
+# evaluation (ADR-0010); without the store, /headroom serves "wait" forever
+# while /pressure says the machine is fine.
+file: rust/banshee-api/src/sampler.rs
+test: the_loop_publishes_a_verdict
+---OLD---
+                                *latest_headroom
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner()) = Some(headroom);
+---NEW---
+                                let _ = headroom;

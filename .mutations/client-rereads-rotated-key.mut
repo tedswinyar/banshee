@@ -1,0 +1,14 @@
+# A long-lived client must RE-READ the key file on 401, not resend the cached key
+# (banshee-dqh). The daemon rotates its key when the key file was group/other-readable,
+# which strands every already-running client: observed live when the MCP server 401'd
+# for the rest of a session while the daemon stayed healthy the whole time.
+#
+# The fixture rewrites the key file when it rejects the old key, so the test can tell
+# "retried" from "retried WITH FRESH CREDENTIALS" — asserting only that a 401 causes a
+# second request would pass with the key still cached.
+file: swift/Sources/BansheeCore/APIClient.swift
+test: testARotatedKeyIsRereadAndTheRequestRetried
+---OLD---
+            let fresh = keyProvider()
+---NEW---
+            let fresh = key

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232a3d"/>
+      <stop offset="1" stop-color="#12151f"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#30d158"/>
+      <stop offset="0.5" stop-color="#ff9f0a"/>
+      <stop offset="1" stop-color="#ff3b30"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="660" height="400" fill="url(#bg)"/>
+
+  <!-- faint skull watermark, bottom-right -->
+  <g fill="#ffffff" opacity="0.035" transform="translate(548 300) scale(0.5)">
+    <path d="M 0 -110 C 78 -110 130 -56 130 22 C 130 70 110 104 84 128 L 84 160 C 84 178 68 188 50 188 L -50 188 C -68 188 -84 178 -84 160 L -84 128 C -110 104 -130 70 -130 22 C -130 -56 -78 -110 0 -110 Z"/>
+    <circle cx="-43" cy="8" r="30" fill="#12151f"/>
+    <circle cx="43" cy="8" r="30" fill="#12151f"/>
+  </g>
+
+  <!-- icon slots are left EMPTY here — Finder drops the real app + Applications
+       alias onto these positions (set by AppleScript at ~x148 and ~x512, y=150) -->
+
+  <!-- arrow, in the wail/pressure gradient, from the app toward Applications -->
+  <g transform="translate(0 172)">
+    <rect x="266" y="-9" width="104" height="18" rx="9" fill="url(#arrow)"/>
+    <path d="M 366 -30 L 410 0 L 366 30 Z" fill="#ff3b30"/>
+  </g>
+
+  <!-- instruction + trust line -->
+  <text x="330" y="322" text-anchor="middle" font-family="-apple-system, Helvetica, Arial, sans-serif"
+        font-size="21" font-weight="600" fill="#c9d1e6">Drag Banshee into Applications</text>
+  <text x="330" y="352" text-anchor="middle" font-family="-apple-system, Helvetica, Arial, sans-serif"
+        font-size="13" fill="#7f88a3">signed · notarized · updates itself</text>
+</svg>

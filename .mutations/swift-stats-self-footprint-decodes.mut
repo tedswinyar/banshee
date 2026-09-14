@@ -1,0 +1,10 @@
+# The Swift Stats decoder must actually READ selfFootprintBytes, not default it —
+# the decodeIfPresent-with-default shape (for pre-WS5 daemons) is exactly the one
+# where a silently ignored key still decodes. The fixture carries a non-zero value
+# and the test asserts it, so this mutation reads 0 and fails.
+file: swift/Sources/BansheeCore/AlertModels.swift
+test: RecordWireFormatTests/testDecodesTheStatsFixture
+---OLD---
+        selfFootprintBytes = try c.decodeIfPresent(UInt64.self, forKey: .selfFootprintBytes) ?? 0
+---NEW---
+        selfFootprintBytes = 0

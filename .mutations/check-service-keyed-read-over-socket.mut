@@ -1,0 +1,9 @@
+# The keyed /stats read must go over the SOCKET. Sending the key over TCP from the
+# checker would be the exact exposure ADR-0008 closed; the fixture keeps the TCP port
+# dead so 'sampling: 7' can only come over the socket.
+file: scripts/check-service.sh
+test: test-service
+---OLD---
+        if STATS="$(printf '%s\n' "$KEY_HDR" | curl -sf --config - --unix-socket "$BANSHEE_API_SOCKET" http://localhost/stats 2>/dev/null)"; then
+---NEW---
+        if STATS="$(printf '%s\n' "$KEY_HDR" | curl -sf --config - "$BASE/stats" 2>/dev/null)"; then

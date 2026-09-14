@@ -1,0 +1,15 @@
+# /headroom serves what the sampler published, never a re-derivation from the
+# served verdict — re-deriving in the handler is how the two surfaces would come
+# to describe different ticks (ADR-0005). The test publishes a Restless decision
+# while the verdict is still the Checking placeholder.
+file: rust/banshee-api/src/routes.rs
+test: headroom_serves_the_published_decision_verbatim
+---OLD---
+    Json(state.headroom_now(Utc::now())).into_response()
+---NEW---
+    Json(banshee_core::pressure::headroom::derive(
+        &state.pressure_now(Utc::now()),
+        Some(8),
+        &banshee_core::pressure::config::PressureConfig::default(),
+    ))
+    .into_response()

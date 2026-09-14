@@ -1,0 +1,21 @@
+# A rejected key must NOT be laundered into ConnectionState.failed (banshee-dqh), which
+# renders as "Nothing is watching" — false when the daemon is healthy, sampling and
+# recording alerts, and only this client is locked out. The two states are opposite
+# claims about the machine and send the user to different actions.
+#
+# This pin lives in the MODEL because the client-side tests cannot reach it: they prove
+# APIClient throws .unauthorized, not that the model preserves the distinction on the
+# way to the UI. Verified 2026-09-06 that this mutation is NOT caught by any
+# APIClient test.
+file: swift/Sources/BansheeCore/PressureModel.swift
+test: testARejectedKeyIsDistinctFromAnUnreachableDaemon
+---OLD---
+            if case APIError.unauthorized(let detail) = error {
+                connectionState = .unauthorized(detail)
+                Self.logger.error("locked out: \(detail, privacy: .public)")
+            } else {
+---NEW---
+            if case APIError.unauthorized(let detail) = error {
+                connectionState = .failed(detail)
+                Self.logger.error("locked out: \(detail, privacy: .public)")
+            } else {

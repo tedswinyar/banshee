@@ -1,0 +1,11 @@
+# The v13 migration arm (WS1c, banshee-87l.3) must fire on the v12->v13 step.
+# Mis-labelling it sends a v12 database through the `other =>` fallthrough, which
+# errors, so the `kernel_free_percent`/`jetsam_kills` columns are never added and
+# `validate_or_init` fails. Proves the arm is reachable from the current head,
+# not dead code — same shape as schema-v10-arm-is-wired-to-v9.
+file: rust/banshee-core/src/schema.rs
+test: interrupted_migration_is_recoverable
+---OLD---
+        12 => {
+---NEW---
+        13 => {

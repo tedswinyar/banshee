@@ -1,0 +1,9 @@
+# Findings name who is behind them NOW: attribution reads the newest census,
+# and `censuses` is oldest-first. Two censuses with different app groups make
+# first() and last() disagree. WS2a.
+file: rust/banshee-core/src/pressure/mod.rs
+test: findings_name_who_from_the_newest_census
+---OLD---
+        build_findings(&readings, &verdict, censuses.last(), config)
+---NEW---
+        build_findings(&readings, &verdict, censuses.first(), config)

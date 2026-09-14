@@ -1,0 +1,66 @@
+# Rust
+rust/target/
+target/
+
+# Swift
+swift/.build/
+.build/
+*.xcresult
+
+# Runtime state (verify logs, locks, dev databases)
+.runtime/
+
+# Build products
+build/
+dist/
+
+# Website
+website/public/
+website/.hugo_build.lock
+website/resources/_gen/
+
+# Release identity — NEVER commit; see scripts/release.conf.example
+scripts/release.conf
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Local agent state
+.claude/settings.local.json
+
+# Beads / Dolt files (added by bd init). The WHOLE of .beads/ is local: the tracker's
+# durable copy is the export in private/beads/ (ADR-0011), written at session close.
+.beads/
+.dolt/
+*.db
+.beads-credential-key
+*.gate.lock*
+
+# Never commit hook binaries: other tooling can write into .beads/hooks when a
+# hooksPath override exists, and bd init auto-commits its directory. bd's real hook
+# shims belong in .git/hooks, not here.
+.beads/hooks/
+
+# The maintainer's notebook: a nested git repo of its own (ADR-0011). Never tracked
+# here; scripts/lib/residue-gate.py refuses it if it ever is.
+private/
+
+# Local-only config that must never be committed (defense-in-depth).
+census.local.toml
+.env
+
+
+# Personal Claude Code approvals (execution allowlist) are local, never shared —
+# a committed allowlist pre-authorizes commands on an untrusted branch/PR (banshee-068).
+.claude/settings.json
+.claude/settings.local.json
+
+# Editor/agent auto-exec hook definitions are local, never shared — a committed
+# hook command auto-runs and a malicious PR could swap it (banshee-068).
+.cursor/hooks.json
+.codex/hooks.json

@@ -1,0 +1,12 @@
+# A CI checkout (actions/checkout on the build server) never has a pre-push hook, and
+# doctor.sh requiring one failed every workflow job at "Toolchain present" before the
+# gate ran. The guard on GITHUB_ACTIONS is the fix; test-doctor drives both modes
+# against a hookless temp clone.
+file: scripts/doctor.sh
+test: test-doctor
+---OLD---
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  say "  skip pre-push verify gate — CI checkout (GITHUB_ACTIONS is set), no hook expected"
+---NEW---
+if false; then
+  say "  skip pre-push verify gate — CI checkout (GITHUB_ACTIONS is set), no hook expected"

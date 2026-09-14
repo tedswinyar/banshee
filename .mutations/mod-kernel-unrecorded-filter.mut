@@ -1,0 +1,7 @@
+# A pre-v8 sample stores memory_pressure_level=0 ("not recorded"); dropping the
+# >0 filter makes the model read that 0 as a real (green) kernel verdict.
+file: rust/banshee-core/src/pressure/mod.rs
+test: an_unrecorded_kernel_level
+---OLD---
+            .filter(|s| s.memory_pressure_level > 0)
+---NEW---

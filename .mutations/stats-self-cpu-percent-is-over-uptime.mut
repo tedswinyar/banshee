@@ -1,0 +1,11 @@
+# selfCpuPercent is the lifetime average cpu / uptime × 100, served as a reduction
+# (ADR-0005). Dropping the division passed the FIRST version of this pin, because
+# uptime was whole seconds and a sub-second test server read 0 — the co-varying
+# fixture shape again. Uptime is now fractional and the test recomputes the
+# percent from the same payload, so a dropped division is 50× off and caught.
+file: rust/banshee-api/src/routes.rs
+test: stats_reports_what_banshee_itself_costs
+---OLD---
+    let self_cpu_percent = me.cpu_secs / uptime_secs * 100.0;
+---NEW---
+    let self_cpu_percent = me.cpu_secs * 100.0;

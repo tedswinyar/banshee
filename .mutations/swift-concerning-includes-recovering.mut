@@ -1,0 +1,7 @@
+# A recovering green is the one green the app must show (popover + window rows).
+file: swift/Sources/BansheeCore/Models.swift
+test: testDecodesTheQuietFixtureIncludingItsExplicitNulls
+---OLD---
+        dimensions.filter { $0.band > .green || $0.recovering }
+---NEW---
+        dimensions.filter { $0.band > .green }

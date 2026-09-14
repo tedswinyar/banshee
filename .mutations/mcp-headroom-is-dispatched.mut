@@ -1,0 +1,8 @@
+# The MCP `headroom` tool must reach /headroom. Only the parity harness drives
+# the shipped binary end to end, so this pin lives on the e2e arm.
+file: rust/banshee-mcp/src/main.rs
+test: e2e
+---OLD---
+        "headroom" => api.get("/headroom", &[]),
+---NEW---
+        "headroom" => api.get("/pressure", &[]),

@@ -1,0 +1,10 @@
+# The file-loaded key travels over the SOCKET only (ADR-0008). Loopback was never a
+# sufficient gate: any local user can bind 127.0.0.1:18769 before the daemon starts and
+# every client would hand them a key that authorises the reap/kill routes. Reverting to
+# "loopback is good enough" reopens the exact hole.
+file: rust/banshee-cli/src/main.rs
+test: the_file_key_is_withheld_from_a_tcp_transport
+---OLD---
+        (Transport::Unix(_), None) => load_file_key(),
+---NEW---
+        (_, None) => load_file_key(),

@@ -1,0 +1,11 @@
+# Sparkle carries BSD components whose licenses must accompany a binary
+# distribution (banshee-4z1); a DMG without the staged notices is a legal
+# defect that looks like a successful build.
+file: scripts/build-dmg.sh
+test: test-release-checklist
+# Target text moved 2026-09-05: the switch to dmgbuild stages notices into $NOTICES_DIR
+# rather than copying them straight into the DMG staging root.
+---OLD---
+cp "$NOTICES" "$NOTICES_DIR/THIRD-PARTY-NOTICES.html"
+---NEW---
+: # notices staging removed

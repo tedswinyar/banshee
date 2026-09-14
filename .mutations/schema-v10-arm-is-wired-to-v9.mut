@@ -1,0 +1,10 @@
+# The v10 migration arm must fire on the v9→v10 step (ADR-0009, banshee-87l.1).
+# Mis-labelling the arm sends a v9 database through the `other =>` fallthrough,
+# which errors, so the episodes table is never created and validate_or_init
+# fails. Proves the arm is reachable from the current head, not dead code.
+file: rust/banshee-core/src/schema.rs
+test: schema
+---OLD---
+        9 => {
+---NEW---
+        10 => {

@@ -1,0 +1,9 @@
+# check-service.sh must refuse a socket that is not 0600: the mode IS the security
+# boundary (ADR-0008), and a daemon serving a group-readable socket would otherwise
+# look healthy in the machine-state report.
+file: scripts/check-service.sh
+test: test-service
+---OLD---
+    if [ "$SOCK_MODE" = "600" ]; then
+---NEW---
+    if true; then

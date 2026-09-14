@@ -1,0 +1,8 @@
+# Census scalars carry the MAX across the bucket (averages hide the spike).
+# min() would understate a sprawl trend.
+file: rust/banshee-core/src/sample.rs
+test: census_scalars_keep_the_max
+---OLD---
+    let stale_max = censuses.iter().map(|c| c.stale_sessions).max();
+---NEW---
+    let stale_max = censuses.iter().map(|c| c.stale_sessions).min();

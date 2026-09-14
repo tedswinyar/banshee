@@ -1,0 +1,15 @@
+# A half-configured App Store Connect key (path without id, say) must be a hard
+# error, not a silent fall-through to the keychain profile: on the build server the
+# profile path fails minutes later with a locked-keychain message that names the
+# wrong cause. test-notary drives every partial combination.
+file: scripts/lib/notary.sh
+test: test-notary
+---OLD---
+    if [ -z "$path" ] || [ -z "$id" ] || [ -z "$issuer" ]; then
+      printf 'notary: NOTARY_KEY_PATH, NOTARY_KEY_ID and NOTARY_ISSUER_ID must all be set (or none)\n' >&2
+      return 2
+    fi
+---NEW---
+    if [ -z "$path" ] || [ -z "$id" ] || [ -z "$issuer" ]; then
+      :
+    fi

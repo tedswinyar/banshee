@@ -1,0 +1,8 @@
+# A daemon with no socket predates ADR-0008 and every client is locked out; the
+# checker must say so rather than report OK on TCP /health alone.
+file: scripts/check-service.sh
+test: test-service
+---OLD---
+    bad "no socket at $BANSHEE_API_SOCKET"
+---NEW---
+    :

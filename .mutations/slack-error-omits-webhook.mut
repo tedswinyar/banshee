@@ -1,0 +1,11 @@
+# A FAILED Slack delivery must never write the webhook to a log (banshee-a4i).
+# reqwest's error Display includes the request URL, and for this sink the URL IS the
+# credential — so a bare `%e` persists the webhook into ~/Library/Logs on every failed
+# POST. The test asserts on CAPTURED LOG OUTPUT, because neither reading the source nor
+# checking that delivery fails quietly can tell `%e` from `%e.without_url()`.
+file: rust/banshee-api/src/slack.rs
+test: a_failed_delivery_never_logs_the_webhook_secret
+---OLD---
+                tracing::warn!(error = %e.without_url(), "could not deliver escalation alert to Slack");
+---NEW---
+                tracing::warn!(error = %e, "could not deliver escalation alert to Slack");

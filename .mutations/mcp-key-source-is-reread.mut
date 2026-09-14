@@ -1,0 +1,13 @@
+# banshee-mcp holds a KeySource, not a key string (banshee-dqh). An agent host starts
+# the MCP server once and keeps it for a whole session, so a key captured at startup
+# dies the moment the daemon rotates — which is exactly what happened live.
+# The fixture changes the file between resolves; reading it once cannot be
+# distinguished from re-reading it otherwise.
+file: rust/banshee-mcp/src/main.rs
+test: a_file_backed_key_is_reread_on_every_resolve
+---OLD---
+            KeySource::File(p) => std::fs::read_to_string(p)
+                .map(|k| k.trim().to_string())
+                .unwrap_or_default(),
+---NEW---
+            KeySource::File(_) => "old-key".to_string(),

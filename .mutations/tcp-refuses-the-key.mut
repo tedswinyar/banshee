@@ -1,0 +1,13 @@
+# ADR-0008 Phase 3: the loopback port accepts NO credential. Reverting the TCP arm to
+# the ordinary key check is exactly Phase 2's behaviour — a valid key over the
+# squattable port is honoured — which is what kept every pre-socket client silently
+# working and is the hole the phase closes.
+file: rust/banshee-api/src/routes.rs
+test: the_key_is_refused_over_tcp_and_accepted_over_the_socket
+---OLD---
+        Transport::Tcp => keyed.layer(middleware::from_fn(auth::refuse_over_tcp)),
+---NEW---
+        Transport::Tcp => keyed.layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_api_key,
+        )),

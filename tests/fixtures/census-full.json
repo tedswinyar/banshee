@@ -1,0 +1,112 @@
+{
+    "id": "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f",
+    "takenAt": "2026-08-31T20:15:02.481773Z",
+    "totalProcs": 812,
+    "agentSessions": [
+        {
+            "pid": 41712,
+            "program": "claude",
+            "rssBytes": 913571840,
+            "ageSecs": 442800,
+            "ageDays": 5,
+            "cpuSecs": 5211.42,
+            "tty": "ttys014",
+            "isStale": true,
+            "cwd": "/Users/example/Code/old-project"
+        },
+        {
+            "pid": 88231,
+            "program": "kiro-cli",
+            "rssBytes": 402653184,
+            "ageSecs": 5400,
+            "ageDays": 0,
+            "cpuSecs": 84.06,
+            "tty": "ttys002",
+            "isStale": false,
+            "cwd": null
+        }
+    ],
+    "ideHelpers": {
+        "count": 48,
+        "rssBytes": 6442450944
+    },
+    "orphans": {
+        "totalCount": 137,
+        "totalRssBytes": 9663676416,
+        "orphanCount": 23,
+        "orphanRssBytes": 1610612736,
+        "orphansByProgram": [
+            {
+                "program": "mcp-server-fetch",
+                "count": 14,
+                "rssBytes": 1073741824
+            },
+            {
+                "program": "language-server",
+                "count": 9,
+                "rssBytes": 536870912
+            }
+        ]
+    },
+    "tmuxSessions": [
+        {
+            "name": "worker-3",
+            "paneCommand": "cargo",
+            "idleDays": null,
+            "isBusy": true,
+            "isStale": false
+        },
+        {
+            "name": "scratch",
+            "paneCommand": "zsh",
+            "idleDays": 11.25,
+            "isBusy": false,
+            "isStale": true
+        },
+        {
+            "name": "old-build",
+            "paneCommand": "cargo",
+            "idleDays": 9.5,
+            "isBusy": true,
+            "isStale": true
+        }
+    ],
+    "appGroups": [
+        {
+            "name": "Chrome",
+            "procCount": 128,
+            "rssBytes": 8053063680
+        },
+        {
+            "name": "Slack",
+            "procCount": 14,
+            "rssBytes": 2147483648
+        }
+    ],
+    "monitorAgents": [
+        {
+            "name": "endpoint-shield",
+            "procCount": 6,
+            "rssBytes": 1288490188,
+            "cpuSecsTotal": 15640.710000000001,
+            "percentOfOneCore": 31.4,
+            "longestLifeSecs": 49812
+        },
+        {
+            "name": "log-shipper",
+            "procCount": 2,
+            "rssBytes": 268435456,
+            "cpuSecsTotal": 16.02,
+            "percentOfOneCore": 14.6,
+            "longestLifeSecs": 109
+        }
+    ],
+    "monitorTotal": {
+        "procCount": 7,
+        "rssBytes": 1422624358,
+        "cpuSecsTotal": 15656.73,
+        "percentOfOneCore": 29.183,
+        "longestLifeSecs": 49812
+    },
+    "tmuxAvailable": true
+}

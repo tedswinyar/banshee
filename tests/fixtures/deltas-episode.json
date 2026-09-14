@@ -1,0 +1,159 @@
+{
+  "evaluatedAt": "2026-08-30T14:28:55.000000Z",
+  "lookback": "episode",
+  "episodeId": "3f9c1b2e-7a4d-4c8f-9e10-5b6a2d3c4e5f",
+  "requestedLookbackSecs": 135,
+  "anchorAt": "2026-08-30T14:26:40.000000Z",
+  "actualLookbackSecs": 135,
+  "verdict": {
+    "thenLevel": "checking",
+    "nowLevel": "quiet",
+    "thenSource": null,
+    "nowSource": null,
+    "detail": "pressure Checking → Quiet"
+  },
+  "dimensions": [
+    {
+      "dimension": "cpu",
+      "key": "cpu",
+      "label": "CPU utilization",
+      "unit": "ratio",
+      "then": 0.2,
+      "now": 0.2,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "CPU 20% → 20% busy (+0 pts)"
+    },
+    {
+      "dimension": "thermal",
+      "key": "thermal",
+      "label": "Thermal pressure",
+      "unit": "count",
+      "then": 0.0,
+      "now": 0.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "thermal nominal → nominal"
+    },
+    {
+      "dimension": "memory",
+      "key": "memory",
+      "label": "Available memory",
+      "unit": "bytes",
+      "then": 6553600000.0,
+      "now": 6553600000.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "available memory 6.6 GB → 6.6 GB (+0 B)"
+    },
+    {
+      "dimension": "swap",
+      "key": "swap",
+      "label": "Swap in use",
+      "unit": "bytes",
+      "then": 2000000000.0,
+      "now": 2000000000.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "swap 2.0 GB → 2.0 GB (+0 B)"
+    },
+    {
+      "dimension": "kernelPressure",
+      "key": "kernelPressure",
+      "label": "Kernel memory pressure",
+      "unit": "count",
+      "then": 1.0,
+      "now": 1.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "kernel pressure normal → normal"
+    },
+    {
+      "dimension": "thrash",
+      "key": "thrash",
+      "label": "Swap thrash",
+      "unit": "perSecond",
+      "then": 0.0,
+      "now": 0.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:55.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "peak thrash 0 → 0 swap ops/sec (+0)"
+    },
+    {
+      "dimension": "disk",
+      "key": "disk",
+      "label": "Disk headroom",
+      "unit": "bytes",
+      "then": 100000000000.0,
+      "now": 100000000000.0,
+      "delta": 0.0,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "free disk 100.0 GB → 100.0 GB (+0 B)"
+    },
+    {
+      "dimension": "uptime",
+      "key": "uptime",
+      "label": "Uptime",
+      "unit": "days",
+      "then": 0.0,
+      "now": 0.0015625,
+      "delta": 0.0015625,
+      "thenAt": "2026-08-30T14:26:40.000000Z",
+      "nowAt": "2026-08-30T14:28:55.000000Z",
+      "observationGapSecs": null,
+      "detail": "uptime 0.0 → 0.0 days"
+    }
+  ],
+  "consumers": [
+    {
+      "name": "Chrome",
+      "kind": "appGroup",
+      "thenCount": 102,
+      "nowCount": 40,
+      "thenBytes": 8900000000,
+      "nowBytes": 4900000000,
+      "deltaBytes": -4000000000,
+      "detail": "freed 4.0 GB from Chrome (×102 → ×40)"
+    },
+    {
+      "name": "managed agents",
+      "kind": "rollup",
+      "thenCount": 13,
+      "nowCount": 13,
+      "thenBytes": 1400000000,
+      "nowBytes": 2100000000,
+      "deltaBytes": 700000000,
+      "detail": "managed agents grew 700 MB"
+    },
+    {
+      "name": "claude",
+      "kind": "sessions",
+      "thenCount": 8,
+      "nowCount": 10,
+      "thenBytes": 1500000000,
+      "nowBytes": 2100000000,
+      "deltaBytes": 600000000,
+      "detail": "claude grew 600 MB (×8 → ×10)"
+    }
+  ],
+  "census": {
+    "thenAt": "2026-08-29T10:40:00.000000Z",
+    "nowAt": "2026-08-30T14:28:55.000000Z"
+  },
+  "observationGapSecs": null,
+  "summary": "since the episode opened 2m ago: freed 4.0 GB from Chrome (×102 → ×40); managed agents grew 700 MB; claude grew 600 MB (×8 → ×10); no trustworthy verdict at the anchor; pressure now Quiet."
+}

@@ -1,0 +1,12 @@
+# The who-line ranks consumers by the MEASURED quantity (RSS or rate), not by
+# process count. In census-full.json the orphaned helpers (23 procs, 1.6 GB)
+# outnumber Slack (14, 2.1 GB) but are smaller, so the two rankings disagree at
+# position three (WS2a).
+file: rust/banshee-core/src/pressure/who.rs
+test: the_memory_who_ranks_by_resident_size_not_process_count
+---OLD---
+        b.measure
+            .partial_cmp(&a.measure)
+---NEW---
+        (b.count as f64)
+            .partial_cmp(&(a.count as f64))

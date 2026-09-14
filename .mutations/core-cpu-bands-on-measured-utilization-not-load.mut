@@ -1,0 +1,15 @@
+# The CPU dimension bands on MEASURED per-core utilization (the tick-counter
+# rate), NEVER on load-per-core (banshee-87l.19). Load-per-core counts a churning
+# security agent's runnable threads and read 3.26x per core over cores that were
+# half idle — 11 false red episodes in one night. Reverting the series to
+# load_per_core_1m() restores exactly that false positive: load 28 on 8 cores is
+# 3.5x, which bands red though the cores are only 20% busy. The test proves an
+# idle-cored deep run queue stays Green ("scheduling contention"), while the SAME
+# load with cores genuinely 98% busy is Red with the fire glyph — the two cases
+# pinned apart so removing the utilization cross-check cannot pass.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_deep_run_queue_over_idle_cores_is_contention_not_saturation
+---OLD---
+                    util.push((curr.sampled_at, u));
+---NEW---
+                    util.push((curr.sampled_at, curr.to_reading().load_per_core_1m()));

@@ -1,0 +1,10 @@
+# The sampler loop must record a successful evaluation into ops-health, or
+# /stats' lastEvaluatedAt never advances and a live verdict is indistinguishable
+# from a frozen one.
+file: rust/banshee-api/src/sampler.rs
+test: the_loop_records_operational_health
+---OLD---
+                                ops.lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .record_eval_ok(Utc::now());
+---NEW---

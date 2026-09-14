@@ -1,0 +1,10 @@
+# The self-contained drill must wait for the model's 40-sample window before it
+# backs up, or it proves nothing about the daemon under sustained sampling — a
+# backup of one row passes every later check. The catching test parses the
+# "with N samples" line and asserts N >= 40.
+file: scripts/restore-drill.sh
+test: test-release-checklist
+---OLD---
+  WANT=40
+---NEW---
+  WANT=1

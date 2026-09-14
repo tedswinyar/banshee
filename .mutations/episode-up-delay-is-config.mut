@@ -1,0 +1,9 @@
+# episode_up_secs must be load-bearing, not decoration (gotcha #10: a config value
+# that silently does nothing is worse than none). Hardcode the default and the 300s
+# configuration opens an episode it should not.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_up_delay_is_load_bearing_config
+---OLD---
+    if r.held_secs < config.episode_up_secs {
+---NEW---
+    if r.held_secs < 120 {

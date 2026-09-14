@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Third-party notices</title>
+<style>body{font-family:system-ui;max-width:52rem;margin:2rem auto;padding:0 1rem}pre{white-space:pre-wrap;background:#f6f6f6;padding:1rem;border-radius:6px}</style>
+</head>
+<body>
+<h1>Third-party notices</h1>
+<p>This software bundles the following third-party components.</p>
+{{#each licenses}}
+<h2>{{name}}</h2>
+<p>Used by: {{#each used_by}}{{crate.name}} {{crate.version}}{{#unless @last}}, {{/unless}}{{/each}}</p>
+<pre>{{text}}</pre>
+{{/each}}
+</body>
+</html>

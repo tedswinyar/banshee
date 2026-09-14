@@ -1,0 +1,9 @@
+# `https://github.com/owner/repo.git` must resolve to owner/repo; leaving the suffix on
+# would hand `gh release create --repo owner/repo.git` a repository that does not exist,
+# minutes after notarization.
+file: scripts/lib/releases-repo.sh
+test: test-releases-repo
+---OLD---
+  url="${url%.git}"
+---NEW---
+  :

@@ -1,0 +1,19 @@
+# WS2d wire contract: nullable fields are PRESENT as null, never absent. The
+# synthesized encoder would drop a nil `census` key; the hand-written encoder
+# emits `encodeNil`. Replace it with a no-op and the key vanishes, so a client
+# cannot tell "no two censuses in reach" from "field missing" — the gap fixture's
+# encode asserts the key is present as NSNull.
+file: swift/Sources/BansheeCore/DeltaModels.swift
+test: testAGapDeltaEncodesItsNullCensusAsPresent
+---OLD---
+        if let census {
+            try c.encode(census, forKey: .census)
+        } else {
+            try c.encodeNil(forKey: .census)
+        }
+---NEW---
+        if let census {
+            try c.encode(census, forKey: .census)
+        } else {
+            _ = census
+        }

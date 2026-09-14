@@ -1,0 +1,12 @@
+# ADR-0009: an untrusted (Checking) verdict must not open OR move an episode. The
+# point-event model's startup bug burned the cooldown here; the episode model's
+# sibling hazard is starting the recovery clock on an ongoing episode because the
+# first sample after a restart has no verdict. Drop the guard and the open swap
+# episode moves to Recovering against a green reading.
+file: rust/banshee-core/src/pressure/episode.rs
+test: nothing_opens_or_moves_while_the_verdict_is_still_checking
+---OLD---
+    if pressure.level == Level::Checking {
+        return Reconciled::default();
+    }
+---NEW---

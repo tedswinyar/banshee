@@ -1,0 +1,9 @@
+# A real-identity DMG without SPARKLE_PUBLIC_KEY can never auto-update — the
+# one thing we said we would never ship. The gate must die, not shrug
+# (SKIP_SPARKLE=1 is the deliberate escape).
+file: scripts/build-dmg.sh
+test: test-release-checklist
+---OLD---
+    die "SPARKLE_PUBLIC_KEY is unset: this DMG could not auto-update (set it in release.conf, or SKIP_SPARKLE=1 to override)"
+---NEW---
+    info "sparkle key missing; continuing anyway"

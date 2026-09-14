@@ -1,0 +1,14 @@
+# A 404 must exit 3 (not found), distinct from the generic exit 1, so scripts can
+# branch on "nothing yet" vs "it broke".
+file: rust/banshee-cli/src/main.rs
+test: a_404_exits_3
+# Target text moved 2026-09-06: the dual-transport work (ADR-0008) replaced
+# reqwest::StatusCode with a plain u16 here, so the recorded text no longer applied.
+---OLD---
+            if status == 404 {
+                EXIT_NOT_FOUND
+            } else {
+                EXIT_SERVER_ERROR
+            }
+---NEW---
+            { EXIT_SERVER_ERROR }

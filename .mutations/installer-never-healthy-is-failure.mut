@@ -1,0 +1,9 @@
+# launchd accepting the service is not the same claim as the daemon serving;
+# reporting success on a never-answering daemon is the lie the health poll exists
+# to prevent.
+file: swift/Sources/BansheeCore/DaemonInstaller.swift
+test: DaemonInstallerTests
+---OLD---
+        return .failure(.neverHealthy)
+---NEW---
+        return .success(())

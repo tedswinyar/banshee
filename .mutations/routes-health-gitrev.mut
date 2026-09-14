@@ -1,0 +1,8 @@
+# /health must serve the build's git rev so the running daemon is traceable; a
+# blank rev makes "what is running?" unanswerable again.
+file: rust/banshee-api/src/routes.rs
+test: health_is_open_and_reports_version
+---OLD---
+            "gitRev": env!("BANSHEE_GIT_REV"),
+---NEW---
+            "gitRev": "",

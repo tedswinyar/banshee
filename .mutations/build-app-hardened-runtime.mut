@@ -1,0 +1,8 @@
+# Real Developer ID signing must apply the hardened runtime (--options runtime),
+# or the notary rejects the DMG. The ad-hoc branch deliberately omits it.
+file: scripts/build-app.sh
+test: test-app-bundle
+---OLD---
+    codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$1"
+---NEW---
+    codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$1"

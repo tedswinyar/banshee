@@ -1,0 +1,9 @@
+# Finding.whoLine is nullable and present-as-null on the wire; the hand-written
+# encoder's encodeNil branch is what keeps the key when the finding names
+# nobody. WS2a.
+file: swift/Sources/BansheeCore/Models.swift
+test: testEncodeCoversEveryFindingField
+---OLD---
+            try c.encodeNil(forKey: .whoLine)
+---NEW---
+            _ = whoLine

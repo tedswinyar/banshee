@@ -1,0 +1,81 @@
+[
+    {
+        "id": "a1b2c3d4-e5f6-4a0b-8c1d-2e3f4a5b6c7d",
+        "sampledAt": "2026-08-31T20:14:45.000123Z",
+        "bootTimeSecs": 1756500000,
+        "ncpu": 8,
+        "memTotalBytes": 17179869184,
+        "pageSize": 16384,
+        "load1m": 4.26,
+        "load5m": 3.81,
+        "load15m": 3.12,
+        "swapTotalBytes": 19327352832,
+        "swapUsedBytes": 17616076800,
+        "pagesFree": 27965,
+        "pagesActive": 402117,
+        "pagesInactive": 398220,
+        "pagesWired": 141020,
+        "pagesSpeculative": 5120,
+        "pagesCompressor": 262144,
+        "pagesPurgeable": 5581,
+        "pagesExternal": 4000,
+        "swapins": 41859667,
+        "swapouts": 44026881,
+        "memoryPressureLevel": 4,
+        "thermalPressureLevel": 3,
+        "cpuSpeedLimitPercent": 62,
+        "cpuTicksTotal": 240000000,
+        "cpuTicksIdle": 96000000,
+        "kernelFreePercent": 12,
+        "jetsamKills": 3,
+        "volumes": [
+            {
+                "mountPoint": "/",
+                "totalBytes": 994662584320,
+                "availBytes": 61443809280
+            },
+            {
+                "mountPoint": "/System/Volumes/Data",
+                "totalBytes": 994662584320,
+                "availBytes": 61443809280
+            }
+        ]
+    },
+    {
+        "id": "B7C8D9E0-F1A2-4B3C-9D4E-5F6A7B8C9D0E",
+        "sampledAt": "2026-09-01T13:27:15.654321Z",
+        "bootTimeSecs": 1788269185,
+        "ncpu": 8,
+        "memTotalBytes": 17179869184,
+        "pageSize": 16384,
+        "load1m": 223.85,
+        "load5m": 231.85,
+        "load15m": 113.18,
+        "swapTotalBytes": 2147483648,
+        "swapUsedBytes": 0,
+        "pagesFree": 34024,
+        "pagesActive": 512000,
+        "pagesInactive": 210881,
+        "pagesWired": 155555,
+        "pagesSpeculative": 60210,
+        "pagesCompressor": 96500,
+        "pagesPurgeable": 12040,
+        "pagesExternal": 355200,
+        "swapins": 102,
+        "swapouts": 0,
+        "memoryPressureLevel": 1,
+        "thermalPressureLevel": null,
+        "cpuSpeedLimitPercent": null,
+        "cpuTicksTotal": null,
+        "cpuTicksIdle": null,
+        "kernelFreePercent": null,
+        "jetsamKills": null,
+        "volumes": [
+            {
+                "mountPoint": "/",
+                "totalBytes": 994662584320,
+                "availBytes": 61443809280
+            }
+        ]
+    }
+]

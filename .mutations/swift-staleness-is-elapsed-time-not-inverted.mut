@@ -1,0 +1,10 @@
+# Staleness is "older than staleAfter", so a 40-second outage keeps the reading and a
+# 61-second one does not. Inverting the comparison makes every fresh failure stale at
+# once — a daemon restart would blank the glyph on its first missed read — and the
+# test's two in-window failures see 🫧 where 🫥 is owed.
+file: swift/Sources/BansheeCore/PressureModel.swift
+test: testAnUnreachableDaemonKeepsTheGlyphOnlyUntilTheVerdictIsStale
+---OLD---
+        return now().timeIntervalSince(lastRefresh) > Self.staleAfter
+---NEW---
+        return now().timeIntervalSince(lastRefresh) < Self.staleAfter

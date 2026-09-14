@@ -1,0 +1,10 @@
+# The notification text is the finding's wording, then how long, then WHO —
+# dropping the who clause turns "…; who: claude ×8 at 62% of one core." back
+# into a symptom with no culprit. WS2a.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_notice_reuses_the_findings_wording_then_says_how_long_and_who
+---OLD---
+                text.push_str("; ");
+                text.push_str(who);
+---NEW---
+                let _ = who;

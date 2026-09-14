@@ -1,0 +1,8 @@
+# The macOS banner carries the finding's who-line between the finding and the
+# action, verbatim. WS2a.
+file: swift/Sources/BansheeCore/Notifications.swift
+test: testTheBannerNamesWhoIsBehindIt
+---OLD---
+            let who = action.whoLine.map { "\n\($0)" } ?? ""
+---NEW---
+            let who = ""

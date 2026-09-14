@@ -1,0 +1,8 @@
+# endedAt is when the dimension dropped below red, not when we finished waiting out
+# the down window. The fixture puts 600s between the two.
+file: rust/banshee-core/src/pressure/episode.rs
+test: a_recovering_episode_closes_after_the_down_window_with_one_notice
+---OLD---
+                next.ended_at = Some(since);
+---NEW---
+                next.ended_at = Some(now);

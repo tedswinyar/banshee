@@ -1,0 +1,14 @@
+# An open episode's endedAt must encode as PRESENT null — it is the most important
+# fact on the payload. The synthesized encoder would drop the key.
+file: swift/Sources/BansheeCore/AlertModels.swift
+test: testAnOpenEpisodeEncodesItsNullsAsPresent
+---OLD---
+        if let endedAt {
+            try c.encode(endedAt, forKey: .endedAt)
+        } else {
+            try c.encodeNil(forKey: .endedAt)
+        }
+---NEW---
+        if let endedAt {
+            try c.encode(endedAt, forKey: .endedAt)
+        }

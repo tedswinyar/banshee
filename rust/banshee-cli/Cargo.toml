@@ -1,0 +1,21 @@
+[package]
+name = "banshee-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "banshee"
+path = "src/main.rs"
+
+[dependencies]
+banshee-core = { workspace = true }
+clap = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+# ADR-0008 key-gate tests need a socket path on disk.
+tempfile = { workspace = true }

@@ -1,0 +1,21 @@
+# WS2d: the delta ranks consumers BY ABSOLUTE CHANGE, not by current size — the
+# biggest thing running is rarely the thing that moved. Chrome at 8 GB that did
+# not budge must rank below claude a quarter its size that grew. A `sort by
+# now_bytes` (the who-line's ranking) puts the largest first for the wrong reason;
+# they co-vary in every fixture where the mover is also the largest, so the pin
+# fixture makes them come apart.
+file: rust/banshee-core/src/pressure/deltas.rs
+test: consumer_deltas_rank_by_absolute_change_not_current_size
+---OLD---
+    out.sort_by(|a, b| {
+        b.delta_bytes
+            .abs()
+            .cmp(&a.delta_bytes.abs())
+            .then_with(|| a.name.cmp(&b.name))
+    });
+---NEW---
+    out.sort_by(|a, b| {
+        b.now_bytes
+            .cmp(&a.now_bytes)
+            .then_with(|| a.name.cmp(&b.name))
+    });

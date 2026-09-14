@@ -1,0 +1,11 @@
+# Stage 1 of the thrash statistic is a trailing MEDIAN filter, and it is what removes
+# single-interval artifacts (banshee-s4d). Measured case: quitting a 6.5 GB browser
+# produced a 6394 ops/sec burst as the kernel tore the working set down — real churn,
+# but caused BY the remediation, so letting one interval set the band would tell
+# someone their fix failed at the moment it worked.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_single_isolated_thrash_spike_does_not_pin_the_band
+---OLD---
+            (at, vals[vals.len() / 2])
+---NEW---
+            (at, points[i].1)

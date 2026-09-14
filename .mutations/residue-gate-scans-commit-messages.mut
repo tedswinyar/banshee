@@ -1,0 +1,9 @@
+# --messages must actually read the reachable commit messages: a commit message that
+# recounts what its diff removed publishes it anyway (the second pre-publication review
+# found exactly that). An empty history reads as clean and the pin fails.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+            for sha, message in commit_messages(root):
+---NEW---
+            for sha, message in []:

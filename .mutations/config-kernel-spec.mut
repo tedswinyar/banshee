@@ -1,0 +1,8 @@
+# kernelPressure must band on its own spec, not the memory dimension's. Swapping
+# it to &self.memory makes WARN(2)/CRITICAL(4) fall on availability thresholds.
+file: rust/banshee-core/src/pressure/config.rs
+test: kernel_pressure
+---OLD---
+            Dimension::KernelPressure => &self.kernel_pressure,
+---NEW---
+            Dimension::KernelPressure => &self.memory,

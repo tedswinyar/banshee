@@ -1,0 +1,11 @@
+# Inhibition (ADR-0009 dec. 7): a firing thrash episode mutes the SWAP-volume
+# NOTICE but not its episode — a swap-volume red under active thrash is the same
+# event told twice. (Before banshee-yk8 this row muted the Memory notice; Memory
+# is now advisory and never opens or notifies, so the redundant pairing moved to
+# Swap.) Empty the table and both bells ring for one event.
+file: rust/banshee-core/src/pressure/episode.rs
+test: thrash_inhibits_the_swap_notice_but_not_the_swap_episode
+---OLD---
+        Dimension::Swap => &[Dimension::Thrash],
+---NEW---
+        Dimension::Swap => &[],

@@ -1,0 +1,9 @@
+# Network.framework parks a missing Unix socket in .waiting(ENOENT) forever and never
+# reports .failed (verified by execution). A client that does not treat ENOENT as
+# definitive hangs for its whole 30 s timeout on every probe of a stopped daemon.
+file: swift/Sources/BansheeCore/UnixSocketHTTP.swift
+test: testASocketNobodyServesIsServerUnreachableFast
+---OLD---
+                        if Self.isDefinitive(error) {
+---NEW---
+                        if false {

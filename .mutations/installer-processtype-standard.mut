@@ -1,0 +1,9 @@
+# The app-side installer must write ProcessType Standard: Background +
+# LowPriorityIO throttled a sampler into missing its own 15s schedule, and the
+# gaps read as a calm machine.
+file: swift/Sources/BansheeCore/DaemonInstaller.swift
+test: DaemonInstallerTests
+---OLD---
+            "ProcessType": "Standard",
+---NEW---
+            "ProcessType": "Background",

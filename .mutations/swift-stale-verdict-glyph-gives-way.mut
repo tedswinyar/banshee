@@ -1,0 +1,11 @@
+# An unreachable daemon keeps the last glyph only until the verdict is stale
+# (banshee-6ds). "Never stale" is the same lie as the lock-out, told more slowly: a
+# daemon that died hours ago leaves a calm face in the menu bar indefinitely.
+file: swift/Sources/BansheeCore/PressureModel.swift
+test: testAnUnreachableDaemonKeepsTheGlyphOnlyUntilTheVerdictIsStale
+---OLD---
+        case .failed where isStale:
+            return "🫧"
+---NEW---
+        case .failed where false:
+            return "🫧"

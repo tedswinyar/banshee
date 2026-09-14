@@ -1,0 +1,8 @@
+# The retention sweep deletes only CLOSED episodes: an open one is live state, and
+# deleting it makes the next evaluation reopen the incident as new.
+file: rust/banshee-core/src/sample_store.rs
+test: sweep_deletes_closed_episodes_past_a_year_but_never_open_ones
+---OLD---
+            "DELETE FROM alert_episodes WHERE started_at < ?1 AND ended_at IS NOT NULL",
+---NEW---
+            "DELETE FROM alert_episodes WHERE started_at < ?1",

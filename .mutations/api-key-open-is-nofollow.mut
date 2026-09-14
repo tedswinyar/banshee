@@ -1,0 +1,11 @@
+# The key file is opened O_NOFOLLOW and every check runs against that DESCRIPTOR
+# (banshee-czn). The previous shape called symlink_metadata(path) and then
+# read_to_string(path) — two independent path lookups, so anyone able to write the
+# containing directory had a TOCTOU window to swap a validated regular file for a
+# symlink. Dropping the flag reopens it.
+file: rust/banshee-api/src/auth.rs
+test: a_symlinked_key_file_is_neither_read_nor_replaced
+---OLD---
+    opts.read(true).custom_flags(libc::O_NOFOLLOW);
+---NEW---
+    opts.read(true);

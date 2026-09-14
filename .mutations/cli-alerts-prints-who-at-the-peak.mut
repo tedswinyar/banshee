@@ -1,0 +1,8 @@
+# `banshee alerts` prints who was behind an episode at its peak, when the
+# finding named anyone. WS2a.
+file: rust/banshee-cli/src/main.rs
+test: alerts_renders_an_episode_with_its_span_peak_and_suppressed_count
+---OLD---
+            .map(|w| format!("  ({w})"))
+---NEW---
+            .map(|_| String::new())

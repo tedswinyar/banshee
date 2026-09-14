@@ -1,0 +1,10 @@
+# WS2d half 1: an opening episode stores a summary of the census behind its peak
+# as `censusAtPeak` — "who was running at the worst moment". Drop the capture
+# (map to None) and the record can never answer "what changed since this began";
+# the open assertion finds it None.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_peak_census_tracks_the_worst_moment
+---OLD---
+        census_at_peak: census.map(summarise),
+---NEW---
+        census_at_peak: None,

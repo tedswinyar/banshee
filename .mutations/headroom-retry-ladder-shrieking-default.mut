@@ -1,0 +1,8 @@
+# The retry ladder's top rung is a wire contract pinned by the shrieking fixture
+# in both languages (ADR-0010 decision 5).
+file: rust/banshee-core/src/pressure/config.rs
+test: the_shrieking_fixture_waits_five_minutes_and_names_the_dominant_source
+---OLD---
+            headroom_retry_shrieking_secs: 300,
+---NEW---
+            headroom_retry_shrieking_secs: 120,

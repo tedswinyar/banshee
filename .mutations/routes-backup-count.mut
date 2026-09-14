@@ -1,0 +1,8 @@
+# The backup route must report the VERIFIED row count from backup_verified, not
+# a constant — the count is the proof the snapshot is complete.
+file: rust/banshee-api/src/routes.rs
+test: backup_writes_a_verified
+---OLD---
+        "samples": count,
+---NEW---
+        "samples": 999999,

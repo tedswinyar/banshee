@@ -1,0 +1,13 @@
+# THE ADR-0008 decision in the app: with no daemon socket the client falls back to TCP
+# but WITHHOLDS the file-loaded key, even though the key file exists. Any local user can
+# bind the port, so loopback was never evidence about who is listening.
+file: swift/Sources/BansheeCore/APIClient.swift
+test: testWithNoSocketTheFileKeyIsWithheldOverTCP
+---OLD---
+        return Resolution(
+            transport: .tcp(defaultBaseURL),
+            key: explicitKey.map(KeySource.explicit) ?? .withheld(noSocketAt: lookedFor))
+---NEW---
+        return Resolution(
+            transport: .tcp(defaultBaseURL),
+            key: explicitKey.map(KeySource.explicit) ?? .file(env["BANSHEE_KEY_FILE"]))

@@ -1,0 +1,9 @@
+# The History fix: closed buckets inside the raw window are summarised on the next
+# sweep, so /rollups is dense to the last five-minute boundary. Skip the recent pass
+# and the 5-hour History window is empty by construction again.
+file: rust/banshee-core/src/sample_store.rs
+test: sweep_rolls_up_closed_buckets_inside_the_raw_window_and_keeps_their_samples
+---OLD---
+        if resume_from < recent_cutoff {
+---NEW---
+        if false && resume_from < recent_cutoff {

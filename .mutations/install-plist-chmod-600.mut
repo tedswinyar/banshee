@@ -1,0 +1,8 @@
+# The plist can hold the Slack webhook credential; it must be 0600, not the
+# umask default, or a world-readable LaunchAgent leaks it.
+file: scripts/install-launchd.sh
+test: test-service
+---OLD---
+chmod 600 "$BANSHEE_PLIST" || fail "could not restrict permissions on $BANSHEE_PLIST"
+---NEW---
+chmod 644 "$BANSHEE_PLIST" || fail "could not restrict permissions on $BANSHEE_PLIST"

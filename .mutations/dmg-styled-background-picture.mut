@@ -1,0 +1,10 @@
+# The DMG must carry the designed dark background (Drag-to-Applications window),
+# not ship a bare/unstyled volume. dmgbuild reads the background from DMG_BG;
+# dropping it strips the styling while still producing a valid DMG — which is
+# exactly the silent regression this pin exists to catch.
+file: scripts/dmg-settings.py
+test: test-app-bundle
+---OLD---
+background = os.environ["DMG_BG"]
+---NEW---
+background = None

@@ -1,0 +1,10 @@
+# An all-green source's condition names the PRIMARY dimension (available
+# memory), not the green closest to its own yellow line — found live when
+# MemoryPressure read "peak 0 swap ops/sec" on a machine with 7 GB available.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: an_all_green_source_reports_its_primary_dimension
+---OLD---
+        let worst = worst_reading(p, |r| mine(r) && r.band > Band::Green)
+            .or_else(|| p.dimensions.iter().find(|r| mine(r)));
+---NEW---
+        let worst = worst_reading(p, mine);

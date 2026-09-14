@@ -1,0 +1,14 @@
+# A group/other-readable API key must be ROTATED, not chmod-repaired (banshee-czn,
+# banshee-4d0). The previous implementation detected the loose mode and fixed it,
+# leaving the daemon serving the key every local user could already read — the
+# appearance of a trust boundary rather than the boundary. The test this pins
+# previously asserted the OPPOSITE and passed, which is how the weakness survived
+# having a test.
+file: rust/banshee-api/src/auth.rs
+test: an_overpermissive_key_is_rotated_not_merely_repaired
+---OLD---
+    let distrust = if mode & 0o077 != 0 {
+        Some(KeyDistrust::Permissive(mode))
+---NEW---
+    let distrust = if false {
+        Some(KeyDistrust::Permissive(mode))

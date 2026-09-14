@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# post-receive — the relay hook on the build server's bare repo (docs/build-server.md).
+#
+# The development machine pushes HERE, never to GitHub. This hook forwards every
+# ref to the GitHub remote named `github`, with ONE rename: `main` arrives on GitHub
+# as `staging`. The CI workflow verifies `staging` on the build server's runner and fast-forwards
+# `main` itself on green — so GitHub's `main` only ever moves when the build server
+# says so. Everything else (feature branches, `release/<version>`, tags) keeps its
+# name. Deletions propagate.
+#
+# Installed by scripts/build-server/setup-relay.sh; tested by
+# scripts/tests/test-relay-hook.sh against two temp bare repos. BANSHEE_RELAY_REMOTE
+# overrides the remote name (the test uses it); the default is `github`.
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH"
+REMOTE="${BANSHEE_RELAY_REMOTE:-github}"
+ZERO="0000000000000000000000000000000000000000"
+
+say() { printf 'relay: %s\n' "$*" >&2; }
+
+map_ref() { # refs/heads/main -> refs/heads/staging; everything else unchanged
+  case "$1" in
+    refs/heads/main) printf 'refs/heads/staging' ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+rc=0
+while read -r oldrev newrev refname; do
+  target="$(map_ref "$refname")"
+  if [ "$newrev" = "$ZERO" ]; then
+    say "deleting $target on $REMOTE"
+    git push "$REMOTE" --delete "$target" || { say "FAILED to delete $target"; rc=1; }
+  else
+    say "forwarding $refname -> $REMOTE $target ($newrev)"
+    # A branch push forwards as a fast-forward only (no --force): if GitHub's
+    # copy has moved in a way ours has not, that is a real conflict to look at.
+    git push "$REMOTE" "$newrev:$target" || { say "FAILED to forward $refname"; rc=1; }
+  fi
+done
+if [ "$rc" -ne 0 ]; then
+  say "one or more refs did NOT reach $REMOTE — the push to the relay succeeded, the forward did not"
+fi
+exit "$rc"

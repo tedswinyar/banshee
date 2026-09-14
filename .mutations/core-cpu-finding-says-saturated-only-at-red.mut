@@ -1,0 +1,12 @@
+# The word "saturated" is earned ONLY at red (banshee-87l.19). The reframe's whole
+# point is that a red CPU reading now means MEASURED busy-time, so the finding may
+# say the machine is saturated; a yellow or contention reading must not. Dropping
+# "saturated: cores are" from the red-band message erases the one claim the finding
+# exists to make, and the test that a red cpu names saturation (while yellow/held
+# do not) fails.
+file: rust/banshee-core/src/pressure/mod.rs
+test: the_cpu_finding_claims_saturation_only_at_red
+---OLD---
+            format!("CPU is saturated: cores are {:.0}% busy.", r.value * 100.0)
+---NEW---
+            format!("CPU is {:.0}% busy.", r.value * 100.0)

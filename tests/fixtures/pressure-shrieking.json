@@ -1,0 +1,117 @@
+{
+    "evaluatedAt": "2026-08-04T22:41:09.870112Z",
+    "level": "shrieking",
+    "levelName": "Shrieking",
+    "source": "memory",
+    "glyph": "💀🧠",
+    "accessibilityLabel": "Banshee: Shrieking, memory",
+    "dimensions": [
+        {
+            "dimension": "cpu",
+            "key": "cpu",
+            "label": "CPU utilization",
+            "band": "red",
+            "value": 0.98,
+            "unit": "ratio",
+            "severity": 1.3,
+            "heldSecs": 3600,
+            "observationGapSecs": 1029,
+            "trendPerSec": 0.004166666666666667,
+            "detail": "98% busy, rising 25%/min; 9.5× per core",
+            "advisory": false,
+            "pending": "yellow",
+            "recovering": false
+        },
+        {
+            "dimension": "swap",
+            "key": "swap",
+            "label": "Swap in use",
+            "band": "red",
+            "value": 35600000000.0,
+            "unit": "bytes",
+            "severity": 3.95,
+            "heldSecs": 3600,
+            "observationGapSecs": null,
+            "trendPerSec": 1235000.0,
+            "detail": "35.6 GB in use, climbing 74 MB/min",
+            "advisory": false,
+            "pending": null,
+            "recovering": false
+        },
+        {
+            "dimension": "uptime",
+            "key": "uptime",
+            "label": "Uptime",
+            "band": "yellow",
+            "value": 12.4,
+            "unit": "days",
+            "severity": 0.3857142857142857,
+            "heldSecs": 86400,
+            "observationGapSecs": null,
+            "trendPerSec": 0.000011574074074074077,
+            "detail": "12.4 days",
+            "advisory": true,
+            "pending": null,
+            "recovering": false
+        }
+    ],
+    "findings": [
+        {
+            "dimension": "swap",
+            "band": "red",
+            "message": "35.6 GB of swap in use.",
+            "action": "relaunchApps",
+            "actionLabel": "Quit and relaunch the biggest apps",
+            "who": [
+                {
+                    "name": "Chrome",
+                    "count": 115,
+                    "detail": "7.7 GB"
+                },
+                {
+                    "name": "claude",
+                    "count": 8,
+                    "detail": "2.1 GB"
+                }
+            ],
+            "whoLine": "who: Chrome ×115 at 7.7 GB, claude ×8 at 2.1 GB"
+        },
+        {
+            "dimension": "cpu",
+            "band": "red",
+            "message": "CPU is saturated: cores are 98% busy.",
+            "action": "reapStaleSessions",
+            "actionLabel": "Reap stale agent sessions",
+            "who": [
+                {
+                    "name": "claude",
+                    "count": 8,
+                    "detail": "62% of one core"
+                },
+                {
+                    "name": "managed agents",
+                    "count": 13,
+                    "detail": "49% of one core"
+                }
+            ],
+            "whoLine": "who: claude ×8 at 62% of one core, managed agents ×13 at 49% of one core"
+        },
+        {
+            "dimension": "uptime",
+            "band": "yellow",
+            "message": "Up 12 days. Long uptime with pinned swap means fragmented, unreclaimable memory.",
+            "action": "reboot",
+            "actionLabel": "Reboot",
+            "who": [],
+            "whoLine": null
+        }
+    ],
+    "sampleCount": 40,
+    "censusCount": 3,
+    "recovering": false,
+    "activity": {
+        "open": 2,
+        "lastHour": 2,
+        "lastDay": 3
+    }
+}

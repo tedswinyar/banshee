@@ -1,0 +1,10 @@
+# A binary file is not prose, but its bytes are still searched: an adversarial probe of
+# the first version hid a denylisted sentinel after a NUL byte and the gate said clean.
+# Returning nothing for binaries reopens that gap; the dirty.bin fixture catches it.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+        text = data.decode("latin-1")
+        return line_findings([(0, text)], prose_here, denylist, "binary content: ")
+---NEW---
+        return []

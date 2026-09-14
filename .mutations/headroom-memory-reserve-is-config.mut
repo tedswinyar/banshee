@@ -1,0 +1,9 @@
+# The hold-back is a fraction of TOTAL memory and is configuration (ADR-0010,
+# decided 2026-09-08): dropping the subtraction lets agents fill the human's and
+# the OS's share; 10 GiB available on 24 GiB reads 5 workers instead of 2.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: the_memory_reserve_is_a_fraction_of_total_and_is_configuration
+---OLD---
+            let spendable = (r.value - reserve).max(0.0);
+---NEW---
+            let spendable = r.value.max(0.0);

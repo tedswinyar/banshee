@@ -1,0 +1,11 @@
+# The managed agents appear as ONE entry — the deduplicated monitor_total (7
+# procs, 29.2%) — never as the sum of the per-group percentages (8 procs,
+# 46.0%), whose denominators differ (the never-sum rule, docs/signal-collection.md). WS2a.
+file: rust/banshee-core/src/pressure/who.rs
+test: the_cpu_who_uses_the_cumulative_cpu_rule_and_the_deduplicated_total
+---OLD---
+            total.proc_count,
+            total.percent_of_one_core,
+---NEW---
+            census.monitor_agents.iter().map(|a| a.proc_count).sum(),
+            census.monitor_agents.iter().map(|a| a.percent_of_one_core).sum(),

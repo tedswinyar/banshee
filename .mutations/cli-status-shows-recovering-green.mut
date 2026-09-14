@@ -1,0 +1,8 @@
+# The status view hides green dimensions by default EXCEPT a recovering one — the
+# one green worth seeing, because it was red a moment ago (ADR-0009).
+file: rust/banshee-cli/src/main.rs
+test: status_hides_green_dimensions_unless_all_is_requested
+---OLD---
+        if !show_all && r.band == Band::Green && !r.recovering {
+---NEW---
+        if !show_all && r.band == Band::Green {

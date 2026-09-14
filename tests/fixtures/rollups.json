@@ -1,0 +1,50 @@
+[
+    {
+        "bucketStart": "2026-08-31T20:10:00.000000Z",
+        "sampleCount": 20,
+        "load1mAvg": 3.9765,
+        "load1mMax": 12.41,
+        "swapUsedAvg": 17515216896,
+        "swapUsedMax": 17616076800,
+        "pagesFreeMin": 27965,
+        "pagesCompressorMax": 262144,
+        "swapinsDelta": 18220,
+        "swapoutsDelta": 4096,
+        "staleSessionsMax": 17,
+        "orphansMax": 45,
+        "monitorPercentMax": 49.2,
+        "totalProcsMax": 912,
+        "volumes": [
+            {
+                "mountPoint": "/",
+                "totalBytes": 994662584320,
+                "availMin": 61443809280,
+                "availAvg": 61511041024
+            }
+        ]
+    },
+    {
+        "bucketStart": "2026-09-01T13:25:00.000000Z",
+        "sampleCount": 9,
+        "load1mAvg": 180.02,
+        "load1mMax": 231.85,
+        "swapUsedAvg": 0,
+        "swapUsedMax": 0,
+        "pagesFreeMin": 34024,
+        "pagesCompressorMax": 96500,
+        "swapinsDelta": null,
+        "swapoutsDelta": null,
+        "staleSessionsMax": null,
+        "orphansMax": null,
+        "monitorPercentMax": null,
+        "totalProcsMax": null,
+        "volumes": [
+            {
+                "mountPoint": "/",
+                "totalBytes": 994662584320,
+                "availMin": 61443809280,
+                "availAvg": 61443809280
+            }
+        ]
+    }
+]

@@ -1,0 +1,72 @@
+name: Release
+
+# Cut a signed, notarized, auto-updating release ON THE BUILD SERVER
+# (docs/build-server.md). Trigger: push a branch named release/<version> — the relay
+# forwards it under its own name — pointing at the commit on main that already
+# carries the version bump. The job:
+#   1. unlocks the build keychain (Developer ID) and checks every credential,
+#   2. runs scripts/release.sh <version>: self-contained restore drill, verify,
+#      notices/SBOM, signed + notarized + stapled DMG, release-notes commit, tag,
+#   3. pushes main and the tag to GitHub (the ONLY place main moves from, besides CI),
+#   4. publishes the DMG + Sparkle appcast to THIS repository's Releases,
+#   5. deletes the release/<version> branch.
+
+on:
+  push:
+    branches: ["release/**"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: release ${{ github.ref_name }}
+    runs-on: [self-hosted, macOS, ARM64, banshee]
+    timeout-minutes: 120
+    env:
+      BANSHEE_DRILL_SELF_CONTAINED: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Version from the branch name
+        run: |
+          v="${GITHUB_REF_NAME#release/}"
+          printf '%s' "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::branch must be release/MAJOR.MINOR.PATCH"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "BANSHEE_RELEASE_CONF=$HOME/.config/banshee-build/release.conf" >> "$GITHUB_ENV"
+      - name: The release branch must be main's tip
+        # release.sh commits notes and tags on main. If main has moved past this
+        # branch, or this branch carries commits main lacks, stop before signing.
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$(git rev-parse HEAD)" \
+            || { echo "::error::release/$VERSION ($(git rev-parse --short HEAD)) is not origin/main ($(git rev-parse --short origin/main))"; exit 1; }
+          git checkout -B main
+      - name: Unlock the build keychain
+        run: scripts/build-server/unlock-build-keychain.sh
+      - name: Every credential a release needs
+        run: ./scripts/doctor.sh --release
+      - name: Cut the release (drill, verify, notices, DMG, notes, tag)
+        run: ./scripts/release.sh "$VERSION"
+      - name: Push main and the tag
+        # --no-verify: release.sh has just run verify; a pre-push hook left in this
+        # persistent runner checkout by an earlier CI job must not run it a second time.
+        run: git push --no-verify origin main "v$VERSION"
+      - name: Publish DMG + appcast to this repository's Releases
+        env:
+          # Same repository, so the workflow's own token (contents: write, above) is
+          # enough — no cross-repo PAT to mint, rotate or leak. publish.sh reads
+          # GITHUB_REPOSITORY for the target.
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/publish.sh
+      - name: Retire the release branch
+        if: success()
+        run: git push origin --delete "$GITHUB_REF_NAME"
+      - name: Lock the build keychain
+        if: always()
+        run: scripts/build-server/unlock-build-keychain.sh --lock || true

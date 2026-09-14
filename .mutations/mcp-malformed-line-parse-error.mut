@@ -1,0 +1,12 @@
+# A malformed JSON-RPC line must get a -32700 parse error, never None — silence
+# hangs the client waiting for a reply.
+file: rust/banshee-mcp/src/main.rs
+test: a_malformed_line_is_a_parse_error
+---OLD---
+        Err(e) => Some(error_response(
+            Value::Null,
+            -32700,
+            &format!("parse error: {e}"),
+        )),
+---NEW---
+        Err(_e) => None,

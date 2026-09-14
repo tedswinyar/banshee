@@ -1,0 +1,7 @@
+# Pin the Rust toolchain so every machine and every stamped project builds
+# with the same compiler — reproducibility a template must not leave to chance
+# (adversarial devops review, 2026-08-20). Bump deliberately, in a commit of
+# its own, and re-run ./scripts/verify.sh.
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]

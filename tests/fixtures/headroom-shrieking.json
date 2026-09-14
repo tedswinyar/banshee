@@ -1,0 +1,60 @@
+{
+    "evaluatedAt": "2026-08-04T22:41:09.870112Z",
+    "level": "shrieking",
+    "shouldWait": true,
+    "recommendedParallelism": 0,
+    "retryAfterSecs": 300,
+    "cores": 8,
+    "reason": "Shrieking: Swap in use is red — 35.6 GB in use, climbing 74 MB/min (held 1h0m). Wait; retry in 300s.",
+    "conditions": [
+        {
+            "type": "Ready",
+            "status": "True",
+            "reason": "VerdictAvailable",
+            "message": "40 samples, 3 censuses in the window",
+            "since": null
+        },
+        {
+            "type": "CpuPressure",
+            "status": "True",
+            "reason": "CpuRed",
+            "message": "98% busy, rising 25%/min; 9.5× per core",
+            "since": "2026-08-04T21:41:09.870112Z"
+        },
+        {
+            "type": "MemoryPressure",
+            "status": "True",
+            "reason": "SwapRed",
+            "message": "35.6 GB in use, climbing 74 MB/min",
+            "since": "2026-08-04T21:41:09.870112Z"
+        },
+        {
+            "type": "ThermalPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no thermal reading yet",
+            "since": null
+        },
+        {
+            "type": "DiskPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no disk reading yet",
+            "since": null
+        },
+        {
+            "type": "SprawlPressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no agent sprawl reading yet",
+            "since": null
+        },
+        {
+            "type": "CorporatePressure",
+            "status": "Unknown",
+            "reason": "NoReading",
+            "message": "no managed agents reading yet",
+            "since": null
+        }
+    ]
+}

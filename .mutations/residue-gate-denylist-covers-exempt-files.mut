@@ -1,0 +1,11 @@
+# Exempt files (the gate, its test, its .mut entries) skip only the GENERIC checks; the
+# private denylist still applies to them. Waiving both turns the gate's own source into
+# the one place a private name can hide.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+    prose_here = [] if is_exempt(path) else prose
+---NEW---
+    prose_here = [] if is_exempt(path) else prose
+    if is_exempt(path):
+        return []

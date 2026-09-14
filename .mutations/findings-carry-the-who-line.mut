@@ -1,0 +1,9 @@
+# The who-line is composed in core and shipped on the finding (ADR-0005); a
+# finding with consumers and no line would leave every surface to word it
+# itself. WS2a.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_yellow_finding_names_who_too
+---OLD---
+                who_line: who::who_line(&who),
+---NEW---
+                who_line: None,

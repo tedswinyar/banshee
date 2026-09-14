@@ -1,0 +1,9 @@
+# The restore drill must reject a snapshot whose re-read row count disagrees with
+# what the backup reported — that mismatch means the copy is not trustworthy.
+file: scripts/restore-drill.sh
+test: test-release-checklist
+---OLD---
+[ "$rows" = "$reported" ] \
+  || die "restored row count $rows != the $reported the backup reported — the copy is not trustworthy"
+---NEW---
+:

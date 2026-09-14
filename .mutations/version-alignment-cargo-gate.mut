@@ -1,0 +1,11 @@
+# release.sh gated Version.swift alone and four releases shipped a daemon whose
+# /health said "0.1.0" (banshee-87l.15). The checker's whole value is the Cargo
+# comparison; comparing the app version with itself makes it vacuously true and
+# reproduces the shipped bug. The decoy-laden Cargo fixture in the test is what
+# keeps a first-or-last `version =` read from passing too.
+file: scripts/check-version-alignment.sh
+test: test-version-alignment
+---OLD---
+if [ "$APP_VERSION" != "$CARGO_VERSION" ]; then
+---NEW---
+if [ "$APP_VERSION" != "$APP_VERSION" ]; then

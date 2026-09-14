@@ -1,0 +1,9 @@
+# The private denylist is only worth anything if it is READ. A loader that parses the
+# file and keeps nothing reports "N patterns" honestly wrong — the test pins both the
+# refusal and the count.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+                patterns.append((line, re.compile(line, re.IGNORECASE)))
+---NEW---
+                pass

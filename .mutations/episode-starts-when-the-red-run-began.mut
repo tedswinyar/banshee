@@ -1,0 +1,8 @@
+# startedAt is when the red run began (now - heldSecs), not when the up delay was
+# crossed. The two come apart by exactly heldSecs in the fixture.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_episode_starts_when_the_red_run_began_not_when_it_crossed_the_delay
+---OLD---
+        started_at: now - Duration::seconds(r.held_secs as i64),
+---NEW---
+        started_at: now,

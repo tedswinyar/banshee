@@ -1,0 +1,10 @@
+# The kernel's thermal enum on its own scale: HEAVY (2, Apple's "serious":
+# performance impacted) must be red. Moving the red line to 3 (trapping) leaves a
+# throttled machine yellow — and yellow does not carry the "load figures understate
+# the work" finding that is the dimension's whole point.
+file: rust/banshee-core/src/pressure/config.rs
+test: a_heavy_thermal_level_is_red_with_the_kernels_words_and_no_action
+---OLD---
+            thermal: BandSpec::rising(1.0, 2.0, 0.5, 2),
+---NEW---
+            thermal: BandSpec::rising(1.0, 3.0, 0.5, 2),

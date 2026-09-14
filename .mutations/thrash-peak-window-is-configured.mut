@@ -1,0 +1,9 @@
+# thrash_peak_window_secs must be load-bearing, not decoration. This project has
+# shipped a config value that silently did nothing before (a tolerance configurable
+# in PressureConfig and hardcoded in Series), so every new knob gets this pin.
+file: rust/banshee-core/src/pressure/mod.rs
+test: the_thrash_peak_window_is_load_bearing
+---OLD---
+            windowed_peak(&rates, config.thrash_peak_window_secs)
+---NEW---
+            windowed_peak(&rates, 300)

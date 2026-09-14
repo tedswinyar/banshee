@@ -1,0 +1,10 @@
+# record_sweep_failure must actually increment; a no-op hides a failing sweep,
+# which is the ADR-0006 bounded-retention violation this counter exists to show.
+file: rust/banshee-api/src/lib.rs
+test: ops_health_tracks_sweep
+---OLD---
+    pub fn record_sweep_failure(&mut self) {
+        self.consecutive_sweep_failures = self.consecutive_sweep_failures.saturating_add(1);
+    }
+---NEW---
+    pub fn record_sweep_failure(&mut self) {}

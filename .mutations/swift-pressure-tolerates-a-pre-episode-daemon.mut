@@ -1,0 +1,10 @@
+# A pre-ADR-0009 daemon sends no `recovering`/`activity`; the app must decode that
+# as "none", not fail the verdict and blank the menu bar to "nothing is watching".
+file: swift/Sources/BansheeCore/Models.swift
+test: testAVerdictWithoutTheEpisodeFieldsStillDecodes
+---OLD---
+        recovering = try c.decodeIfPresent(Bool.self, forKey: .recovering) ?? false
+        activity = try c.decodeIfPresent(RecentActivity.self, forKey: .activity) ?? .none
+---NEW---
+        recovering = try c.decode(Bool.self, forKey: .recovering)
+        activity = try c.decode(RecentActivity.self, forKey: .activity)

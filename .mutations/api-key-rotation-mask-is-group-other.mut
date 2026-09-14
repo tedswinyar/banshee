@@ -1,0 +1,10 @@
+# The rotation trigger is the GROUP/OTHER mask (0o077), not inequality with 0o600.
+# Pairs with api-key-rotated-not-repaired: rotating on any mode != 0600 also passes
+# that test while throwing the key away on every start for a harmless 0700, and a key
+# that changes every start is a self-inflicted outage rather than a security control.
+file: rust/banshee-api/src/auth.rs
+test: an_owner_only_key_with_extra_owner_bits_is_kept
+---OLD---
+    let distrust = if mode & 0o077 != 0 {
+---NEW---
+    let distrust = if mode & 0o777 != 0o600 {

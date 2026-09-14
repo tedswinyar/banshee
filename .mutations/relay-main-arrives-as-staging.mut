@@ -1,0 +1,9 @@
+# The one rename the build-server topology depends on: the development machine's `main` reaches
+# GitHub as `staging`, so GitHub's `main` only moves when CI promotes it. Forwarding
+# main as main would let an unverified push land on main.
+file: scripts/build-server/post-receive
+test: test-relay-hook
+---OLD---
+    refs/heads/main) printf 'refs/heads/staging' ;;
+---NEW---
+    refs/heads/main) printf 'refs/heads/main' ;;

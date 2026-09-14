@@ -1,0 +1,8 @@
+# The installer must refuse a dirty tree so the daemon matches a commit; neutering
+# the porcelain check lets an uncommitted binary ship (the 8-day-outage shape).
+file: scripts/install-launchd.sh
+test: test-service
+---OLD---
+    if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
+---NEW---
+    if [ -n "" ]; then

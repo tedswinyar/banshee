@@ -1,0 +1,13 @@
+# A locked-out app must not wear its last verdict's glyph (banshee-6ds). Found running
+# 0.1.3 against the Phase 3 daemon: every request refused for hours while the menu bar
+# kept "Wailing, memory" — the last accepted verdict, presented as current. This is the
+# old behaviour whenever a verdict is in hand; the verdict is kept for the popover, so
+# only the glyph assertion can catch it.
+file: swift/Sources/BansheeCore/PressureModel.swift
+test: testALockedOutAppDoesNotWearItsLastVerdictGlyph
+---OLD---
+        case .unauthorized:
+            return "🔒"
+---NEW---
+        case .unauthorized:
+            return pressure?.glyph ?? "🔒"

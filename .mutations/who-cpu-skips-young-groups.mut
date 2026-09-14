@@ -1,0 +1,9 @@
+# A per-program cumulative-CPU ratio over a short lifetime is a startup burst,
+# not a rate: a group younger than corporate_min_life_secs is never named for
+# CPU, even when it would top the list (a 60 s newborn at 90%). WS2a.
+file: rust/banshee-core/src/pressure/who.rs
+test: the_cpu_who_skips_a_group_too_young_for_the_ratio_to_mean_anything
+---OLD---
+        .filter(|(_, (_, _, life))| *life >= min_life && *life > 0)
+---NEW---
+        .filter(|(_, (_, _, life))| *life > 0)

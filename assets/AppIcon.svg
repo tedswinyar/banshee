@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232a3d"/>
+      <stop offset="1" stop-color="#12151f"/>
+    </linearGradient>
+    <linearGradient id="wail" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#30d158"/>
+      <stop offset="0.5" stop-color="#ff9f0a"/>
+      <stop offset="1" stop-color="#ff3b30"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.44" r="0.5">
+      <stop offset="0" stop-color="#ff6b5c" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ff6b5c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- macOS squircle -->
+  <rect x="0" y="0" width="1024" height="1024" rx="230" ry="230" fill="url(#bg)"/>
+  <ellipse cx="512" cy="452" rx="360" ry="360" fill="url(#glow)"/>
+
+  <!-- wail: concentric arcs radiating up-and-out from the skull, calm→critical -->
+  <g fill="none" stroke="url(#wail)" stroke-linecap="round" opacity="0.92">
+    <path d="M 300 452 A 212 212 0 0 1 724 452" stroke-width="26"/>
+    <path d="M 246 452 A 266 266 0 0 1 778 452" stroke-width="24" opacity="0.72"/>
+    <path d="M 192 452 A 320 320 0 0 1 832 452" stroke-width="22" opacity="0.5"/>
+  </g>
+
+  <!-- skull: the death-omen face, its menu-bar identity -->
+  <g fill="#f4f6fb">
+    <!-- cranium + cheeks -->
+    <path d="M 512 300
+             C 618 300 690 372 690 476
+             C 690 540 664 586 628 618
+             L 628 662 C 628 686 606 700 582 700
+             L 442 700 C 418 700 396 686 396 662
+             L 396 618 C 360 586 334 540 334 476
+             C 334 372 406 300 512 300 Z"/>
+  </g>
+  <!-- eye sockets -->
+  <g fill="#12151f">
+    <ellipse cx="454" cy="486" rx="46" ry="54"/>
+    <ellipse cx="570" cy="486" rx="46" ry="54"/>
+    <!-- nasal cavity -->
+    <path d="M 512 540 L 490 596 L 534 596 Z"/>
+    <!-- clenched teeth (the wail) -->
+    <rect x="452" y="636" width="20" height="46" rx="6"/>
+    <rect x="482" y="636" width="20" height="52" rx="6"/>
+    <rect x="512" y="636" width="20" height="52" rx="6"/>
+    <rect x="542" y="636" width="20" height="46" rx="6"/>
+  </g>
+</svg>

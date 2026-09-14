@@ -1,0 +1,9 @@
+# The floor of one is what makes shouldWait exactly (recommendedParallelism ==
+# 0): without it a calm machine with no free cores reports "do not wait, run
+# zero", a contradiction no agent can act on.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: a_calm_machine_with_no_free_cores_still_has_room_for_one
+---OLD---
+    let slots = slots.max(1);
+---NEW---
+    let slots = slots;

@@ -1,0 +1,10 @@
+# An empty manifest is a misconfiguration, not a clean pass — the guard must
+# exit nonzero, or a manifest that silently lost all its entries reads as green.
+file: scripts/replay-mutations.sh
+test: test-mutations-manifest
+---OLD---
+  echo "replay-mutations: 0 passed, 1 failed"
+  exit 1
+---NEW---
+  echo "replay-mutations: 0 passed, 0 failed"
+  exit 0

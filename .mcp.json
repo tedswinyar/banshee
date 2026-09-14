@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "banshee": {
+      "command": "rust/target/debug/banshee-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

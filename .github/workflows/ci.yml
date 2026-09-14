@@ -1,0 +1,70 @@
+name: CI
+
+# Runs on the maintainer's self-hosted build server (docs/build-server.md), never on
+# GitHub-hosted images: this project does not buy Actions minutes, so a
+# `macos-*`/`ubuntu-*` job here would queue forever.
+#
+# Topology: the development machine pushes to the build server's bare repo; its
+# post-receive relay forwards `main` to GitHub as `staging`. This workflow verifies
+# `staging` and, on green, fast-forwards `main` itself — so GitHub's `main` only
+# moves when the build server says so. Feature branches are verified but never
+# promoted.
+#
+# NO `pull_request` trigger, deliberately. The runner is a real machine with the
+# release signing keychain on it, and a pull request from a fork would run the
+# fork's code there as the build user. Contributor branches are verified by pushing
+# them to the relay (a maintainer act), never by opening a PR.
+#
+# One runner, one job at a time: keep it lean and time-boxed.
+
+on:
+  push:
+    branches: [staging, "ci/**", "feature/**", "agent/**"]
+  workflow_dispatch:
+
+# Least privilege: the verify job runs branch code and needs only a read token (and does
+# not keep it in .git/config); only the promote job moves main.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (macos-arm64, banshee runner)
+    runs-on: [self-hosted, macOS, ARM64, banshee]
+    timeout-minutes: 45
+    steps:
+      # Pinned by SHA (v4.2.2), per the public-surface hardening bead.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0   # build numbers are the commit count; gitleaks scans history
+          persist-credentials: false
+      - name: Toolchain present
+        run: ./scripts/doctor.sh
+      - name: The gate
+        run: make ci
+
+  promote:
+    name: fast-forward main
+    needs: verify
+    if: github.ref == 'refs/heads/staging'
+    permissions:
+      contents: write
+    runs-on: [self-hosted, macOS, ARM64, banshee]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: main := staging (fast-forward only)
+        # No --force: if main has moved in a way staging does not contain, that is a
+        # real divergence to look at, not something to paper over.
+        # --no-verify: the verify job just ran the gate; a pre-push hook that an earlier
+        # `make ci` left in this persistent runner checkout must not run it again.
+        run: |
+          git fetch origin main || true
+          git push --no-verify origin "HEAD:refs/heads/main"
+          echo "main is now $(git rev-parse --short HEAD)"

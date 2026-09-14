@@ -1,0 +1,8 @@
+# A not-waiting decision has no retry; rendering the null as 0 would read as
+# "retry immediately".
+file: rust/banshee-cli/src/main.rs
+test: headroom_renders_go_with_the_slot_count_and_no_retry
+---OLD---
+            let _ = writeln!(s, "  retry after              —");
+---NEW---
+            let _ = writeln!(s, "  retry after              0s");

@@ -1,0 +1,11 @@
+# WS2d: the 2026-09-05 shape in one word — memory was freed and the machine did
+# NOT get better, so swap "still" grew. The "still" only belongs when something
+# was freed AND the verdict got no better (`worse`); flip that to `!worse` and the
+# sentence says "still" exactly when it should not, dropping it from the case it
+# exists for ("why did freeing 4 GB not help").
+file: rust/banshee-core/src/pressure/deltas.rs
+test: the_sentence_says_still_when_freeing_did_not_help
+---OLD---
+            let still = if freed_any && worse && ((d == Dimension::Swap) == (dd.delta > 0.0)) {
+---NEW---
+            let still = if freed_any && !worse && ((d == Dimension::Swap) == (dd.delta > 0.0)) {

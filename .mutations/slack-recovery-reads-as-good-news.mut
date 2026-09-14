@@ -1,0 +1,8 @@
+# The Slack payload distinguishes a recovery from an alarm and carries the
+# suppressed count. Ignore the kind and the all-clear wears the rotating light.
+file: rust/banshee-api/src/slack.rs
+test: the_payload_distinguishes_recovery_and_carries_the_suppressed_count
+---OLD---
+        NotificationKind::Recovered => (":white_check_mark:", "recovered"),
+---NEW---
+        NotificationKind::Recovered => (":rotating_light:", "critical"),

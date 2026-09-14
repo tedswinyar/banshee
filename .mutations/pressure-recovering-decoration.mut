@@ -1,0 +1,9 @@
+# The recovering decoration (ADR-0009 dec. 8): a calm face gains the bandage when a
+# dimension is inside its down window. Drop it and the flag says recovering while
+# the glyph says nothing — two surfaces disagreeing, which ADR-0005 forbids.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_calm_verdict_with_a_recovering_dimension_is_decorated
+---OLD---
+            self.glyph.push_str(RECOVERING_GLYPH);
+            self.accessibility_label.push_str(", recovering");
+---NEW---

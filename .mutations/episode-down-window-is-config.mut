@@ -1,0 +1,8 @@
+# episode_down_secs (keep_firing_for) must be load-bearing. Hardcode 600 and the 60s
+# configuration stops closing an episode that has been below red for 120s.
+file: rust/banshee-core/src/pressure/episode.rs
+test: the_down_window_is_load_bearing_config
+---OLD---
+            if now - since >= Duration::seconds(config.episode_down_secs as i64) {
+---NEW---
+            if now - since >= Duration::seconds(600) {

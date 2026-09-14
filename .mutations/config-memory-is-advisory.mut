@@ -1,0 +1,15 @@
+# Availability (`Dimension::Memory`) is ADVISORY since banshee-yk8: macOS holds
+# availability near a target, so the value is stable by design and the band never
+# fires — it looked like a guard and contributed nothing (measured 3.9→3.2→3.8 GB,
+# never leaving GREEN, while the machine went calm→Wailing). The metric stays
+# (the banshee-cot fix) as an informational reading; only the band is demoted.
+# Removing `Dimension::Memory` from `is_advisory` puts it back among the banded
+# memory dimensions that DRIVE the level, so a decorative availability red could
+# ring a bell again — `the_banded_memory_dimensions_exclude_the_advisory_ones`
+# (and `the_advisory_dimensions_are_the_display_only_ones`) fails.
+file: rust/banshee-core/src/pressure/config.rs
+test: the_banded_memory_dimensions_exclude_the_advisory_ones
+---OLD---
+            Dimension::Uptime | Dimension::Memory | Dimension::KernelFree | Dimension::Compressor
+---NEW---
+            Dimension::Uptime | Dimension::KernelFree | Dimension::Compressor

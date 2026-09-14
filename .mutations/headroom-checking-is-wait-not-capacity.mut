@@ -1,0 +1,20 @@
+# ADR-0010 decision 3: no data is "wait", never headroom. Flipping the Checking
+# branch to "go with one slot" is the one lie the agent surface must never tell.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: the_checking_fixture_says_wait_and_never_invents_headroom
+---OLD---
+        return Headroom {
+            evaluated_at: p.evaluated_at,
+            level: p.level,
+            should_wait: true,
+            recommended_parallelism: 0,
+            retry_after_secs: Some(retry),
+            cores: machine.map(|m| m.cores),
+---NEW---
+        return Headroom {
+            evaluated_at: p.evaluated_at,
+            level: p.level,
+            should_wait: false,
+            recommended_parallelism: 1,
+            retry_after_secs: Some(retry),
+            cores: machine.map(|m| m.cores),

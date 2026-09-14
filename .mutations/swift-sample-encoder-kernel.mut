@@ -1,0 +1,7 @@
+# The hand-written Swift encoder must emit memoryPressureLevel (present-as-null
+# wire contract); dropping the line silently loses it on write.
+file: swift/Sources/BansheeCore/SampleModels.swift
+test: RecordWireFormatTests
+---OLD---
+        try c.encode(memoryPressureLevel, forKey: .memoryPressureLevel)
+---NEW---

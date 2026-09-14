@@ -1,0 +1,111 @@
+# Changelog
+
+All notable changes to Banshee. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Semantic Versioning](https://semver.org/) as described in `VERSIONING.md`.
+
+## [Unreleased]
+
+Everything on `main` since 0.1.4. This is the 1.0 candidate.
+
+### Added
+
+- **Alert episodes and the Recovering state** (schema v10, ADR-0009). An alert is
+  one continuous incident on one dimension: it opens after the up delay, absorbs
+  re-fires inside the repeat interval (counted, shown as "+N more"), survives short
+  dips, and closes with exactly one recovery notice. A dimension that has dropped
+  below red inside its episode's down window is `recovering`, and a calm glyph
+  wears 🩹 for it.
+- **The thermal dimension** (schema v11). The kernel's own thermal pressure level is
+  the eleventh dimension: moderate is yellow, heavy and above red. A throttled
+  machine runs slower for the same load figure, so a load red without this beside
+  it was a story with a missing chapter.
+- **Memory second pass** (schema v13). The kernel's reclaimable percentage and the
+  compressor's occupancy are advisory dimensions; a jetsam kill is a confirmed kill
+  and rings the top bell at once. Plain availability is now informational, never a
+  driver, because banding on it alone produced false reds.
+- **CPU banded on measured utilization** (schema v12), not load per core. The tick
+  counters are differentiated between samples; load per core rides beside the
+  headline as run-queue depth, and a deep queue with idle cores is reported as
+  scheduling contention rather than saturation.
+- **The who-line.** Every finding names the top consumers behind it, from the
+  newest census — "who: Chrome ×115 at 7.7 GB, claude ×8 at 2.1 GB" — on the
+  popover, `banshee status`, the MCP `pressure` tool and the alert text. Episodes
+  keep the who-line at their peak.
+- **The headroom read** (`/headroom`, `banshee headroom`, MCP `headroom`, ADR-0010).
+  The verdict reduced to a decision for agents: wait or go, how many more workers
+  the machine can absorb, when to ask again. Advice, never a block. Served on all
+  three surfaces and pinned cross-language.
+- **Deltas** (`/deltas`, `banshee deltas`, MCP `deltas`). What changed over a
+  lookback, or since an alert episode opened, ranked by change rather than size and
+  honest about any hole in the observations. Episodes now carry a compact census
+  summary from their peak so the question still has an answer after the live
+  censuses are swept.
+- **Continuous history rollups.** Every closed five-minute bucket is rolled up as
+  it closes, not only when it ages out, so the History tab's short windows are no
+  longer empty by construction.
+- **`/stats` says what Banshee itself costs**: physical footprint and CPU as a
+  lifetime average over uptime, shown in the app and `banshee stats`.
+- **`make install`** ships the daemon and the app together, from one commit, so the
+  two halves cannot drift apart on the machine that runs them.
+- **A self-contained release pipeline**: App Store Connect API-key notarization,
+  key-file Sparkle signing, a named signing keychain and an enforced restore drill,
+  so a release can be cut on a build server without the maintainer's login session.
+
+### Fixed
+
+- The daemon, CLI and MCP server report the same version as the app; the release
+  gate blocks if the two version files diverge.
+- One sustained red catastrophically past its line rings the top bell on its own,
+  rather than waiting for a second dimension.
+- The app decodes unknown `source` and `unit` values leniently, so a newer daemon
+  does not blank a field in an older app; `level` and `band` stay strict on purpose.
+
+## [0.1.4] — 2026-09-07
+
+- The daemon refuses every credential sent over TCP; the API key travels only over
+  the owner-only Unix socket (ADR-0008 Phase 3). The menu-bar app authenticates over
+  the socket.
+- A locked-out or long-unreachable app stops wearing its last verdict glyph: 🔒 at
+  once on a refused key, 🫧 after a minute of silence.
+- The thrash dimension bands on the peak of a five-minute window (median-filtered,
+  then max), so it decays as a storm ages out instead of climbing.
+- Clients re-read the API key on a 401, so a key rotation cannot strand them.
+- `check-service.sh` probes the socket, verifies it is 0600, and keys only over it.
+
+## [0.1.3] — 2026-09-03
+
+- First launch offers to install the daemon from the helpers bundled inside the app,
+  closing the gap between "dragged to /Applications" and "something is sampling".
+- App icon, and a styled DMG window with the app-to-Applications layout.
+- Third-party license notices ride in the DMG; a real build refuses to proceed
+  without the Sparkle public key.
+- The API key is bound to loopback destinations.
+
+## [0.1.2] — 2026-09-02
+
+- Sparkle auto-update embedded: a signed appcast published to GitHub Releases,
+  EdDSA-verified before install. `publish.sh` signs the appcast and uploads it.
+- The app is stapled inside the DMG, so an offline first launch passes Gatekeeper.
+
+## [0.1.1] — 2026-09-02
+
+- Hardened runtime on real Developer ID signing, so the app is notarizable; the
+  notarized and stapled DMG verified end to end.
+- API key-file hardening from the pre-publication security review: the blank-key
+  and permission gaps closed, untrusted keys rotated, daemon logs owner-only.
+
+## [0.1.0] — 2026-08-31
+
+The first working build: the Rust core with the pressure model (bands, hysteresis,
+six levels, ranked findings), the cheap-tier sampler and census tier, the SQLite
+time-series store with retention and rollups, the HTTP API, the `banshee` CLI and
+the MCP server at byte parity, the daemon as a launchd LaunchAgent, and the menu
+bar glyph with its popover and detail window. Reap actions (preview, then execute)
+and the optional Slack escalation sink followed the next day.
+
+---
+
+Versions 0.1.1 through 0.1.4 were interim builds installed on the maintainer's own
+machine while the release pipeline was being brought up; none was git-tagged.
+`scripts/release.sh` regenerates this file with `git-cliff` at release time.

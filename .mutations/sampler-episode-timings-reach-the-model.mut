@@ -1,0 +1,8 @@
+# The episode timings must reach the model through from_env — the path that can
+# actually be broken (gotcha #9). Drop the propagation and a dogfood run's
+# BANSHEE_EPISODE_UP_SECS=0 silently stays at 120.
+file: rust/banshee-api/src/sampler.rs
+test: the_resolved_cadence_is_propagated_to_the_pressure_model
+---OLD---
+        p.episode_up_secs = env_secs("BANSHEE_EPISODE_UP_SECS", p.episode_up_secs);
+---NEW---

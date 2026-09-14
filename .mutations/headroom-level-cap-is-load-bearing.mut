@@ -1,0 +1,9 @@
+# The level cap distinguishes Stirring from Quiet when the resources say the
+# same thing: 7 free cores, capped at half of 8.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: stirring_caps_at_half_the_cores_and_restless_at_a_quarter
+---OLD---
+        Level::Stirring => cores.div_ceil(2),
+        Level::Restless => cores.div_ceil(4),
+---NEW---
+        Level::Restless => cores.div_ceil(4),

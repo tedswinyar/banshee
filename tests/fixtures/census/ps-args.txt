@@ -1,0 +1,21 @@
+    1 /sbin/launchd
+  504 /usr/libexec/logd
+ 2833 claude --model example-model-5
+ 4803 claude
+22629 claude --resume
+63380 claude
+77001 claude
+88120 claude
+91002 kiro-cli --resume
+33001 /Users/example/.local/bin/example-notes-mcp-server
+33002 /Users/example/.local/bin/example-tickets-mcp-server
+33003 /Users/example/.local/bin/example-search-mcp-server
+44001 /Users/example/.local/share/nvim/mason/bin/rust-language-server
+44002 /Users/example/.local/lib/tree-sitter-cli
+55001 /Library/SystemExtensions/00000000-0000-0000-0000-000000000000/com.example.endpointagent.systemextension/Contents/MacOS/com.example.endpointagent
+55002 /Applications/Example DLP Agent.app/Contents/MacOS/scan-helper
+55004 /Applications/Example DLP Agent.app/Contents/MacOS/scan-helper
+55003 /usr/local/bin/example-log-shipper
+66001 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/152.0.7977.64/Helpers/Google Chrome Helper.app/Contents/MacOS/Google Chrome Helper --type=renderer
+66002 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+99100 /opt/homebrew/bin/rg --files claude

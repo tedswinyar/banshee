@@ -1,0 +1,8 @@
+# The whole point of the gate: a `private/` path that reaches the parent index (git add
+# -f, a rename, a gitignore edit) must fail verify. Dropping the prefix makes the notebook
+# publishable by accident.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+    "private/",
+---NEW---

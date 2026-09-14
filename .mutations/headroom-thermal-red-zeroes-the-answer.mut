@@ -1,0 +1,9 @@
+# ADR-0010 decision 5: a RED thermal dimension zeroes the recommendation even
+# inside its grace period, because a throttled CPU makes the load arithmetic a
+# lie. The fixture is the co-variance breaker — level and cores alone say 2.
+file: rust/banshee-core/src/pressure/headroom.rs
+test: a_fresh_thermal_red_flips_a_restless_machine_from_two_slots_to_wait
+---OLD---
+const ZEROING_SOURCES: [Source; 3] = [Source::Memory, Source::Thermal, Source::Disk];
+---NEW---
+const ZEROING_SOURCES: [Source; 2] = [Source::Memory, Source::Disk];
