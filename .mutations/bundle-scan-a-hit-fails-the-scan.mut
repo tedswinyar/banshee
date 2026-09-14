@@ -1,0 +1,11 @@
+# The scan must FAIL when it finds a builder path, not merely print it. Reporting the
+# offender and returning 0 is the shape build-app.sh cannot distinguish from clean, and
+# a published DMG with home paths in all four executables is what that cost.
+file: scripts/lib/bundle-scan.sh
+test: test-bundle-scan
+---OLD---
+      printf 'bundle-scan: %s carries a builder path: %s\n' "${f#"$bundle"/}" "$(printf '%s' "$hits" | paste -sd' ' -)" >&2
+      rc=1
+---NEW---
+      printf 'bundle-scan: %s carries a builder path: %s\n' "${f#"$bundle"/}" "$(printf '%s' "$hits" | paste -sd' ' -)" >&2
+      rc=0

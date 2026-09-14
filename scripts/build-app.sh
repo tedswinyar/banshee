@@ -53,7 +53,22 @@ APPCAST_URL="${APPCAST_URL:-https://github.com/tedswinyar/banshee/releases/lates
 SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}"
 
 echo "==> Building $APP_NAME $VERSION ($CONFIGURATION)"
-(cd "$ROOT_DIR/swift" && swift build -c "$CONFIGURATION")
+# A release build must not carry the builder's home path (scripts/lib/bundle-scan.sh
+# explains the incident). Both compilers embed source paths into the binary — Rust in
+# panic locations for every crate, including the Cargo registry under $HOME; Swift in
+# #filePath literals and module paths — so both get remapped to stable, anonymous
+# prefixes. Debug builds are left alone: a debugger wants the real paths.
+SWIFT_FLAGS=()
+if [ "$CONFIGURATION" = release ]; then
+  CARGO_HOME_DIR="${CARGO_HOME:-$HOME/.cargo}"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$CARGO_HOME_DIR/registry/src=/cargo/registry --remap-path-prefix=$ROOT_DIR=/banshee --remap-path-prefix=$HOME=/home"
+  # -file-prefix-map covers what the COMPILER writes (#filePath, module paths). The
+  # LINKER separately records each object file's absolute path in the debug map
+  # (N_OSO stabs), which the compiler flag cannot reach; ld64's -oso_prefix strips it.
+  SWIFT_FLAGS=(-Xswiftc -file-prefix-map -Xswiftc "$ROOT_DIR=/banshee" -Xswiftc -file-prefix-map -Xswiftc "$HOME=/home"
+               -Xlinker -oso_prefix -Xlinker "$ROOT_DIR/")
+fi
+(cd "$ROOT_DIR/swift" && swift build -c "$CONFIGURATION" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"})
 (cd "$ROOT_DIR/rust" && cargo build --workspace $([ "$CONFIGURATION" = release ] && echo --release))
 
 APP_BINARY="$ROOT_DIR/swift/.build/$CONFIGURATION/$APP_NAME"
@@ -208,5 +223,15 @@ for bin in banshee-api banshee-mcp banshee; do
   sign "$APP_DIR/Contents/Helpers/$bin"
 done
 sign "$APP_DIR"
+
+# The packaged bytes, not the source tree, are what ships: refuse a release bundle that
+# still carries the builder's home path anywhere (scripts/lib/bundle-scan.sh).
+if [ "$CONFIGURATION" = release ]; then
+  # shellcheck source=lib/bundle-scan.sh
+  . "$SCRIPT_DIR/lib/bundle-scan.sh"
+  banshee_scan_bundle_for_paths "$APP_DIR" \
+    || { echo "build-app.sh: the release bundle carries a builder path; refusing to finish (see scripts/lib/bundle-scan.sh)" >&2; exit 1; }
+  echo "==> Bundle scan: no builder paths in the packaged bytes"
+fi
 
 echo "==> Done: $APP_DIR"

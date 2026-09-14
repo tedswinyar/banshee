@@ -112,15 +112,27 @@ cat > "$APPCAST" <<XML
 XML
 
 TAG="v$VERSION"
-info "publishing $TAG to $RELEASES_REPO (DMG + appcast.xml)"
+# Provenance: the tag must name the commit the DMG was built from, and that commit must
+# already be on the remote (a tag on a commit GitHub does not have is an error, and a
+# tag on "whatever main is right now" was how a shipped app once disagreed with its own
+# tag). A dirty tree has no single commit to name.
+REV="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+git -C "$ROOT_DIR" diff --quiet && git -C "$ROOT_DIR" diff --cached --quiet \
+  || die "the working tree is dirty; a release names one commit, so commit or stash first"
+git -C "$ROOT_DIR" fetch -q origin 2>/dev/null || true
+git -C "$ROOT_DIR" merge-base --is-ancestor "$REV" origin/main 2>/dev/null \
+  || die "HEAD ${REV:0:7} is not on origin/main; push it first so the tag can point at it"
+info "publishing $TAG to $RELEASES_REPO (DMG + appcast.xml) for commit ${REV:0:7}"
 if gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
-  # Re-publishing the same version: replace the assets rather than fail.
+  # Re-publishing the same version: replace the assets rather than fail. The tag keeps
+  # its original target; if the source moved, delete the release and tag first.
   gh release upload "$TAG" "$DMG" "$APPCAST" --repo "$RELEASES_REPO" --clobber
 else
   gh release create "$TAG" "$DMG" "$APPCAST" \
     --repo "$RELEASES_REPO" \
+    --target "$REV" \
     --title "Banshee $VERSION" \
-    --notes "Automated release. Auto-updates via Sparkle."
+    --notes "Banshee $VERSION, built from commit ${REV:0:7}. Signed, notarized, and auto-updating via Sparkle."
 fi
 
 info "done. Sparkle feed: https://github.com/$RELEASES_REPO/releases/latest/download/appcast.xml"
