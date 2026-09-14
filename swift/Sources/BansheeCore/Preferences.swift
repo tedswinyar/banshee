@@ -41,6 +41,7 @@ public struct Preferences {
     private enum Key {
         static let dockPresence = "banshee.dockPresence"
         static let notificationsEnabled = "banshee.notificationsEnabled"
+        static let loginItemRegistrationAttempted = "banshee.loginItemRegistrationAttempted"
     }
 
     public init(defaults: UserDefaults = .standard) {
@@ -72,5 +73,20 @@ public struct Preferences {
             return defaults.bool(forKey: Key.notificationsEnabled)
         }
         nonmutating set { defaults.set(newValue, forKey: Key.notificationsEnabled) }
+    }
+
+    /// Whether the app has ever tried to register itself as a login item.
+    ///
+    /// The login item's actual state lives with launchd (`SMAppService.mainApp.status`),
+    /// not here — System Settings can change it behind the app's back and the Settings
+    /// toggle reads launchd. What THIS remembers is only that the one-time first-launch
+    /// registration has happened, so the app offers itself as a login item exactly
+    /// once and thereafter respects whatever the user chose. Without it, a user who
+    /// removed Banshee from Login Items would find it back after every launch.
+    ///
+    /// Defaults to false (never attempted).
+    public var loginItemRegistrationAttempted: Bool {
+        get { defaults.bool(forKey: Key.loginItemRegistrationAttempted) }
+        nonmutating set { defaults.set(newValue, forKey: Key.loginItemRegistrationAttempted) }
     }
 }

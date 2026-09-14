@@ -46,6 +46,12 @@ The app is a CLIENT of the daemon — it never starts one, because a second
 installed the window shows the verdict; without it, the window says so and names
 the command to fix it.
 
+Start at login is two halves: the daemon is a LaunchAgent with `RunAtLoad`, so it
+always survives a reboot; the app registers itself as a login item (`SMAppService`)
+once, on its first launch from `/Applications` — deliberately not from a `build/`
+checkout, so a developer's throwaway build never starts at login. Settings › "Open at
+login" reads launchd's answer and toggles it.
+
 Once connected, the verdict is **Checking** for the first ~15 seconds, which is not
 a claim that the machine is calm.
 

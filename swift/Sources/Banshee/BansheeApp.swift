@@ -86,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyDockPresence()
         MenuBarController.shared.setup()
+        LoginItem.registerOnFirstLaunch(preferences: preferences)
 
         // Start Sparkle now: constructing the controller begins the scheduled
         // background update checks (banshee-u0a5-sparkle). Referencing the

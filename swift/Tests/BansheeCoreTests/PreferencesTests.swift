@@ -66,6 +66,18 @@ final class PreferencesTests: XCTestCase {
         XCTAssertTrue(Preferences(defaults: defaults).notificationsEnabled)
     }
 
+    /// The first-launch login-item registration happens ONCE. A fresh install has never
+    /// attempted it; after the attempt the flag sticks, so a user who later removes
+    /// Banshee from Login Items does not find it re-added on the next launch.
+    /// Mutation-proof: make the getter return true and the first assertion fails; make
+    /// the setter a no-op and the second does.
+    func testLoginItemRegistrationIsAttemptedOnce() {
+        let prefs = Preferences(defaults: defaults)
+        XCTAssertFalse(prefs.loginItemRegistrationAttempted, "a fresh install has never attempted it")
+        prefs.loginItemRegistrationAttempted = true
+        XCTAssertTrue(Preferences(defaults: defaults).loginItemRegistrationAttempted)
+    }
+
     /// Two `Preferences` values over the same defaults are one setting, not two — it
     /// is a view onto storage, not a cache. Otherwise Settings would write somewhere
     /// the AppDelegate does not read.

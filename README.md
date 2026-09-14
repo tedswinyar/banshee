@@ -56,8 +56,12 @@ Download the DMG from the
 [GitHub Releases page](https://github.com/tedswinyar/banshee/releases),
 drag Banshee.app to `/Applications`, and launch it. The first launch offers to
 install the daemon (a launchd LaunchAgent, from helpers bundled inside the app);
-accept, and the menu bar glyph appears once the first samples are in. Updates
-arrive through the app's own "Check for Updates…" (Sparkle, signed appcast).
+accept, and the menu bar glyph appears once the first samples are in. On that first
+launch from `/Applications` the app also adds itself to your Login Items, so the glyph
+comes back after a restart (macOS tells you; Settings › "Open at login" or System
+Settings › Login Items turns it off). The daemon starts at login regardless — it is a
+background service the app only reads from. Updates arrive through the app's own
+"Check for Updates…" (Sparkle, signed appcast).
 
 **Requirements.** macOS 14 (Sonoma) or newer on Apple silicon (the release build
 is arm64-only; an Intel or universal build is not produced yet). The DMG carries

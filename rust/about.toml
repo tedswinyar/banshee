@@ -1,6 +1,16 @@
 # cargo-about configuration — generates THIRD-PARTY-NOTICES.html during
 # release.sh (skipped with a warning when cargo-about is not installed;
-# install: cargo install cargo-about).
+# install: cargo install cargo-about --features cli).
+#
+# Attribution is owed for what SHIPS: the crates compiled into the macOS binaries.
+# Without these three filters cargo-about walks the whole lockfile — dev-only test
+# crates, build-script tooling, and the Windows/Linux halves of platform crates — and
+# the notices grew to 204 crates for a binary that links 160. The filters bring the
+# document back to the dependency graph `cargo tree -e normal --target
+# aarch64-apple-darwin` reports.
+targets = ["aarch64-apple-darwin"]
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
 accepted = [
     "MIT",
     "Apache-2.0",

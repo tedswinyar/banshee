@@ -1,0 +1,10 @@
+# The first-launch login-item registration must happen exactly once: the flag defaults
+# to "never attempted" and sticks after the attempt, so a user who removes Banshee from
+# Login Items does not find it re-added at the next launch. A getter that always says
+# "attempted" would never register; one that always says "not attempted" would nag.
+file: swift/Sources/BansheeCore/Preferences.swift
+test: testLoginItemRegistrationIsAttemptedOnce
+---OLD---
+        get { defaults.bool(forKey: Key.loginItemRegistrationAttempted) }
+---NEW---
+        get { true }
