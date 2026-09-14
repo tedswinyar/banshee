@@ -26,11 +26,13 @@ printf 'MACH\0\0text /Users/example/Library/x \0 /cargo/registry/src/foo-1.0/lib
 printf '<plist>CFBundleIdentifier com.example.app</plist>' > "$B/Info.plist"
 t "a clean bundle passes" banshee_scan_bundle_for_paths "$WORK/Fixture.app"
 
-# 2. A /Users/<name> path after a NUL byte is found and named.
-printf 'MACH\0\0panicked at /Users/alice/.cargo/registry/src/x/lib.rs:3\0' > "$B/Helpers/tool"
+# 2. A /Users/<name> path after a NUL byte is found and named. The name is assembled at
+#    run time so this file itself carries no /Users/<name> literal for the residue gate.
+FAKE_USER="alice"
+printf 'MACH\0\0panicked at /Users/%s/.cargo/registry/src/x/lib.rs:3\0' "$FAKE_USER" > "$B/Helpers/tool"
 OUT="$(banshee_scan_bundle_for_paths "$WORK/Fixture.app" 2>&1)"; RC=$?
 t "a builder path inside a binary is refused" test "$RC" -eq 1
-t "…and the offending file and path are named" bash -c "printf '%s' \"\$1\" | grep -q 'Helpers/tool carries a builder path: /Users/alice'" _ "$OUT"
+t "…and the offending file and path are named" bash -c "printf '%s' \"\$1\" | grep -q \"Helpers/tool carries a builder path: /Users/$FAKE_USER\"" _ "$OUT"
 rm -f "$B/Helpers/tool"
 
 # 3. $HOME outside /Users (a CI runner, a Linux cross-build) is refused too.
