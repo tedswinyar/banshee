@@ -85,13 +85,6 @@ winning:
 
 🔥 CPU · 🌡️ thermal · 🧠 memory · 💽 disk · 🕸️ agent sprawl · 🏢 managed agents
 
-`Checking` is distinct from `Quiet` on purpose. Without it the menu bar would say
-"nothing is wrong" for the first moments after launch, which teaches people to
-distrust the one glyph that has to be trusted. The app also never presents an old
-verdict as current. If the daemon refuses the app's key, the glyph is 🔒 at once.
-If the daemon stops answering, the last glyph stands for a minute and then gives
-way to 🫧.
-
 ## Install
 
 Download the DMG from the
