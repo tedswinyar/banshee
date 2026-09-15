@@ -129,8 +129,14 @@ To cut a release: bump BOTH version files (`Version.swift`, `rust/Cargo.toml`; t
 suite is red on a half-bump), land that on `main` via `staging`, then:
 
 ```
-git fetch mbp && git push mbp origin/main:release/0.1.4
+git fetch origin && git push mbp origin/main:refs/heads/release/0.1.4
 ```
+
+`origin/main` is GitHub's `main` (the relay has no `main` of its own worth naming, and
+`git fetch mbp` does not update `origin/*`). The destination must be fully qualified:
+the source is a remote-tracking ref, so for a branch that does not exist yet git
+cannot infer `refs/heads/` and refuses with "You must fully qualify the ref" (bit on
+the first rehearsal, 2026-09-14).
 
 The workflow refuses unless the branch is exactly `origin/main`'s tip, unlocks the
 keychain, runs `doctor.sh --release`, then `release.sh 0.1.4` (self-contained drill,
@@ -161,6 +167,6 @@ release.
 | `relay: FAILED to forward` on `git push mbp` | GitHub's ref is not a fast-forward of yours | the relay never forces; look at what moved on GitHub |
 | `relay: FAILED to forward` with `Permission … denied` / HTTP 403, while `gh api repos/<owner>/banshee` as `builder` shows `push: true` | the fine-grained PAT has no grant on this repository. Reads succeed anyway once the repository is public, and `permissions` in that response describes the USER, not the token — only a write exposes it. Seen 2026-09-14 after the repository was deleted and recreated: same name, new id, every grant gone | add the repository to the token's Repository access on github.com/settings/personal-access-tokens; no re-login. Then replay the forward by hand: `git -C ~/repos/banshee.git push github main:staging` |
 | Job queued forever although `launchctl print` says running and the runner log shows token refreshes | the runner is registered against a repository that no longer exists (deleted and recreated under the same name). `gh api repos/<owner>/banshee/actions/runners` lists nothing; the Listener keeps polling a dead pool without complaint | `./config.sh remove --local`, re-run `setup-runner.sh` with a fresh token, then `sudo launchctl kickstart -k system/<label>` (the plist is unchanged, so no bootout/bootstrap) |
-| `release/X` refused: "is not origin/main" | `main` moved after you branched, or the branch carries extra commits | `git push mbp origin/main:release/X` after `staging` promoted |
+| `release/X` refused: "is not origin/main" | `main` moved after you branched, or the branch carries extra commits | `git fetch origin && git push mbp origin/main:refs/heads/release/X` after `staging` promoted |
 | Homebrew/cargo tools "missing" over ssh | non-interactive PATH lacks `/opt/homebrew/bin` | every script here exports it; `.zshenv` covers ad-hoc shells |
 | Sparkle's "Check for Updates…" finds nothing after a publish | the repository is still private (anonymous GET 404s) | rehearse against a local appcast (above); flip visibility for the real thing |

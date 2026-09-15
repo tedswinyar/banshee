@@ -406,6 +406,15 @@ class); add your own the moment one bites.
   longer existed (`NotFound`). Neither message names the move. After relocating any
   checkout, delete both build dirs before trusting a green or a red. Cost: one failed
   run and a full rebuild.
+- **A job-level env var is inherited by every test the job runs, and it can flip the
+  suite's mode without a word (2026-09-14, first pipeline rehearsal).** `release.yml`
+  exports `BANSHEE_DRILL_SELF_CONTAINED=1` for the whole job; `release.sh` runs verify,
+  verify runs `test-release-checklist.sh`, and its seven stubbed "the drill FAILS when…"
+  cases inherited the flag, went self-contained, booted a real daemon and passed —
+  "succeeded and should not have", on a suite that was green in CI four minutes earlier.
+  Same runner, same commit, one env var. The test now `unset`s the drill's mode
+  variables at the top. **A test that drives a script by env must start from a clean
+  env**, not the caller's; `env -u` per case is not enough when a new variable arrives.
 - **macOS file permissions, verified by execution (2026-08-06):** `chmod 600`
   does not remove an ACL (`chmod -N` does); `ls -l` cannot show you whether an
   ACL exists (use `ls -le`); `/bin/chmod 600 -- f` exits 1 *while still

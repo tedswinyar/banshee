@@ -11,6 +11,13 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DRILL="$SCRIPT_DIR/restore-drill.sh"
+# release.yml exports BANSHEE_DRILL_SELF_CONTAINED=1 for the WHOLE job, and release.sh
+# runs verify (this suite) under it. Inherited here, every stubbed failure case below
+# went self-contained instead, booted a real throwaway daemon, and "succeeded and
+# should not have" — 7 red on the first pipeline rehearsal (2026-09-14) while the same
+# suite was green in CI minutes earlier. The self-contained cases pass the flag or
+# the env explicitly; nothing here may inherit it.
+unset BANSHEE_DRILL_SELF_CONTAINED BANSHEE_DRILL_BIN
 PASS=0
 FAIL=0
 
