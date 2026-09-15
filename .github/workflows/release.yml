@@ -43,7 +43,10 @@ jobs:
         # release.sh commits notes and tags on main. If main has moved past this
         # branch, or this branch carries commits main lacks, stop before signing.
         run: |
-          git fetch origin main
+          # --prune-tags: this checkout persists between jobs, so a tag deleted on GitHub
+          # (a failed cut, retired) would otherwise survive here and make release.sh
+          # refuse with "tag already exists" forever.
+          git fetch origin main --tags --prune --prune-tags
           test "$(git rev-parse origin/main)" = "$(git rev-parse HEAD)" \
             || { echo "::error::release/$VERSION ($(git rev-parse --short HEAD)) is not origin/main ($(git rev-parse --short origin/main))"; exit 1; }
           git checkout -B main

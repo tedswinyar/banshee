@@ -13,6 +13,8 @@ swift/.build/
 # Build products
 build/
 dist/
+# cargo-cyclonedx drops one SBOM next to each crate; release.sh collects them into sbom/
+rust/*/*.cdx.json
 
 # Website
 website/public/

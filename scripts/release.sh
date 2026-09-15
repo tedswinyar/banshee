@@ -61,7 +61,7 @@ info "running verify"
 # Release tooling is REQUIRED for a release (unlike the develop-time gates,
 # a release is a deliberate act — fail closed rather than ship stale notes /
 # missing attribution). Run ./scripts/doctor.sh to install these.
-for tool in git-cliff cargo-about cargo-cyclonedx; do
+for tool in cargo-about cargo-cyclonedx; do
   command -v "$tool" >/dev/null || die "$tool is required to cut a release (see ./scripts/doctor.sh)"
 done
 
@@ -78,19 +78,32 @@ if [ -d swift ]; then
   ./scripts/build-dmg.sh || die "DMG build failed"
 fi
 
-info "generating release notes"
-git-cliff --config cliff.toml --tag "v$VERSION" -o CHANGELOG.md
-if [ -d website/content ]; then
-  ./scripts/generate-release-notes.sh >/dev/null || true
-fi
+# Release notes are WRITTEN, not generated: CHANGELOG.md is curated (Keep a Changelog),
+# and regenerating it from commit subjects would have replaced the curated file on the
+# first pipeline rehearsal. The gate is that the section already exists.
+"$SCRIPT_DIR/check-changelog-section.sh" "$VERSION" \
+  || die "CHANGELOG.md has no section for $VERSION; write the notes, land them on main, then cut"
 
-info "generating SBOM (CycloneDX)"
-(cd rust && cargo cyclonedx --format json) \
-  && find rust -name '*.cdx.json' -maxdepth 2 -exec cp {} ../sbom.cdx.json \; 2>/dev/null \
-  || info "WARNING: SBOM generation produced no output; check cargo-cyclonedx"
+info "generating SBOM (CycloneDX) into sbom/"
+# cargo-cyclonedx writes <crate>.cdx.json next to each crate's Cargo.toml (gitignored
+# there); the tracked copies live in sbom/. The earlier one-liner copied them to
+# ../sbom.cdx.json — OUTSIDE the repository — and its `git add` of the missing path
+# then failed as a whole, so no notes commit was ever made (first rehearsal, 2026-09-15).
+(cd rust && cargo cyclonedx --format json) || die "cargo-cyclonedx failed; a release ships its SBOM"
+mkdir -p sbom
+sbom_count=0
+for f in rust/*/*.cdx.json; do
+  [ -f "$f" ] || continue
+  /bin/cp -f "$f" "sbom/$(basename "$f")"; sbom_count=$((sbom_count + 1))
+done
+[ "$sbom_count" -gt 0 ] || die "cargo-cyclonedx produced no rust/*/*.cdx.json"
+info "SBOM: $sbom_count crate(s) in sbom/"
 
-git add CHANGELOG.md website/content/changelog.md THIRD-PARTY-NOTICES.html sbom.cdx.json 2>/dev/null || true
-git diff --cached --quiet || git commit -m "release: v$VERSION notes + attribution + SBOM"
+# `git add a b c` with ONE missing path adds NOTHING and exits 1; add what exists.
+to_add=()
+for f in THIRD-PARTY-NOTICES.html sbom; do [ -e "$f" ] && to_add+=("$f"); done
+git add -- "${to_add[@]}"
+git diff --cached --quiet || git commit -m "release: v$VERSION attribution + SBOM"
 
 # ---------------------------------------------------------------------------
 # Tag

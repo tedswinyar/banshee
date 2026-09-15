@@ -29,7 +29,8 @@ would stay ticked and rot; performing the drill cannot.
       running (it is, on the release machine); the release fails clearly if not.
 - [ ] `./scripts/verify.sh` green (every suite).
 - [ ] DMG builds (`build-dmg.sh`) when the swift layer is present.
-- [ ] Release tooling present (`git-cliff`, `cargo-about`, `cargo-cyclonedx`).
+- [ ] Release tooling present (`cargo-about`, `cargo-cyclonedx`).
+- [ ] `CHANGELOG.md` has a `## [<version>]` section (`scripts/check-changelog-section.sh <version>`); the release does not write notes.
 - [ ] Notes, THIRD-PARTY-NOTICES, and SBOM regenerated and committed.
 
 ## Not automated — judgment calls

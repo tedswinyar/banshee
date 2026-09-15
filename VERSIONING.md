@@ -118,8 +118,10 @@ enum Version {
 2. **Update both version files** — `Version.marketing` in Version.swift and
    `version` under `[workspace.package]` in `rust/Cargo.toml` (then `cargo build`
    so `Cargo.lock` follows)
-3. **Run**: `./scripts/release.sh <version>`
-4. **Script validates alignment** → builds → signs → notarizes → tags
+3. **Write the notes** — a `## [<version>] — <date>` section in `CHANGELOG.md` (Keep a
+   Changelog). The release refuses without it and never generates notes from commits.
+4. **Run**: `./scripts/release.sh <version>` (on the build server: push `release/<version>`)
+5. **Script validates alignment and the changelog section** → builds → signs → notarizes → tags
 
 ## Rules
 

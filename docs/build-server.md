@@ -69,7 +69,7 @@ host's name from `BANSHEE_BUILD_HOST`, falling back to the machine's own hostnam
    Homebrew and cargo on PATH for non-interactive shells, copies the admin's
    `authorized_keys` so the development machine can ssh as `builder`, and admits `builder`
    to Remote Login.
-2. **Admin:** `brew install gh git-cliff cargo-deny gitleaks jq` (brew is owned by the admin
+2. **Admin:** `brew install gh cargo-deny gitleaks jq` (brew is owned by the admin
    account; the formulae are shared). Optional: `pipx install dmgbuild`.
 3. **As `builder`** (`ssh builder@<build-host>`): `gh auth login` with a fine-grained PAT —
    contents: read+write and workflow scope on the repository — then
@@ -98,6 +98,18 @@ host's name from `BANSHEE_BUILD_HOST`, falling back to the machine's own hostnam
    with codesign in its partition list, stores the two key files 0600, writes
    `~/.config/banshee-build/release.conf`, and ends with `doctor.sh --release` — which must
    be all green. Then **delete the exported files from both machines**.
+5b. **Admin, once:** put Apple's Developer ID G2 intermediate in the System keychain.
+   `import-signing-material.sh` imports it into the build keychain, which is enough for
+   an ssh session, but a LaunchDaemon session does not consult a user keychain when it
+   builds a certificate chain: the first codesign in the release job fails with
+   `Warning: unable to build chain to self-signed root` and `errSecInternalComponent`
+   while the identical command succeeds over ssh (2026-09-15, run 34930148546).
+   ```bash
+   curl -sSfL -o /tmp/DeveloperIDG2CA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+   openssl x509 -inform der -in /tmp/DeveloperIDG2CA.cer -noout -fingerprint -sha1 \
+     | grep -q 5B:45:F6:10:68:B2:9F:CC:8F:FF:F1:A7:E9:9B:78:DA:9E:9C:46:35 \
+     && sudo security add-certificates -k /Library/Keychains/System.keychain /tmp/DeveloperIDG2CA.cer
+   ```
 6. **As `builder`:** `~/banshee/scripts/build-server/setup-relay.sh` — the bare repo,
    seeded from GitHub, with `post-receive` installed. It prints the remote to add on the
    development machine: `git remote add mbp ssh://builder@<build-host>/Users/builder/repos/banshee.git`.
@@ -161,6 +173,8 @@ release.
 |---|---|---|
 | Job queued forever | runner offline (LaunchDaemon not running, build host asleep/away) | `sudo launchctl print system/actions.runner.<owner>-banshee.<runner name>`; `gh api repos/<owner>/banshee/actions/runners` |
 | `errSecInternalComponent` / codesign hangs | keychain locked or key not in codesign's partition list | `unlock-build-keychain.sh`; re-run `import-signing-material.sh` (it re-applies the partition list) |
+| `errSecInternalComponent` in the release JOB only, preceded by `Warning: unable to build chain to self-signed root`, while the same codesign works over ssh as `builder` | the LaunchDaemon session builds chains from the System keychain and the system roots only; the Developer ID G2 intermediate is in the build keychain, which that session does not consult | provisioning step 5b: `sudo security add-certificates -k /Library/Keychains/System.keychain DeveloperIDG2CA.cer` (fingerprint-checked) |
+| `release.sh` tags and pushes but `main` does not move, then `publish.sh` says the working tree is dirty | `git add a b c` with ONE missing path adds NOTHING and exits 1 — `\|\| true` hid it, so the notes commit never happened and the tag landed on the previous commit (first rehearsal, 2026-09-15) | fixed: release.sh adds only the paths that exist and requires a curated `## [X.Y.Z]` changelog section instead of regenerating the file |
 | `import-signing-material` says no valid Developer ID identity, but `find-identity` (without `-v`) lists one | the chain cannot be built: a fresh non-admin user has no Apple intermediates, and an ssh-only user has an EMPTY keychain search list | the script imports the Developer ID G2 CA (SHA-1 pinned) and adds the build keychain to the search list; `security verify-cert -c leaf.pem -p codeSign -k <kc>` names the problem |
 | `import-signing-material` says no valid Developer ID identity and `find-identity` shows "Apple Development: …" | the .p12 was exported from the wrong row in Keychain Access (a development certificate, not the Developer ID) | `security delete-keychain` the build keychain, `rm -rf ~/.config/banshee-build`, re-export the "Developer ID Application" row |
 | `notarytool` `HTTP 401` with the API key | wrong key id / issuer id, or key revoked | check App Store Connect; `doctor.sh --release` reproduces it in seconds |

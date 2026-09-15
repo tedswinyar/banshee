@@ -6,7 +6,12 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
-Everything on `main` since 0.1.4. This is the 1.0 candidate.
+Nothing yet.
+
+## [0.1.5] — 2026-09-15
+
+Everything on `main` since 0.1.4, and the first release cut end to end by the build
+server pipeline (`docs/build-server.md`) rather than by hand.
 
 ### Added
 

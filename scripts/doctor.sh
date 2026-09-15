@@ -50,7 +50,6 @@ command -v bd >/dev/null 2>&1 && ok "bd (beads)" || miss "bd" "optional issue tr
 
 say ""
 say "Release-only (needed to cut a signed release, not to develop):"
-check git-cliff      "brew install git-cliff — changelog generation" release
 check cargo-about    "cargo install cargo-about — THIRD-PARTY-NOTICES" release
 check cargo-cyclonedx "cargo install cargo-cyclonedx — SBOM" release
 say "  (optional) pipx install dmgbuild — the styled DMG window; without it the DMG is unstyled but valid"

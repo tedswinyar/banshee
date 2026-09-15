@@ -1,0 +1,8 @@
+# The changelog gate must not accept a LONGER version that starts with the wanted
+# one (0.1.50 for 0.1.5); the heading terminator is part of the contract.
+file: scripts/check-changelog-section.sh
+test: test-changelog-section
+---OLD---
+if grep -Eq "^## \[$ESCAPED\]( |$)" "$FILE"; then
+---NEW---
+if grep -Eq "^## \[$ESCAPED" "$FILE"; then

@@ -1,0 +1,9 @@
+# Only MAJOR.MINOR.PATCH has a release section; without this guard `Unreleased`
+# satisfies the gate and a release could be cut against notes that were never written.
+file: scripts/check-changelog-section.sh
+test: test-changelog-section
+---OLD---
+printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' \
+  || fail "'$VERSION' is not MAJOR.MINOR.PATCH — only a release version has a section (Unreleased is not one)"
+---NEW---
+:
