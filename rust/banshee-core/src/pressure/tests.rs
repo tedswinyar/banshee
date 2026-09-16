@@ -982,6 +982,50 @@ fn the_worklist_puts_stale_sessions_before_orphans() {
     );
 }
 
+/// A saturated CPU offers "Reap stale agent sessions" ONLY when the census has
+/// stale sessions to reap (`banshee-rad`). Seen 2026-09-15: the popover's single
+/// affordance was that button over a census reading "0 stale"; pressing it
+/// opened an empty dry run — during a crisis the one button on screen led
+/// nowhere. Mutation-proof: drop the `stale_sessions > 0` guard in `action_for`
+/// and the zero-stale case carries the dead button again.
+#[test]
+fn a_cpu_red_with_nothing_to_reap_offers_no_reap_button() {
+    let mut samples = healthy(41, 600);
+    set_cpu(&mut samples, 0.98);
+    // Saturated cores, and a census with ZERO stale sessions.
+    let censuses = vec![
+        census(0, 0, 2, 49.2, 78_000),
+        census(600, 0, 2, 49.2, 78_000),
+    ];
+    let p = evaluate(at(600), &samples, &censuses, &cfg());
+    let cpu = p
+        .findings
+        .iter()
+        .find(|f| f.dimension == Dimension::Cpu)
+        .expect("a cpu finding");
+    assert_eq!(cpu.action, Action::None, "nothing to reap");
+    assert!(
+        !p.actions().contains(&Action::ReapStaleSessions),
+        "no dead button anywhere in the worklist: {:?}",
+        p.actions()
+    );
+
+    // The distinguishing contrast (the co-varying-fixture rule): the SAME
+    // saturated machine with stale sessions in the census keeps the button —
+    // it is the census, not the band, that decides.
+    let censuses = vec![
+        census(0, 7, 2, 49.2, 78_000),
+        census(600, 7, 2, 49.2, 78_000),
+    ];
+    let p = evaluate(at(600), &samples, &censuses, &cfg());
+    let cpu = p
+        .findings
+        .iter()
+        .find(|f| f.dimension == Dimension::Cpu)
+        .expect("a cpu finding");
+    assert_eq!(cpu.action, Action::ReapStaleSessions);
+}
+
 /// A managed-agent reading derived from a young process is NOT banded. Measured:
 /// a log shipper restarted 109s earlier reported 14.6% off 16s of CPU.
 /// Mutation-proof: drop the `corporate_min_life_secs` filter and a freshly

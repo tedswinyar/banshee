@@ -1,0 +1,9 @@
+# A saturated CPU offers "Reap stale agent sessions" only when the census has
+# stale sessions to reap (banshee-rad). Dropping the guard restores the 2026-09-15
+# popover: one button on screen, over "0 stale", opening an empty dry run.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_cpu_red_with_nothing_to_reap_offers_no_reap_button
+---OLD---
+            if band == Band::Red && stale_sessions > 0 {
+---NEW---
+            if band == Band::Red {

@@ -139,12 +139,25 @@ struct MenuBarPanel: View {
             Text(finding.message)
                 .font(Typography.caption)
                 .fixedSize(horizontal: false, vertical: true)
+            // The who-line IS the finding's point: during the 2026-09-15 crisis
+            // the panel offered one action and named no culprit, so the person
+            // had a button and no reason to believe it (banshee-rad). One caption
+            // line, verbatim from the wire like every other surface.
+            if let whoLine = finding.whoLine {
+                Text(whoLine)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(finding.actionLabel)
                 .font(Typography.caption)
                 .foregroundStyle(Palette.accent)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Suggested: \(finding.actionLabel). \(finding.message)")
+        .accessibilityLabel(
+            "Suggested: \(finding.actionLabel). \(finding.message)"
+                + (finding.whoLine.map { " \($0)" } ?? "")
+        )
     }
 
     /// The glyph is not the verdict's, and this says why. Two states reach here: the

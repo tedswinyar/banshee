@@ -1105,6 +1105,10 @@ fn build_findings(
             .map(|c| who::attribute(d, c, config))
             .unwrap_or_default()
     };
+    // What the reap button would actually find. Zero when no census has been
+    // taken yet: an action must not claim there is something to reap before
+    // anyone has looked (`banshee-rad`).
+    let stale_sessions = census.map(|c| c.stale_sessions().count()).unwrap_or(0);
     let mut findings: Vec<Finding> = readings
         .iter()
         .filter(|r| r.band > Band::Green)
@@ -1125,7 +1129,7 @@ fn build_findings(
                         .any(|o| o.dimension == Dimension::Swap && o.band > Band::Green))
         })
         .map(|r| {
-            let action = action_for(r.dimension, r.band);
+            let action = action_for(r.dimension, r.band, stale_sessions);
             let who = who_for(r.dimension);
             Finding {
                 dimension: r.dimension,
@@ -1261,7 +1265,7 @@ fn message_for(r: &DimensionReading) -> String {
     }
 }
 
-fn action_for(d: Dimension, band: Band) -> Action {
+fn action_for(d: Dimension, band: Band, stale_sessions: usize) -> Action {
     match d {
         Dimension::Agents => Action::ReapStaleSessions,
         Dimension::Orphans => Action::ReapOrphans,
@@ -1292,8 +1296,14 @@ fn action_for(d: Dimension, band: Band) -> Action {
         // load red to reaping; pointing thermal there too would say the same
         // thing twice and mis-describe the one case where the load is legitimate.
         Dimension::Thermal => Action::None,
+        // A saturated CPU routes to reaping ONLY when the census actually has
+        // stale sessions to reap. During the 2026-09-15 crisis the popover's one
+        // button was "Reap stale agent sessions" over a census reading "0 stale";
+        // pressing it opened an empty dry run — the single affordance on screen
+        // led nowhere (`banshee-rad`). With no census yet, same answer: an action
+        // must not promise something to reap before anyone has looked.
         Dimension::Cpu => {
-            if band == Band::Red {
+            if band == Band::Red && stale_sessions > 0 {
                 Action::ReapStaleSessions
             } else {
                 Action::None
