@@ -173,12 +173,22 @@ run_rust() {
 run_swift()   { (cd swift && swift test); }
 run_e2e()     { tests/e2e/run-e2e.sh; }
 run_scripts() {
-  local rc=0 t
+  local rc=0 t matched=0
   for t in scripts/tests/test-*.sh; do
     [ -e "$t" ] || continue
+    matched=$((matched + 1))
     echo "── scripts suite: $t"
     "$t" || rc=1
   done
+  # A glob that matches NOTHING must be a FAILURE, not a pass (upstream-template
+  # defect, bead rlm): scripts/tests/ exists — run_suite gates on the directory
+  # — yet holds no tests, so the suite would report PASS while running nothing.
+  # A deliberate prune deletes the whole directory and is reported as SKIPPED,
+  # never here. scripts/tests/test-verify-empty-tests.sh pins both sides.
+  if [ "$matched" -eq 0 ]; then
+    echo "run_scripts: scripts/tests/ exists but contains no test-*.sh — a gate that runs nothing must not report PASS (upstream-template bead rlm)" >&2
+    rc=1
+  fi
   # Secret scan over the working tree. There is no cloud CI: if it does not
   # run here it runs nowhere, and .gitleaks.toml would be dead config.
   # Present-or-warn (same posture as cargo-deny) so a fresh clone without the
