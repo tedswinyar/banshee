@@ -1,0 +1,10 @@
+# The disk bytes term is (red/free) SQUARED so severity climbs the way concern does
+# as free space approaches zero (banshee-3sn): 6.25 at the 2026-09-15 low of 12 GB,
+# where the old linear rule read 1.08 and lost to everything. Linearising it flattens
+# the whole table Ted signed off on.
+file: rust/banshee-core/src/pressure/disk.rs
+test: the_bytes_term_is_squared_distance_to_zero
+---OLD---
+    let bytes_term = (red_bytes / free_bytes.max(1.0)).powi(2);
+---NEW---
+    let bytes_term = (red_bytes / free_bytes.max(1.0)).powi(1);

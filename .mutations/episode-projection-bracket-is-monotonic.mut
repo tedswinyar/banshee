@@ -1,0 +1,10 @@
+# The projection bracket only ever moves DEEPER inside one episode: a deeper
+# crossing speaks, wobble inside an announced bracket does not. Reversing the
+# comparison silences the deeper crossing (and would re-announce on recovery),
+# which is the flapping the episode model exists to absorb (banshee-3sn).
+file: rust/banshee-core/src/pressure/episode.rs
+test: only_a_deeper_projection_crossing_speaks_again
+---OLD---
+        (Some(b), Some(prev)) if b < prev => {
+---NEW---
+        (Some(b), Some(prev)) if b > prev => {

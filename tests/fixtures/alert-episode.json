@@ -40,5 +40,6 @@
     "suppressed": 39,
     "state": "closed",
     "lastNotifiedAt": "2026-09-05T21:26:03.870112Z",
-    "recoveringSince": "2026-09-05T21:40:12.000000Z"
+    "recoveringSince": "2026-09-05T21:40:12.000000Z",
+    "projectionBracketSecs": null
 }

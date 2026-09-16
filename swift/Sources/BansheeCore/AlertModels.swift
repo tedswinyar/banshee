@@ -107,12 +107,17 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
     /// since it started" after the raw censuses behind the incident have been
     /// swept. Nullable on the wire; null for episodes from before deltas existed.
     public let censusAtPeak: CensusSummary?
+    /// The smallest disk time-to-full threshold (seconds) this episode has
+    /// already re-notified at — the daemon's anti-flap state for the projection
+    /// escalation rule. Null for every dimension but disk, for episodes from
+    /// before the rule existed, and while no threshold has been crossed.
+    public let projectionBracketSecs: UInt64?
 
     public init(
         id: UUID, dimension: String, startedAt: Date, endedAt: Date?,
         peak: EpisodePeak, suppressed: Int, state: EpisodeState,
         lastNotifiedAt: Date?, recoveringSince: Date?,
-        censusAtPeak: CensusSummary? = nil
+        censusAtPeak: CensusSummary? = nil, projectionBracketSecs: UInt64? = nil
     ) {
         self.id = id
         self.dimension = dimension
@@ -124,13 +129,14 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
         self.lastNotifiedAt = lastNotifiedAt
         self.recoveringSince = recoveringSince
         self.censusAtPeak = censusAtPeak
+        self.projectionBracketSecs = projectionBracketSecs
     }
 
     public var isOpen: Bool { endedAt == nil }
 
     enum CodingKeys: String, CodingKey {
         case id, dimension, startedAt, endedAt, peak, suppressed, state
-        case lastNotifiedAt, recoveringSince, censusAtPeak
+        case lastNotifiedAt, recoveringSince, censusAtPeak, projectionBracketSecs
     }
 
     // Hand-written for the UUID's lowercase-out rule and the present-as-null
@@ -163,6 +169,11 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
             try c.encode(censusAtPeak, forKey: .censusAtPeak)
         } else {
             try c.encodeNil(forKey: .censusAtPeak)
+        }
+        if let projectionBracketSecs {
+            try c.encode(projectionBracketSecs, forKey: .projectionBracketSecs)
+        } else {
+            try c.encodeNil(forKey: .projectionBracketSecs)
         }
     }
 }

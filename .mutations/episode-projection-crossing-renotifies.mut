@@ -1,0 +1,12 @@
+# A disk projection crossing a notify threshold inside an open episode is a
+# RE-ESCALATION, bypassing episode_repeat_secs (banshee-3sn). Dropping the clause
+# is the 2026-09-15 silence: "full in 22 min" arriving as (at best) a Repeat an
+# hour later. The pin asserts the KIND, so the fallback-to-Repeat path fails it.
+file: rust/banshee-core/src/pressure/episode.rs
+test: a_projection_crossing_renotifies_before_the_repeat_interval
+---OLD---
+            } else if after.projection_bracket_secs != b.projection_bracket_secs
+                && after.projection_bracket_secs.is_some()
+            {
+---NEW---
+            } else if false {

@@ -1,0 +1,9 @@
+# A projection at or under an hour forces the disk band RED regardless of bytes
+# (banshee-3sn). Demoting the arm to Yellow reproduces the 2026-09-15 failure: a
+# volume minutes from full wearing the same colour as one merely low.
+file: rust/banshee-core/src/pressure/disk.rs
+test: a_sub_hour_projection_forces_red_whatever_the_bytes_say
+---OLD---
+            Some(p) if p <= red_secs => Band::Red,
+---NEW---
+            Some(p) if p <= red_secs => Band::Yellow,

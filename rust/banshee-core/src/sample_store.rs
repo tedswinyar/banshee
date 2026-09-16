@@ -2010,6 +2010,7 @@ mod tests {
             },
             last_notified_at: Some(at(started)),
             recovering_since: ended.map(at),
+            projection_bracket_secs: None,
         }
     }
 

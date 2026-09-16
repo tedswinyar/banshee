@@ -13,6 +13,7 @@
 pub mod band;
 pub mod config;
 pub mod deltas;
+mod disk;
 pub mod episode;
 pub mod headroom;
 pub mod level;
@@ -498,13 +499,46 @@ pub fn evaluate(
         };
 
         let spec = config.spec(d);
-        let severity = severity_of(spec, outcome.value);
-        let held = series.held(outcome.held_samples);
-        let trend = series.trend_per_sec();
+        // Disk is judged on TIME as well as bytes (`banshee-3sn`): its slope is
+        // the flicker-proof median estimator, its severity folds in the
+        // projected time-to-full, and a near projection forces the band floor
+        // regardless of bytes. Everything downstream — `decide`'s catastrophic
+        // ceiling, `dominant_source`, the glyph, headroom's reason line —
+        // follows from the severity and band with no disk-specific rules.
+        let (band, held_samples, severity, trend) = if d == Dimension::Disk {
+            let tail = series.contiguous_tail();
+            let slope = disk::slope_per_sec(tail);
+            let projection = disk::projected_full_secs(outcome.value, slope);
+            let severity = disk::severity(
+                spec.red,
+                config.disk_projection_red_secs,
+                outcome.value,
+                projection,
+            );
+            let (forced, forced_held) = disk::forced_floor(
+                tail,
+                config.disk_projection_red_secs,
+                config.disk_projection_yellow_secs,
+                spec.confirm_samples,
+            );
+            if forced > outcome.band {
+                (forced, forced_held, severity, slope)
+            } else {
+                (outcome.band, outcome.held_samples, severity, slope)
+            }
+        } else {
+            (
+                outcome.band,
+                outcome.held_samples,
+                severity_of(spec, outcome.value),
+                series.trend_per_sec(),
+            )
+        };
+        let held = series.held(held_samples);
 
         contributions.push(Contribution {
             dimension: d,
-            band: outcome.band,
+            band,
             held_secs: held.secs,
             severity,
         });
@@ -512,7 +546,7 @@ pub fn evaluate(
             dimension: d,
             key: d.key().to_string(),
             label: d.label().to_string(),
-            band: outcome.band,
+            band,
             value: outcome.value,
             unit: d.unit(),
             severity,

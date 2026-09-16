@@ -877,9 +877,10 @@ fn a_reboot_inside_the_window_does_not_manufacture_a_thrash_spike() {
 fn disk_projects_a_time_to_full_when_space_is_falling() {
     let n = 21;
     let mut samples = healthy(n, 300);
-    // Falling 1 GB per sample (15s) from 40 GB: yellow, and emptying fast.
+    // Falling 100 MB per sample (15s) from 45 GB: yellow, emptying slowly
+    // enough (~1.9 h to full) that time does not force it red.
     for (i, s) in samples.iter_mut().enumerate() {
-        s.volumes[0].avail_bytes = 40_000_000_000 - (i as u64 * 1_000_000_000);
+        s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 100_000_000);
     }
     let p = evaluate(at(300), &samples, &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
@@ -894,6 +895,38 @@ fn disk_projects_a_time_to_full_when_space_is_falling() {
         "expected a projection, got {:?}",
         disk.detail
     );
+}
+
+/// Pin (c) of `banshee-3sn`: a volume EMPTYING FAST is red on time alone, at a
+/// byte level where a flat volume is merely yellow. The 2026-09-15 descent spent
+/// 40 minutes in the yellow band at ~12 MB/s — indistinguishable, before this,
+/// from a volume sitting still at the same reading. Mutation-proof: drop the
+/// `forced > outcome.band` arm in `evaluate` and the falling case reads Yellow.
+#[test]
+fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
+    // 40 GB free — mid-yellow — falling 250 MB per 15s tick: ~40 min to full.
+    let mut falling = healthy(21, 300);
+    for (i, s) in falling.iter_mut().enumerate() {
+        s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 250_000_000);
+    }
+    let p = evaluate(at(300), &falling, &[], &cfg());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Red, "red on time alone: {}", disk.detail);
+    assert!(
+        disk.severity >= 1.0,
+        "and past its line by severity: {}",
+        disk.severity
+    );
+
+    // The distinguishing contrast (the co-varying-fixture rule): the same
+    // newest reading, flat, stays yellow — so it is the slope, not the bytes,
+    // that escalated above.
+    let mut flat = healthy(21, 300);
+    for s in flat.iter_mut() {
+        s.volumes[0].avail_bytes = 40_000_000_000;
+    }
+    let p = evaluate(at(300), &flat, &[], &cfg());
+    assert_eq!(p.reading(Dimension::Disk).unwrap().band, Band::Yellow);
 }
 
 /// Banshee never walks the filesystem, so the disk finding hands off to a disk-usage tool
@@ -1487,6 +1520,7 @@ fn open_episode(d: Dimension, state: episode::EpisodeState, started: i64) -> epi
         } else {
             None
         },
+        projection_bracket_secs: None,
     }
 }
 

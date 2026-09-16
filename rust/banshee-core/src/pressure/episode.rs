@@ -107,6 +107,14 @@ pub struct AlertEpisode {
     /// `Firing`; kept once `Closed` (it becomes `endedAt`).
     #[serde(default, with = "crate::wire_time::option")]
     pub recovering_since: Option<DateTime<Utc>>,
+    /// The smallest `disk_projection_notify_secs` threshold the projected
+    /// time-to-full has already crossed inside this episode — the state behind
+    /// the disk re-notification rule (`banshee-3sn`). Monotonic while the
+    /// episode is open: a projection that recovers and then worsens past the
+    /// same line again is a re-fire, not new news. Null for every dimension but
+    /// Disk, and while no projection has crossed a line.
+    #[serde(default)]
+    pub projection_bracket_secs: Option<u64>,
 }
 
 impl AlertEpisode {
@@ -330,7 +338,7 @@ fn open_if_due(
     if r.held_secs < config.episode_up_secs {
         return None;
     }
-    Some(AlertEpisode {
+    let mut episode = AlertEpisode {
         id: Uuid::new_v4(),
         dimension: r.dimension,
         started_at: now - Duration::seconds(r.held_secs as i64),
@@ -343,7 +351,51 @@ fn open_if_due(
         state: EpisodeState::Firing,
         last_notified_at: None,
         recovering_since: None,
-    })
+        projection_bracket_secs: None,
+    };
+    // Seed the projection bracket at open: the Opened notice already carries
+    // the current projection in its message, so the first CROSSING after this
+    // is the next news, not the state at open re-announced.
+    record_projection(&mut episode, r, config);
+    Some(episode)
+}
+
+/// Fold the projected time-to-full into a disk episode's bracket. Returns true
+/// when the projection crossed INTO a smaller configured threshold than any
+/// already recorded — the escalation that bypasses `episode_repeat_secs`
+/// (`banshee-3sn`: a projection collapsing from 5.8 hours to 22 minutes inside
+/// an open episode produced no second notice, because `record_peak` re-escalates
+/// only on a LEVEL rise and the level was already Shrieking from memory).
+fn record_projection(
+    next: &mut AlertEpisode,
+    r: &DimensionReading,
+    config: &PressureConfig,
+) -> bool {
+    // Only disk has a time-to-exhaustion axis; every other dimension's trend is
+    // not a countdown to zero.
+    if next.dimension != Dimension::Disk {
+        return false;
+    }
+    let Some(projection) = super::disk::projected_full_secs(r.value, r.trend_per_sec) else {
+        return false;
+    };
+    let crossed = config
+        .disk_projection_notify_secs
+        .iter()
+        .copied()
+        .filter(|b| projection <= *b as f64)
+        .min();
+    match (crossed, next.projection_bracket_secs) {
+        (Some(b), None) => {
+            next.projection_bracket_secs = Some(b);
+            true
+        }
+        (Some(b), Some(prev)) if b < prev => {
+            next.projection_bracket_secs = Some(b);
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Advance one open episode against its dimension's current reading. Returns the
@@ -364,10 +416,11 @@ fn step(
     match (e.state, red) {
         (EpisodeState::Firing, true) => {
             let escalated = record_peak(&mut next, r, pressure, census, now);
+            let crossed = record_projection(&mut next, r, config);
             // Not "changed" for a quiet tick: a firing episode that neither
             // escalated nor hit the repeat clock is exactly as stored, and
             // rewriting it 240 times an hour buys nothing.
-            let changed = escalated || repeat_due || next != *e;
+            let changed = escalated || crossed || repeat_due || next != *e;
             Some((next, changed))
         }
         (EpisodeState::Firing, false) => {
@@ -383,7 +436,8 @@ fn step(
             next.state = EpisodeState::Firing;
             next.recovering_since = None;
             let escalated = record_peak(&mut next, r, pressure, census, now);
-            if !escalated && !repeat_due {
+            let crossed = record_projection(&mut next, r, config);
+            if !escalated && !crossed && !repeat_due {
                 next.suppressed = next.suppressed.saturating_add(1);
             }
             Some((next, true))
@@ -471,6 +525,15 @@ fn pending_notification(
         (Some(_), EpisodeState::Closed) => NotificationKind::Recovered,
         (Some(b), EpisodeState::Firing) => {
             if after.peak.level > b.peak.level {
+                NotificationKind::Reescalated
+            } else if after.projection_bracket_secs != b.projection_bracket_secs
+                && after.projection_bracket_secs.is_some()
+            {
+                // The disk projection crossed a notify threshold (`banshee-3sn`):
+                // "full in 22 min" inside an episode announced at "red since
+                // 11:51" is new news, exactly as a level rise is. The message
+                // below reuses the finding's wording, which carries the current
+                // projection.
                 NotificationKind::Reescalated
             } else if b.suppressed != after.suppressed {
                 // A swallowed re-fire: counted, not spoken.
@@ -711,6 +774,7 @@ mod tests {
             state: EpisodeState::Firing,
             last_notified_at: notified.map(at),
             recovering_since: None,
+            projection_bracket_secs: None,
         }
     }
 
@@ -1634,5 +1698,96 @@ mod tests {
         let old: AlertEpisode = serde_json::from_value(trimmed).expect("older rows still parse");
         assert_eq!(old.suppressed, 0);
         assert_eq!(old.last_notified_at, None);
+    }
+
+    // ---- the disk projection re-notifies (`banshee-3sn`) -------------------
+
+    /// A disk reading with a projection: `value / -trend` is what
+    /// `record_projection` reads, and the detail is what the notice's message
+    /// carries.
+    fn disk_reading(free_bytes: f64, projection_secs: f64, held_secs: u64) -> DimensionReading {
+        let mut r = reading(Dimension::Disk, Band::Red, held_secs);
+        r.value = free_bytes;
+        r.trend_per_sec = Some(-free_bytes / projection_secs);
+        r.detail = format!(
+            "{:.1} GB free, full in {:.0} min",
+            free_bytes / 1e9,
+            projection_secs / 60.0
+        );
+        r
+    }
+
+    /// Pin (d) of `banshee-3sn`, the 2026-09-15 silence: an open episode whose
+    /// LEVEL is already at its peak (Shrieking, held there by memory) and whose
+    /// repeat clock is nowhere near due must still notify when the projection
+    /// collapses past a threshold — that is the "full in 22 min" that happened
+    /// behind the memory glyph. The message carries the new projection.
+    /// Mutation-proof: remove the projection clause from `pending_notification`'s
+    /// kind selection and this crossing is a silent peak update.
+    #[test]
+    fn a_projection_crossing_renotifies_before_the_repeat_interval() {
+        // Notified 2 minutes ago; repeat is 3600s. Level Shrieking == the peak,
+        // so neither of the old escalation paths can speak.
+        let e = firing(Dimension::Disk, 0, Some(1200), Level::Shrieking);
+        let r = disk_reading(12e9, 22.0 * 60.0, 1320);
+        let p = pressure(Level::Shrieking, vec![r]);
+
+        let out = reconcile_episodes(&[e], &p, None, at(1320), &cfg());
+        assert_eq!(kinds(&out), vec![NotificationKind::Reescalated]);
+        let n = &out.notifications[0];
+        assert!(
+            n.message.contains("full in 22 min"),
+            "the notice must carry the new projection: {}",
+            n.message
+        );
+        assert_eq!(
+            out.episodes[0].projection_bracket_secs,
+            Some(1800),
+            "22 min crossed the 30-minute line"
+        );
+        assert_eq!(
+            out.episodes[0].last_notified_at,
+            Some(at(1320)),
+            "a spoken notice resets the repeat clock"
+        );
+    }
+
+    /// The bracket is monotonic: wobbling within an announced bracket says
+    /// nothing, and only a DEEPER crossing speaks again. Without this, a
+    /// projection oscillating around one threshold re-notifies on every tick —
+    /// the flapping the episode model exists to absorb.
+    #[test]
+    fn only_a_deeper_projection_crossing_speaks_again() {
+        let mut e = firing(Dimension::Disk, 0, Some(1200), Level::Shrieking);
+        e.projection_bracket_secs = Some(1800);
+
+        // 25 minutes: inside the already-announced 30-minute bracket. Silence.
+        let p = pressure(Level::Shrieking, vec![disk_reading(12e9, 1500.0, 1320)]);
+        let out = reconcile_episodes(&[e.clone()], &p, None, at(1320), &cfg());
+        assert_eq!(kinds(&out), Vec::<NotificationKind>::new());
+
+        // 8 minutes: past the 10-minute line. News.
+        let p = pressure(Level::Shrieking, vec![disk_reading(6e9, 480.0, 1440)]);
+        let out = reconcile_episodes(&[e], &p, None, at(1440), &cfg());
+        assert_eq!(kinds(&out), vec![NotificationKind::Reescalated]);
+        assert_eq!(out.episodes[0].projection_bracket_secs, Some(600));
+    }
+
+    /// An episode that OPENS with a near projection announces once: the bracket
+    /// is seeded at open (the Opened notice already carries the projection), so
+    /// the same state is not re-announced on the next tick as a "crossing".
+    #[test]
+    fn the_bracket_is_seeded_at_open_not_reannounced() {
+        let r = disk_reading(12e9, 22.0 * 60.0, 150);
+        let p = pressure(Level::Wailing, vec![r.clone()]);
+        let out = reconcile_episodes(&[], &p, None, at(150), &cfg());
+        assert_eq!(kinds(&out), vec![NotificationKind::Opened]);
+        let opened = out.episodes[0].clone();
+        assert_eq!(opened.projection_bracket_secs, Some(1800), "seeded at open");
+
+        // The next tick, same projection: nothing new to say.
+        let p = pressure(Level::Wailing, vec![disk_reading(12e9, 22.0 * 60.0, 165)]);
+        let out = reconcile_episodes(&[opened], &p, None, at(165), &cfg());
+        assert_eq!(kinds(&out), Vec::<NotificationKind>::new());
     }
 }

@@ -814,6 +814,7 @@ fn episode(dimension: Dimension, started: chrono::Duration, message: &str) -> Al
         state: EpisodeState::Closed,
         last_notified_at: Some(started_at),
         recovering_since: Some(started_at + chrono::Duration::minutes(10)),
+        projection_bracket_secs: None,
     }
 }
 

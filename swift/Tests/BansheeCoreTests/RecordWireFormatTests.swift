@@ -427,7 +427,7 @@ final class RecordWireFormatTests: XCTestCase {
             Set(obj.keys),
             [
                 "id", "dimension", "startedAt", "endedAt", "peak", "suppressed", "state",
-                "lastNotifiedAt", "recoveringSince", "censusAtPeak",
+                "lastNotifiedAt", "recoveringSince", "censusAtPeak", "projectionBracketSecs",
             ],
             "encode(to:) key set drifted — an AlertEpisode field was added without a matching encode line"
         )
@@ -458,7 +458,7 @@ final class RecordWireFormatTests: XCTestCase {
         let obj = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Wire.encoder().encode(open)) as? [String: Any]
         )
-        for key in ["endedAt", "lastNotifiedAt", "recoveringSince"] {
+        for key in ["endedAt", "lastNotifiedAt", "recoveringSince", "projectionBracketSecs"] {
             let v = try XCTUnwrap(obj[key], "\(key) must be PRESENT as null, not absent")
             XCTAssertTrue(v is NSNull, key)
         }

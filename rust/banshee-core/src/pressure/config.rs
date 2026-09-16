@@ -348,6 +348,22 @@ pub struct PressureConfig {
     /// ratio is the same arithmetic as the managed-agent one and lies the same
     /// way over a short life.
     pub who_limit: usize,
+    /// The disk projection at which time-to-full alone forces the band RED and
+    /// the unit of the time severity term (`banshee-3sn`): severity is 1.0 with
+    /// this long to full, 2.0 at half of it, 3.0 (catastrophic) at a third. One
+    /// value on purpose, so the forced red and severity 1.0 cannot disagree
+    /// about where "red by time" begins.
+    pub disk_projection_red_secs: f64,
+    /// The disk projection at which time-to-full forces at least YELLOW. The
+    /// 2026-09-15 descent spent 40 minutes at "full in ~1 h" inside the yellow
+    /// byte band — this is the line that would have coloured it.
+    pub disk_projection_yellow_secs: f64,
+    /// Projection thresholds that RE-NOTIFY an open disk episode when crossed,
+    /// bypassing `episode_repeat_secs` (largest first). A projection collapsing
+    /// from 5.8 hours to 22 minutes inside one episode is new news, the same way
+    /// a level rise is; the 2026-09-15 episode said it once at minute two and
+    /// then went silent.
+    pub disk_projection_notify_secs: Vec<u64>,
     /// Load-per-core above which the CPU detail names SCHEDULING CONTENTION when
     /// measured utilization is still below its yellow line (`banshee-87l.19`). A
     /// run queue this deep over cores that are not busy is threads queueing for a
@@ -505,8 +521,13 @@ impl Default for PressureConfig {
             corporate: BandSpec::rising(60.0, 100.0, 5.0, 2),
 
             // Free bytes on the data volume. Measured 65–71 GB free; the
-            // 2026-07-16 crisis bottomed out at 1.1 GB.
-            disk: BandSpec::falling(50e9, 15e9, 5e9, 2),
+            // 2026-07-16 crisis bottomed out at 1.1 GB. Raised from 50/15 after
+            // the 2026-09-15 crisis (`banshee-3sn`): red at 15 GB was LESS than
+            // the 24 GB of swapfiles the volume was already carrying that day —
+            // by the time disk went red, the swap that memory pressure would
+            // reach for was already impossible. Ted: anything under 30 GB can be
+            // eaten quickly; he is already alarmed at 25.
+            disk: BandSpec::falling(60e9, 30e9, 5e9, 2),
 
             // perf-scan flags >7 days. Advisory only.
             uptime: BandSpec::rising(7.0, 21.0, 1.0, 1),
@@ -547,6 +568,9 @@ impl Default for PressureConfig {
             episode_repeat_secs: 3600,
             corporate_min_life_secs: 600,
             who_limit: 3,
+            disk_projection_red_secs: 3600.0,
+            disk_projection_yellow_secs: 7200.0,
+            disk_projection_notify_secs: vec![3600, 1800, 600],
             // perf-scan's "SATURATED" heuristic, repurposed as the run-queue
             // depth that triggers the contention framing. The 2026-09-09 incident
             // sat at 3.26× per core with the cores half idle.
