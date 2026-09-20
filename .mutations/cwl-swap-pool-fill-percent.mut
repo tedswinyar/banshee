@@ -1,0 +1,15 @@
+# banshee-cwl part 2: the swap detail reports pool fill as used/total. Zeroing the ratio
+# would print "pool 0% full" on a pool that is 96% full — a fill% that lies. The test pins
+# the exact percentage.
+file: rust/banshee-core/src/pressure/mod.rs
+test: swap_detail_names_pool_fill_only_when_the_total_is_known
+---OLD---
+            if let Some(total) = swap_total.filter(|t| *t > 0) {
+                let pct = (value / total as f64) * 100.0;
+                s.push_str(&format!(" \u{b7} pool {pct:.0}% full"));
+            }
+---NEW---
+            if let Some(total) = swap_total.filter(|t| *t > 0) {
+                let pct = (value / total as f64) * 0.0;
+                s.push_str(&format!(" \u{b7} pool {pct:.0}% full"));
+            }

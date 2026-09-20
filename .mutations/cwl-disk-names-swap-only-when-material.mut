@@ -1,0 +1,14 @@
+# banshee-cwl part 1: the disk finding names the swapfiles on the same volume ONLY when
+# the allocated pool rivals what is free (the spiral). Dropping the materiality gate would
+# make every low-disk finding mention swap even on a roomy pool — noise. The 6-vs-12 case
+# in the test is the co-varying guard.
+file: rust/banshee-core/src/pressure/mod.rs
+test: disk_finding_names_swap_only_when_it_rivals_free_space
+---OLD---
+            if let Some(total) = swap_total.filter(|t| *t > 0)
+                && total as f64 >= r.value
+            {
+---NEW---
+            if let Some(total) = swap_total.filter(|t| *t > 0)
+                && total as f64 >= 0.0
+            {

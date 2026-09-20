@@ -485,6 +485,10 @@ pub fn evaluate(
     // is measured utilization — but a high demand over idle cores is the
     // scheduling-contention story the detail must be able to tell (`banshee-87l.19`).
     let cpu_demand = window.last().map(|s| s.to_reading().load_per_core_1m());
+    // banshee-cwl: the swap pool lives on the data volume, so the swap and disk
+    // findings read the allocated pool total together — how full the pool is, and
+    // how much of the volume it occupies. Newest sample; `None` before the first.
+    let swap_total = window.last().map(|s| s.swap_total_bytes);
 
     let mut readings = Vec::new();
     let mut contributions = Vec::new();
@@ -553,7 +557,7 @@ pub fn evaluate(
             held_secs: held.secs,
             observation_gap_secs: held.gap_secs,
             trend_per_sec: trend,
-            detail: detail_for(d, outcome.value, trend, cpu_demand, config),
+            detail: detail_for(d, outcome.value, trend, cpu_demand, swap_total, config),
             advisory: d.is_advisory(),
             pending: outcome.pending,
             recovering: false,
@@ -574,7 +578,7 @@ pub fn evaluate(
     // Attribution reads the NEWEST census: the who-line answers "who is behind
     // this now", and `censuses` is oldest-first.
     let findings = if have_data {
-        build_findings(&readings, &verdict, censuses.last(), config)
+        build_findings(&readings, &verdict, censuses.last(), swap_total, config)
     } else {
         Vec::new()
     };
@@ -945,6 +949,7 @@ fn detail_for(
     value: f64,
     trend: Option<f64>,
     cpu_demand: Option<f64>,
+    swap_total: Option<u64>,
     config: &PressureConfig,
 ) -> String {
     let rising = trend.filter(|t| t.abs() > f64::EPSILON);
@@ -993,6 +998,13 @@ fn detail_for(
             {
                 s.push_str(&format!(", climbing {}/min", fmt_bytes(t * 60.0)));
             }
+            // banshee-cwl: how full the allocated pool is (used/total) bounds how
+            // much further swap can grow before macOS must take more of the volume.
+            // A percentage a person recognises — "pool 96% full".
+            if let Some(total) = swap_total.filter(|t| *t > 0) {
+                let pct = (value / total as f64) * 100.0;
+                s.push_str(&format!(" \u{b7} pool {pct:.0}% full"));
+            }
             s
         }
         // "peak" is not decoration: the number IS a window maximum over a smoothed
@@ -1031,7 +1043,7 @@ fn detail_for(
             if value >= 1.0 {
                 format!("{value:.0} killed under memory pressure")
             } else {
-                "no kills this window".to_string()
+                "no sustained-pressure kills this window".to_string()
             }
         }
     }
@@ -1096,6 +1108,7 @@ fn build_findings(
     readings: &[DimensionReading],
     verdict: &level::Verdict,
     census: Option<&Census>,
+    swap_total: Option<u64>,
     config: &PressureConfig,
 ) -> Vec<Finding> {
     // Every finding — yellow as well as red — names its consumers. Yellow is
@@ -1134,7 +1147,7 @@ fn build_findings(
             Finding {
                 dimension: r.dimension,
                 band: r.band,
-                message: message_for(r),
+                message: message_for(r, swap_total),
                 action,
                 action_label: action.label().to_string(),
                 who_line: who::who_line(&who),
@@ -1192,7 +1205,7 @@ fn build_findings(
     findings
 }
 
-fn message_for(r: &DimensionReading) -> String {
+fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
     match r.dimension {
         // Red means MEASURED utilization is at or above the saturation line — the
         // cores really are pegged, not merely that the run queue is long (`banshee-87l.19`).
@@ -1219,7 +1232,26 @@ fn message_for(r: &DimensionReading) -> String {
             thermal_level_name(r.value)
         ),
         Dimension::Memory => format!("Only {} of RAM available.", fmt_bytes(r.value)),
-        Dimension::Swap => format!("{} of swap in use.", fmt_bytes(r.value)),
+        Dimension::Swap => {
+            let mut m = format!("{} of swap in use.", fmt_bytes(r.value));
+            // banshee-cwl: give swap the projection disk already has, but against
+            // its OWN ceiling — the allocated pool, exhausted before macOS must grow
+            // onto the volume. The volume's own "full in X" (disk dimension) is the
+            // next ceiling and is not repeated here.
+            if let Some(total) = swap_total.filter(|t| *t > 0) {
+                let pct = (r.value / total as f64) * 100.0;
+                m.push_str(&format!(" The allocated pool is {pct:.0}% full"));
+                if let Some(t) = r.trend_per_sec.filter(|t| *t > 0.0) {
+                    let remaining = (total as f64 - r.value).max(0.0);
+                    m.push_str(&format!(
+                        " and would be exhausted in {} at this rate",
+                        fmt_duration(remaining / t)
+                    ));
+                }
+                m.push('.');
+            }
+            m
+        }
         // The one claim no other dimension can make: this is the kernel's own
         // statement about itself, not our inference about the kernel.
         Dimension::KernelPressure => format!(
@@ -1242,11 +1274,25 @@ fn message_for(r: &DimensionReading) -> String {
             "Managed agents are using {:.0}% of one core — up from the recorded baseline.",
             r.value
         ),
-        Dimension::Disk => format!(
-            "{} free on the data volume. {}",
-            fmt_bytes(r.value),
-            r.detail
-        ),
+        Dimension::Disk => {
+            let mut m = format!(
+                "{} free on the data volume. {}",
+                fmt_bytes(r.value),
+                r.detail
+            );
+            // banshee-cwl: swapfiles live on this same volume. When the pool rivals
+            // what is free, the disk finding must SAY so — the two reds are one
+            // spiral (memory -> swap -> disk -> jetsam), never named before.
+            if let Some(total) = swap_total.filter(|t| *t > 0)
+                && total as f64 >= r.value
+            {
+                m.push_str(&format!(
+                    " {} of the volume is swap.",
+                    fmt_bytes(total as f64)
+                ));
+            }
+            m
+        }
         Dimension::Uptime => format!(
             "Up {:.0} days. Long uptime with pinned swap means fragmented, \
              unreclaimable memory.",

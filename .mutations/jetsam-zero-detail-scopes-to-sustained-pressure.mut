@@ -1,0 +1,10 @@
+# banshee-714: the jetsam counter only sees the sustained-pressure kill path, so a
+# zero must not read as "nothing was killed" (on 2026-09-15 it was 0 while the kernel
+# killed ~170 processes via idle-exit rf:high and one per-process-limit). Reverting the
+# wording to the bare "no kills this window" is the false reassurance the pin guards.
+file: rust/banshee-core/src/pressure/mod.rs
+test: the_zero_jetsam_detail_scopes_itself_to_sustained_pressure
+---OLD---
+                "no sustained-pressure kills this window".to_string()
+---NEW---
+                "no kills this window".to_string()

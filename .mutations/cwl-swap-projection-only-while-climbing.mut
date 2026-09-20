@@ -1,0 +1,11 @@
+# banshee-cwl part 3: swap projects pool exhaustion ONLY while climbing. Forcing a rate when
+# the trend is flat/absent would invent an "exhausted in X" for a steady pool — the exact
+# false-precision the disk dimension's peak-slope bug (banshee-s4d) warned against.
+file: rust/banshee-core/src/pressure/mod.rs
+test: swap_finding_projects_pool_exhaustion_while_climbing
+---OLD---
+                if let Some(t) = r.trend_per_sec.filter(|t| *t > 0.0) {
+                    let remaining = (total as f64 - r.value).max(0.0);
+---NEW---
+                if let Some(t) = r.trend_per_sec.or(Some(1.0)).filter(|t| *t >= 0.0) {
+                    let remaining = (total as f64 - r.value).max(0.0);
