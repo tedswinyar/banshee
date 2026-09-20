@@ -157,11 +157,28 @@ struct MenuBarPanel: View {
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(finding.actionLabel)
-                .font(Typography.caption)
-                .foregroundStyle(Palette.accent)
+            // The disk finding is the most time-critical one and used to be the
+            // only action with nowhere to go (banshee-60q). When the disk
+            // visualizer is installed the accent line becomes a real button;
+            // otherwise it stays the server's words as text, like every other
+            // non-reap action.
+            if finding.action == .openDiskTool, DiskTool.installedURL != nil {
+                Button {
+                    DiskTool.launch()
+                } label: {
+                    Text(finding.actionLabel)
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.accent)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the disk visualizer to see what is using the volume")
+            } else {
+                Text(finding.actionLabel)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.accent)
+            }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel(
             "Suggested: \(finding.actionLabel). \(finding.message)"
                 + (finding.whoLine.map { " \($0)" } ?? "")

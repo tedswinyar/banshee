@@ -467,6 +467,20 @@ struct FindingList: View {
             .buttonStyle(.link)
             .font(Typography.caption)
             .accessibilityHint("Opens a dry run you can review before anything is reaped")
+        } else if finding.action == .openDiskTool, DiskTool.installedURL != nil {
+            // The one non-reap action with somewhere to go: the disk visualizer
+            // is installed, so this launches it instead of describing a tool the
+            // person must go find (banshee-60q). If it is absent this branch is
+            // skipped and the finding falls back to plain text below — never a
+            // dead button.
+            Button {
+                DiskTool.launch()
+            } label: {
+                Label(finding.actionLabel, systemImage: "externaldrive")
+            }
+            .buttonStyle(.link)
+            .font(Typography.caption)
+            .accessibilityHint("Opens the disk visualizer to see what is using the volume")
         } else if finding.action != .none {
             Text(finding.actionLabel)
                 .font(Typography.caption)

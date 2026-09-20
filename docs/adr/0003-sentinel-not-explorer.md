@@ -63,6 +63,18 @@ Concretely:
 A copy of this ADR is kept with the disk visualizer, so neither project can
 drift across the boundary while believing it is the only one that owns it.
 
+**The explorer is the disk visualizer at `com.tedswinyar.phantom`**, a sibling
+app of `com.tedswinyar.banshee`. This ADR names the hand-off by bundle id; it
+does not overturn the no-walk rule (banshee-60q). Concretely: the disk finding
+ships action `openDiskTool`, and a client that can launch apps (the macOS app)
+turns it into a button that opens the visualizer when it is installed, falling
+back to the finding's text otherwise — never a dead button. The CLI and MCP
+keep the generic action label, which is the same words on every surface
+(ADR-0005), because the wire is public and must not carry the sibling's name.
+Banshee still walks no filesystem; it points at the tool whose job that is. The
+read-through to the visualizer's `/volume` and hotspots routes remains the
+additive, degrade-gracefully step described below.
+
 ## Consequences
 
 - **The rule is testable, not just stated.** "No filesystem walk" is a property
