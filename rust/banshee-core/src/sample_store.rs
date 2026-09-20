@@ -491,8 +491,8 @@ impl SampleStore {
                 ide_helper_count, ide_helper_rss, orphan_total_count,
                 orphan_total_rss, orphan_count, orphan_rss,
                 monitor_proc_count, monitor_rss, monitor_cpu_secs,
-                monitor_percent, monitor_longest_life)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                monitor_percent, monitor_longest_life, pressure_kills)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 id,
                 wire_time::to_wire(&c.taken_at),
@@ -509,6 +509,7 @@ impl SampleStore {
                 c.monitor_total.cpu_secs_total,
                 c.monitor_total.percent_of_one_core,
                 clamp_i64(c.monitor_total.longest_life_secs),
+                c.pressure_kills.map(clamp_i64),
             ],
         )?;
         {
@@ -716,7 +717,8 @@ impl SampleStore {
                 "SELECT id, taken_at, total_procs, tmux_available, ide_helper_count,
                         ide_helper_rss, orphan_total_count, orphan_total_rss,
                         orphan_count, orphan_rss, monitor_proc_count, monitor_rss,
-                        monitor_cpu_secs, monitor_percent, monitor_longest_life
+                        monitor_cpu_secs, monitor_percent, monitor_longest_life,
+                        pressure_kills
                  FROM censuses WHERE id = ?1",
                 params![want],
                 |r| {
@@ -738,13 +740,26 @@ impl SampleStore {
                             percent_of_one_core: r.get(13)?,
                             longest_life_secs: r.get(14)?,
                         },
+                        r.get::<_, Option<u64>>(15)?,
                     ))
                 },
             )
             .optional()?;
 
-        let Some((cid, taken_at, total_procs, tmux_available, hc, hr, otc, otr, oc, or_, mtot)) =
-            row
+        let Some((
+            cid,
+            taken_at,
+            total_procs,
+            tmux_available,
+            hc,
+            hr,
+            otc,
+            otr,
+            oc,
+            or_,
+            mtot,
+            pressure_kills,
+        )) = row
         else {
             return Ok(None);
         };
@@ -878,6 +893,7 @@ impl SampleStore {
             monitor_total: mtot,
             tmux_available,
             cpu_consumers,
+            pressure_kills,
         }))
     }
 
@@ -1903,6 +1919,7 @@ mod tests {
                     percent_of_one_core: 96.0,
                 },
             ],
+            pressure_kills: Some(2),
         }
     }
 
@@ -1916,6 +1933,11 @@ mod tests {
         assert_eq!(got.id, c.id);
         assert_eq!(got.taken_at, c.taken_at);
         assert_eq!(got.total_procs, 1234);
+        assert_eq!(
+            got.pressure_kills,
+            Some(2),
+            "pressure_kills survives the round trip"
+        );
         assert!(got.tmux_available);
 
         assert_eq!(got.agent_sessions.len(), 2);

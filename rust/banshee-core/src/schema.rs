@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::{CoreError, Result};
 
 /// Bump this when adding a migration below.
-pub const CURRENT_VERSION: i64 = 14;
+pub const CURRENT_VERSION: i64 = 15;
 
 /// Validate an existing database or initialize a fresh one, applying any
 /// pending forward migrations. Refuses databases newer than this build.
@@ -458,8 +458,8 @@ fn migrate_step(conn: &Connection, from: i64) -> Result<()> {
             // next migration therefore gets its OWN arm and bumps
             // CURRENT_VERSION — it must NOT append to THIS step, because prod
             // is already at v13 and would never re-run it. (That arm is the
-            // `13 =>` CPU-consumers migration below; the limits dimension, when it
-            // lands, becomes v15.)
+            // `13 =>` CPU-consumers migration below. v15 in the event became
+            // the census `pressure_kills` column (`banshee-2dq`), not limits.)
             conn.execute_batch(
                 "ALTER TABLE samples ADD COLUMN kernel_free_percent INTEGER;
                  ALTER TABLE samples ADD COLUMN jetsam_kills INTEGER;",
@@ -486,6 +486,20 @@ fn migrate_step(conn: &Connection, from: i64) -> Result<()> {
                     PRIMARY KEY (census_id, rank)
                 );",
             )?;
+        }
+        14 => {
+            // v15: the honest jetsam counter (`banshee-2dq`). The memory-kills
+            // dimension banded on `samples.jetsam_kills`, a sysctl lifetime
+            // counter — but a positive delta there fires on ANY jetsam, including
+            // the routine `idle-exit rf:low` reaping that macOS does on a healthy
+            // machine, so the dimension was a false-positive generator. The census
+            // now parses `/usr/bin/log show` for genuine sustained-pressure kills
+            // (excluding idle-exit noise) over the gap since the previous census,
+            // and stores that per-window count here. NULLABLE, no DEFAULT — 0 is a
+            // real reading (a healthy machine reports 0 pressure kills), so the
+            // only honest marker for a pre-v15 census is NULL. The sysctl column
+            // stays as a cheap secondary observable but no longer drives the band.
+            conn.execute_batch("ALTER TABLE censuses ADD COLUMN pressure_kills INTEGER;")?;
         }
         other => {
             return Err(CoreError::Schema(format!(
@@ -602,6 +616,15 @@ mod tests {
             )
             .unwrap();
         n == 1
+    }
+
+    fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
+        conn.prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .any(|c| c == column)
     }
 
     #[test]
@@ -838,21 +861,12 @@ mod tests {
             // Simulate a migration interrupted mid-flight: apply the DDL and
             // the version bump inside a transaction, then roll it back (== a
             // crash before COMMIT under the atomic design). The DDL here must
-            // BE the newest arm's (v14, the CPU who-line consumers table), or
+            // BE the newest arm's (v15, the census `pressure_kills` column), or
             // this test quietly stops covering the step it claims to. Copy it
-            // verbatim from the `13 =>` arm after any `cargo fmt`.
+            // verbatim from the `14 =>` arm after any `cargo fmt`.
             let tx = conn.unchecked_transaction().unwrap();
-            tx.execute_batch(
-                "CREATE TABLE census_cpu_consumers (
-                    census_id           TEXT    NOT NULL REFERENCES censuses(id) ON DELETE CASCADE,
-                    rank                INTEGER NOT NULL,
-                    name                TEXT    NOT NULL,
-                    proc_count          INTEGER NOT NULL,
-                    percent_of_one_core REAL    NOT NULL,
-                    PRIMARY KEY (census_id, rank)
-                );",
-            )
-            .unwrap();
+            tx.execute_batch("ALTER TABLE censuses ADD COLUMN pressure_kills INTEGER;")
+                .unwrap();
             tx.pragma_update(None, "user_version", CURRENT_VERSION)
                 .unwrap();
             tx.rollback().unwrap();
@@ -867,8 +881,8 @@ mod tests {
                 "rolled-back migration must leave the version where it was"
             );
             assert!(
-                !table_exists(&conn, "census_cpu_consumers"),
-                "the rolled-back CREATE TABLE must not have taken effect"
+                !column_exists(&conn, "censuses", "pressure_kills"),
+                "the rolled-back ALTER TABLE must not have taken effect"
             );
         }
 

@@ -8,7 +8,8 @@
 // this tier names the cause.
 //
 // Subprocesses live here and nowhere else (ADR-0007): two `ps` calls, one `tmux`
-// call, and `lsof` ONLY for sessions already flagged stale.
+// call, one `log show` call (honest jetsam kills, `banshee-2dq`), and `lsof`
+// ONLY for sessions already flagged stale.
 
 pub mod config;
 pub mod exec;
@@ -198,6 +199,57 @@ pub struct CpuSnapshot {
 /// question is not starved by the finding's shorter list.
 const CPU_CONSUMER_CAP: usize = 12;
 
+/// The kernel-log predicate for jetsam kills (`banshee-2dq`). Every process the
+/// kernel jetsams logs `memorystatus: killing…`; the reason token on the same
+/// line is what distinguishes a real pressure kill from routine housekeeping.
+const JETSAM_PREDICATE: &str =
+    r#"process == "kernel" AND eventMessage CONTAINS "memorystatus: killing""#;
+
+/// Upper bound on the jetsam-kill lookback window, in seconds. The window is
+/// normally the gap since the previous census (so windows tile without overlap
+/// or gap), but a laptop sleep or a stalled daemon can make that gap hours long
+/// — and `log show`'s cost is proportional to the window length (a multi-hour
+/// window takes over two minutes; a 5-minute one takes 2–4s). Capping the window
+/// keeps the census-tier probe affordable AND stops a burst of kills logged
+/// before a sleep from being attributed to the moment the machine woke — the
+/// same "a gap is not evidence" mistake `held_secs` made (`a-monitor-s-held…`).
+/// 15 minutes = 3× the default cadence: generous enough to rarely truncate a
+/// genuine non-sleep gap, bounded enough that the probe stays cheap. No kills
+/// happen while a machine is asleep, so truncating a sleep gap loses nothing.
+const JETSAM_WINDOW_CAP_SECS: i64 = 900;
+
+/// Count the HONEST pressure kills in `log show` output, excluding the routine
+/// `idle-exit rf:low` daemon housekeeping that dominates a healthy machine
+/// (~100–157 lines per 5 minutes, all of it `killing_idle_process … rf:low`).
+///
+/// Counting raw kill lines would make the dimension a false-positive generator
+/// on every idle machine — the same shape as the `pages_free` mistake. The
+/// honest signal is a kill flagged `rf:high`, `per-process-limit`, or
+/// `vm-pageshortage`; the 2026-09-15 crisis kills were `idle-exit … rf:high` and
+/// `killing_specific_process … (per-process-limit … rf:high)`.
+fn count_honest_kills(log_output: &str) -> u64 {
+    log_output
+        .lines()
+        .filter(|line| is_honest_pressure_kill(line))
+        .count() as u64
+}
+
+/// A kill line counts iff it is a kill AND names a real-distress reason. The
+/// explicit `idle-exit rf:low` exclusion is belt-and-suspenders over the
+/// positive filter (rf:low is not rf:high), and documents the one shape that
+/// MUST NOT count no matter how the positive set grows.
+fn is_honest_pressure_kill(line: &str) -> bool {
+    if !line.contains("memorystatus: killing") {
+        return false;
+    }
+    if line.contains("idle-exit") && line.contains("rf:low") {
+        return false;
+    }
+    line.contains("rf:high")
+        || line.contains("per-process-limit")
+        || line.contains("vm-pageshortage")
+}
+
 /// The current cycle's per-pid CPU snapshot, to difference next cycle.
 pub fn cpu_snapshot(rows: &[ProcRow], at: DateTime<Utc>) -> CpuSnapshot {
     CpuSnapshot {
@@ -308,6 +360,16 @@ pub struct Census {
     /// this; every other dimension is attributed by resident size or cumulative
     /// CPU.
     pub cpu_consumers: Vec<CpuConsumer>,
+    /// Honest kernel-jetsam kills observed in this census's bounded window —
+    /// `rf:high` / `per-process-limit` / `vm-pageshortage`, EXCLUDING the routine
+    /// `idle-exit rf:low` daemon housekeeping (`banshee-2dq`). This is what the
+    /// Jetsam dimension bands on; it replaces the sample-tier sysctl counter,
+    /// which stayed 0 through 170 real kills. `None` when `log show` could not be
+    /// run (a non-macOS build) or on a pre-v15 census row — never coerced to 0,
+    /// which would invent a calm machine. Windows do not overlap (each starts
+    /// where the last ended), so summing across censuses does not double-count.
+    #[serde(default)]
+    pub pressure_kills: Option<u64>,
 }
 
 impl Census {
@@ -335,6 +397,12 @@ pub struct CensusCollector<R: CommandRunner> {
     /// once per census tick, serially — the one piece of state the census keeps
     /// between cycles.
     prev_cpu: Mutex<Option<CpuSnapshot>>,
+    /// The timestamp of the previous census, so the jetsam-kill window is exactly
+    /// the gap since then (windows tile without overlap or gap) rather than a
+    /// fixed `--last 5m` that drifts. `None` on the first cycle after a daemon
+    /// start, which falls back to the capped window. Same interior-mutability
+    /// rationale as `prev_cpu` (`banshee-2dq`).
+    last_census_at: Mutex<Option<DateTime<Utc>>>,
 }
 
 impl<R: CommandRunner> CensusCollector<R> {
@@ -343,7 +411,38 @@ impl<R: CommandRunner> CensusCollector<R> {
             runner,
             config,
             prev_cpu: Mutex::new(None),
+            last_census_at: Mutex::new(None),
         }
+    }
+
+    /// Honest jetsam kills in the window since the previous census, capped at
+    /// [`JETSAM_WINDOW_CAP_SECS`]. `--last <secs>s` is relative to when `log show`
+    /// runs (≈ `at`), so consecutive windows tile: each starts where the last
+    /// ended. `None` when `log show` cannot be spawned (a non-macOS build) — the
+    /// runner's `Err` is spawn failure, and an unmeasurable window must read as
+    /// unknown, not as zero kills.
+    fn pressure_kills(&self, at: DateTime<Utc>) -> Option<u64> {
+        let window_secs = {
+            let mut last = self
+                .last_census_at
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let secs = match *last {
+                Some(prev) => (at - prev).num_seconds().clamp(0, JETSAM_WINDOW_CAP_SECS),
+                None => JETSAM_WINDOW_CAP_SECS,
+            };
+            *last = Some(at);
+            secs
+        };
+        let last_arg = format!("{window_secs}s");
+        let out = self
+            .runner
+            .run(
+                "/usr/bin/log",
+                &["show", "--last", &last_arg, "--predicate", JETSAM_PREDICATE],
+            )
+            .ok()?;
+        Some(count_honest_kills(&out))
     }
 
     pub fn config(&self) -> &CensusConfig {
@@ -389,6 +488,12 @@ impl<R: CommandRunner> CensusCollector<R> {
             s.cwd = self.cwd_of(s.pid);
         }
 
+        // Honest jetsam kills over the window since the last census (`banshee-2dq`).
+        // The `log show` call is the fifth and heaviest subprocess in the census
+        // tier — affordable at a 5-minute cadence, off-reactor via spawn_blocking,
+        // and never on the cheap syscall tier (ADR-0007).
+        let pressure_kills = self.pressure_kills(at);
+
         Ok(Census {
             id: Uuid::new_v4(),
             taken_at: at,
@@ -402,6 +507,7 @@ impl<R: CommandRunner> CensusCollector<R> {
             monitor_total,
             tmux_available,
             cpu_consumers,
+            pressure_kills,
         })
     }
 
@@ -621,6 +727,7 @@ mod tests {
     const PS_ARGS: &str = include_str!("../../../../tests/fixtures/census/ps-args.txt");
     const TMUX: &str = include_str!("../../../../tests/fixtures/census/tmux-panes.txt");
     const LSOF: &str = include_str!("../../../../tests/fixtures/census/lsof-cwd.txt");
+    const LOG_KILLS: &str = include_str!("../../../../tests/fixtures/census/log-show-kills.txt");
 
     const PS_CORE_CMD: &str = "ps -Ao pid=,ppid=,rss=,etime=,time=,tty=,comm=";
     const PS_ARGS_CMD: &str = "ps -Ao pid=,args=";
@@ -717,9 +824,10 @@ mod tests {
         }
     }
 
-    /// The whole census must be two `ps` calls plus one `tmux` call, regardless
-    /// of how many processes exist. Mutation-proof: move the `ps` call inside a
-    /// per-process loop and this explodes.
+    /// The whole census must be two `ps` calls, one `tmux` call and one
+    /// `/usr/bin/log show` call, regardless of how many processes exist.
+    /// Mutation-proof: move the `ps` call inside a per-process loop and this
+    /// explodes.
     #[test]
     fn a_census_costs_a_fixed_number_of_spawns() {
         let r = runner();
@@ -729,8 +837,67 @@ mod tests {
         let calls = c.runner.calls();
         assert_eq!(c.runner.calls_to("ps").len(), 2, "{calls:?}");
         assert_eq!(c.runner.calls_to("tmux").len(), 1, "{calls:?}");
-        // 2 ps + 1 tmux + 2 lsof (stale sessions only) = 5, against 20 processes.
-        assert_eq!(calls.len(), 5, "{calls:?}");
+        // One log-show probe per census for the honest jetsam count, fixed no
+        // matter how many processes or kills there are (`banshee-2dq`).
+        assert_eq!(c.runner.calls_to("/usr/bin/log").len(), 1, "{calls:?}");
+        // 2 ps + 1 tmux + 2 lsof (stale sessions only) + 1 log = 6, against 20
+        // processes.
+        assert_eq!(calls.len(), 6, "{calls:?}");
+    }
+
+    /// The honest jetsam count is the crux of `banshee-2dq`: the fixture has six
+    /// `memorystatus: killing` lines, but only THREE are genuine sustained-pressure
+    /// kills (`vm-pageshortage`, `per-process-limit`, `rf:high`). The other three
+    /// are noise a naive `contains("killing")` filter would count — two routine
+    /// `idle-exit, rf:low` reaps and one kill with no pressure reason at all.
+    /// Counting all six is exactly the false-positive generator this replaced.
+    /// Mutation-proof: drop the `is_honest_pressure_kill` filter (count every
+    /// line) and this reads 6; treat `idle-exit rf:low` as honest and it reads 5.
+    #[test]
+    fn only_genuine_pressure_kills_are_counted_not_idle_exit_noise() {
+        assert_eq!(
+            count_honest_kills(LOG_KILLS),
+            3,
+            "3 honest kills; idle-exit rf:low and reasonless kills are noise"
+        );
+        // The discriminating lines, one property at a time.
+        assert!(is_honest_pressure_kill(
+            "memorystatus: killing_top_process pid 1 [x] (vm-pageshortage)"
+        ));
+        assert!(is_honest_pressure_kill(
+            "memorystatus: killing_specific_process pid 2 [y] (per-process-limit)"
+        ));
+        assert!(is_honest_pressure_kill(
+            "memorystatus: killing_top_process pid 3 [z] (rf:high)"
+        ));
+        assert!(
+            !is_honest_pressure_kill(
+                "memorystatus: killing_top_process pid 4 [w] (idle-exit, rf:low)"
+            ),
+            "routine idle-exit reaping is not memory pressure"
+        );
+        assert!(
+            !is_honest_pressure_kill("memorystatus: killing_idle_process pid 5 [q] ()"),
+            "a kill with no pressure reason is not counted"
+        );
+        assert!(
+            !is_honest_pressure_kill("some unrelated kernel line"),
+            "a line without the kill marker is not a kill"
+        );
+    }
+
+    /// The honest count reaches the stored census through the collector, from the
+    /// real `/usr/bin/log show` output shape. Mutation-proof: stop calling
+    /// `pressure_kills` in `collect_at` (leave the field `None`) and this fails.
+    #[test]
+    fn the_census_records_the_honest_jetsam_count() {
+        let first_window = format!("{JETSAM_WINDOW_CAP_SECS}s");
+        let log_key =
+            format!("/usr/bin/log show --last {first_window} --predicate {JETSAM_PREDICATE}");
+        let r = runner().with(&log_key, LOG_KILLS);
+        let c = collector(r);
+        let census = c.collect_at(at()).unwrap();
+        assert_eq!(census.pressure_kills, Some(3));
     }
 
     // ---- orphans --------------------------------------------------------

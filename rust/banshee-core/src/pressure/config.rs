@@ -65,11 +65,15 @@ pub enum Dimension {
     /// return without a restart. Advisory — it backs a finding, it does not drive
     /// the level.
     Compressor,
-    /// Kernel jetsam kills under sustained pressure
-    /// (`kern.memorystatus.kill_on_sustained_pressure_count`), measured as the
-    /// count of NEW kills across the window. NOT advisory and NOT subject to the
-    /// sustain grace: a kill is a confirmed past event, not a threshold spike that
-    /// might recover, so any kill rings the top bell at once (`banshee-yk8`).
+    /// Genuine sustained-pressure kills, counted by the census from
+    /// `/usr/bin/log show` over the gap since the previous census — excluding the
+    /// routine `idle-exit rf:low` reaping macOS does on a healthy machine
+    /// (`banshee-2dq`). Each census stores a per-window count; the model
+    /// accumulates them. NOT advisory and NOT subject to the sustain grace: a kill
+    /// is a confirmed past event, not a threshold spike that might recover, so any
+    /// kill rings the top bell at once (`banshee-yk8`). The `kern.memorystatus`
+    /// sysctl counter stays on the sample tier as a cheap secondary observable but
+    /// no longer drives this band — it fired on ANY jetsam, idle-exit included.
     Jetsam,
     /// Interactive agent CLI sessions older than the staleness threshold.
     Agents,

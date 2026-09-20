@@ -462,7 +462,11 @@ decoded by both unit suites. What binds:
   per-agent `percentOfOneCore` values**: each divides by the longest-lived process
   in its own group, so the denominators differ (a real census summed to 59.9%
   against an honest 49.2%). `monitorTotal.percentOfOneCore` is the deduplicated
-  figure.
+  figure. Also carries `cpuConsumers` (the recent-rate who-line) and
+  **`pressureKills`** — genuine kernel-jetsam kills counted from `/usr/bin/log
+  show` over the census's window, excluding routine `idle-exit rf:low` reaping
+  (`banshee-2dq`). This is what the `jetsam` dimension bands on; **`null` means a
+  pre-v15 census that never looked**, never coerced to 0.
 - **`Rollup`** is one 5-minute bucket: `bucketStart`, `sampleCount`, and then
   AVERAGES AND MAXIMA where a sample has a reading — `load1mAvg`/`load1mMax`,
   `swapUsedAvg`/`swapUsedMax`, `pagesFreeMin`, `pagesCompressorMax` — plus a

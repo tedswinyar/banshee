@@ -41,7 +41,7 @@ test — never for every PID.
 | Available RAM | `host_statistics64`: free + speculative + purgeable + external pages | NOT `vm_stat`'s free list, which macOS keeps deliberately tiny (100–500 MB on any healthy machine). Banding on `pages_free` alone was the memory false-positive bug: red at 84 MB "free" while `kern.memorystatus_vm_pressure_level` said NORMAL. **This is NOT `memory_pressure`'s "free percentage"** — that figure is `kern.memorystatus_level`, the kernel's own reclaimability estimate, and it is much larger (measured 40% vs our 11.5% at the same instant, 2026-09-01 parity run). An earlier revision of this row claimed they track each other; they are different quantities, both honest. |
 | Kernel memory pressure level | `sysctl -n kern.memorystatus_vm_pressure_level` | 1 normal, 2 warn, 4 critical. The kernel's OWN verdict, banded as its own dimension since schema v8: the 2026-09-01 parity run measured WARN while available RAM was comfortably green (swap carried the pressure), so it is a signal in its own right, not a restatement of availability. Stored per sample; 0 marks a pre-v8 row ("not recorded" — skipped by the model, never read as normal). |
 | Kernel reclaimable % | `sysctl -n kern.memorystatus_level` | The kernel's OWN reclaimability **percentage** — a DIFFERENT quantity from `memorystatus_vm_pressure_level` above (a percent, not a 1/2/4 level) and from availability (measured 40% here vs our 11.5% at the same instant, 2026-09-01 parity). The `KernelFree` **advisory** dimension since schema v13: shown, banded to colour the row, never a bell. Stored per sample; NULL marks a pre-v13 row. |
-| Jetsam kills | `sysctl -n kern.memorystatus.kill_on_sustained_pressure_count` | Lifetime counter of processes the kernel killed via the **sustained-pressure** path only (`kern.memorystatus.kill_on_sustained_pressure_count`) — cheap integer read, 0 on a healthy machine. It does NOT count idle-exit kills (`rf:high` or `rf:low`) or per-process-limit kills, which is how the 2026-09-15 crisis killed ~170 processes while this counter stayed 0 — so a zero here means "no *sustained-pressure* kill", not "nothing was killed" (banshee-714). The `Jetsam` dimension since schema v13; a positive DELTA over the window is a confirmed kill, **not** advisory, and rings the top bell AT ONCE (no sustain grace — the kernel already destroyed a process). Delta invalidated across a `boot_time_secs` change (a reboot resets the counter). Stored per sample; NULL marks a pre-v13 row. |
+| Jetsam kills (sysctl) | `sysctl -n kern.memorystatus.kill_on_sustained_pressure_count` | Lifetime counter of processes the kernel killed via the **sustained-pressure** path only — cheap integer read, 0 on a healthy machine. It does NOT count idle-exit or per-process-limit kills, which is how the 2026-09-15 crisis killed ~170 processes while this counter stayed 0 (banshee-714). **This no longer drives the `Jetsam` dimension** (banshee-2dq): it stayed 0 through a real crisis, so it was a false-negative here and — read as a lifetime delta — a false-positive on routine reaping elsewhere. It remains on the wire as a cheap secondary observable; the dimension now bands on the census-tier honest count below. Stored per sample; NULL marks a pre-v13 row. |
 | Kernel thermal pressure level | `notify_get_state("com.apple.system.thermalpressurelevel")` | 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping (`OSThermalNotification.h`, the macOS arm of the enum; Foundation's `ProcessInfo.thermalState` collapses it to nominal/fair/serious/critical). The kernel's OWN verdict about heat, banded as the eleventh dimension since schema v11: moderate is yellow, heavy and above red. A throttled machine runs slower for the same load figure, so a load red without this beside it is a story with a missing chapter. Stored per sample; NULL marks a pre-v11 row ("not recorded" — skipped by the model, never read as nominal, because 0 IS nominal). |
 | CPU speed limit | `IOPMCopyCPUPowerStatus` → `CPU_Speed_Limit` (percent) | **Absent on Apple silicon**: the call returns `kIOReturnNotFound` and `pmset -g therm` says no CPU power status is recorded (probed 2026-09-08). Only an Intel PMU publishes it. Stored nullable, never banded — when present it is the direct measurement of throttling and rides beside the level for the record. |
 | CPU tick counters (total / idle) | `host_processor_info(PROCESSOR_CPU_LOAD_INFO)`, summed across cores | Cumulative ticks: `total` = user+system+idle+nice, `idle` the idle state alone (schema v12). Lifetime counters — **differentiate them** to get MEASURED utilization, see below. Stored nullable; NULL marks a pre-v12 row ("not recorded"). |
@@ -216,6 +216,29 @@ Reading a 2-part `time` as `HH:MM` turns 18,945 seconds into 1,136,700.
   seconds earlier reported **14.6%** off 16 seconds of CPU. The lifetime
   denominator is exposed as `longestLifeSecs` so the pressure model can refuse to
   band on a figure derived from a process that has barely run.
+
+### Jetsam pressure kills — the honest count (`banshee-2dq`)
+
+The `Jetsam` dimension bands on genuine sustained-pressure kills, counted here at
+census cadence from the unified log rather than the sample-tier sysctl:
+
+```
+/usr/bin/log show --last <window>s --predicate   'process == "kernel" AND eventMessage CONTAINS "memorystatus: killing"'
+```
+
+`<window>` is the gap since the previous census, clamped to 900s (`log show` cost
+is proportional to the window; an unbounded `[boot, now]` scan times out, and a
+bounded window self-solves the laptop-sleep gap — a stale pre-sleep burst is not
+attributed to "now"). Each census stores a **per-window count**, so summing across
+censuses never double-counts.
+
+**Only genuine pressure kills are counted.** A line is a kill when it names
+`rf:high`, `per-process-limit`, or `vm-pageshortage`; the routine `idle-exit,
+rf:low` daemon reaping macOS does on a healthy machine is **excluded** — counting
+it is exactly the false-positive generator this replaced. `pressureKills` is
+`null` on a pre-v15 census or a non-macOS build (`log show` could not run), never
+coerced to 0. `/usr/bin/log`, never bare `log` — the latter is a zsh builtin that
+prints nothing.
 
 ## Configuration
 

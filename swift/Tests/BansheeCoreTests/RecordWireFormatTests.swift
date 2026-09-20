@@ -282,12 +282,14 @@ final class RecordWireFormatTests: XCTestCase {
             [
                 "id", "takenAt", "totalProcs", "agentSessions", "ideHelpers",
                 "orphans", "tmuxSessions", "appGroups", "monitorAgents",
-                "monitorTotal", "tmuxAvailable", "cpuConsumers",
+                "monitorTotal", "tmuxAvailable", "cpuConsumers", "pressureKills",
             ],
             "encode(to:) key set drifted — a Census field was added without a matching encode line"
         )
         // Lowercase-out for the census id too.
         XCTAssertEqual(obj["id"] as? String, "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f")
+        // Present-as-null, never absent: the fixture's 0 decodes and re-encodes.
+        XCTAssertEqual(c.pressureKills, 0)
     }
 
     /// The recent-rate CPU consumers decode, keep their RANK ORDER, and cover a

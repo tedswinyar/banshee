@@ -906,24 +906,27 @@ fn series_for(
                 )
             })
             .collect(),
-        // Jetsam kills are a step in a LIFETIME counter, so band on the number of
-        // NEW kills seen across the window: accumulate positive increments between
-        // consecutive samples, skipping any pair that spans a reboot (the counter
-        // resets, so `c < p`) or a pre-v13 row (`None`). The running total holds at
-        // its peak for the rest of the window, so a single kill keeps the dimension
-        // red long enough for `decide` to ring the top bell (`banshee-yk8`).
+        // Genuine sustained-pressure kills, counted by the census from
+        // `/usr/bin/log show` over the gap since the previous census
+        // (`banshee-2dq`). Each `pressure_kills` is already a PER-WINDOW count of
+        // honest kills — idle-exit `rf:low` reaping is excluded at the source — so
+        // the windows do not overlap and simply accumulate; no reboot guard is
+        // needed because these are not a lifetime counter. `None` is a pre-v15
+        // census that never recorded it — SKIPPED. The running total holds at its
+        // peak for the rest of the window, so a single kill keeps the dimension red
+        // long enough for `decide` to ring the top bell (`banshee-yk8`). This
+        // replaces the old sysctl-delta lens, which fired on ANY jetsam including
+        // routine idle-exit reaping and so was a false-positive generator; the
+        // `samples.jetsam_kills` counter stays on the wire as a cheap secondary
+        // observable but no longer drives the band.
         Dimension::Jetsam => {
             let mut total = 0.0;
             let mut points = Vec::new();
-            for w in samples.windows(2) {
-                let (prev, curr) = (&w[0], &w[1]);
-                let (Some(p), Some(c)) = (prev.jetsam_kills, curr.jetsam_kills) else {
-                    continue;
-                };
-                if prev.boot_time_secs == curr.boot_time_secs && c >= p {
-                    total += (c - p) as f64;
+            for c in censuses {
+                if let Some(kills) = c.pressure_kills {
+                    total += kills as f64;
+                    points.push((c.taken_at, total));
                 }
-                points.push((curr.sampled_at, total));
             }
             points
         }

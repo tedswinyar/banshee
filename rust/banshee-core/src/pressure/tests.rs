@@ -148,6 +148,9 @@ fn census(t: i64, stale: u32, orphans: u32, managed_agents: f64, life: u64) -> C
         },
         tmux_available: true,
         cpu_consumers: Vec::new(),
+        // The census looked and found no genuine pressure kills — Some(0), a green
+        // Jetsam reading. None would mean a pre-v15 census that never looked.
+        pressure_kills: Some(0),
     }
 }
 

@@ -1,0 +1,17 @@
+# banshee-2dq: the Jetsam dimension bands on an HONEST kill count — only kills
+# flagged rf:high / per-process-limit / vm-pageshortage, never the routine
+# idle-exit rf:low reaping a healthy machine does constantly. Dropping the
+# positive reason filter (count every "memorystatus: killing" line) reads the
+# fixture's 6 raw kills instead of its 3 genuine ones — exactly the
+# false-positive generator this replaced (the old sysctl lens fired on any
+# jetsam). Note the idle-exit guard ABOVE this is belt-and-suspenders and would
+# NOT catch this alone: rf:low lines fail the positive filter anyway, so the
+# reason filter is the load-bearing line.
+file: rust/banshee-core/src/census/mod.rs
+test: only_genuine_pressure_kills_are_counted_not_idle_exit_noise
+---OLD---
+    line.contains("rf:high")
+        || line.contains("per-process-limit")
+        || line.contains("vm-pageshortage")
+---NEW---
+    true

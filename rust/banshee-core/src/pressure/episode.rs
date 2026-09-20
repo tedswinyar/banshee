@@ -703,6 +703,7 @@ mod tests {
             monitor_total: MonitorTotal::default(),
             tmux_available: true,
             cpu_consumers: Vec::new(),
+            pressure_kills: None,
         }
     }
 

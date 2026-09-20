@@ -125,5 +125,6 @@
             "procCount": 1,
             "percentOfOneCore": 47.0
         }
-    ]
+    ],
+    "pressureKills": 0
 }

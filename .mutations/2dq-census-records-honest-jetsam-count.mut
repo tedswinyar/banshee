@@ -1,0 +1,11 @@
+# banshee-2dq: the honest jetsam count must actually be probed and stored on the
+# census — the field exists for exactly this. Stubbing the probe out (leaving
+# pressure_kills None) makes the census carry nothing, so the Jetsam dimension
+# has no series to band on and the crisis this fixes goes unseen. The collector
+# test asserts the fixture's 3 genuine kills reach the stored census.
+file: rust/banshee-core/src/census/mod.rs
+test: the_census_records_the_honest_jetsam_count
+---OLD---
+        let pressure_kills = self.pressure_kills(at);
+---NEW---
+        let pressure_kills = None;

@@ -1,0 +1,7 @@
+Timestamp                       Thread     Type        Activity             PID    TTL
+2026-09-20 14:22:58.114231-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_top_process pid 4412 [Google Chrome He] (vm-pageshortage) 402318KB - memorystatus_available_pages: 41233
+2026-09-20 14:23:01.882910-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_specific_process pid 5120 [com.apple.WebKit] (per-process-limit) 812004KB - memorystatus_available_pages: 40881
+2026-09-20 14:23:04.550118-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_top_process pid 6001 [node] (rf:high) 233110KB - memorystatus_available_pages: 39002
+2026-09-20 14:23:09.223401-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_top_process pid 7788 [Slack Helper] (idle-exit, rf:low) 96012KB - memorystatus_available_pages: 512334
+2026-09-20 14:23:12.771002-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_top_process pid 7801 [Notes] (idle-exit, rf:low) 40118KB - memorystatus_available_pages: 520661
+2026-09-20 14:23:15.009887-0700 0x0        Default     0x0                  0      0    kernel: (AppleEmbeddedOSSupportHost) memorystatus: killing_idle_process pid 7999 [mdworker_shared] () 12004KB - memorystatus_available_pages: 528110

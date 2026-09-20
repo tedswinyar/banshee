@@ -271,6 +271,11 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     /// The CPU/thermal who-line's recent-rate consumers, ranked. Empty on the
     /// first census after a start (no predecessor to difference).
     public let cpuConsumers: [CpuConsumer]
+    /// Honest kernel-jetsam kills in this census's window — genuine
+    /// sustained-pressure kills only, excluding routine `idle-exit rf:low`
+    /// reaping (`banshee-2dq`). What the Jetsam dimension bands on. `nil` on a
+    /// pre-v15 census that never recorded it — never coerced to 0.
+    public let pressureKills: UInt64?
 
     public init(
         id: UUID, takenAt: Date, totalProcs: Int,
@@ -278,7 +283,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         orphans: OrphanCensus, tmuxSessions: [TmuxSessionInfo],
         appGroups: [AppGroup], monitorAgents: [MonitorAgent],
         monitorTotal: MonitorTotal, tmuxAvailable: Bool,
-        cpuConsumers: [CpuConsumer]
+        cpuConsumers: [CpuConsumer], pressureKills: UInt64?
     ) {
         self.id = id
         self.takenAt = takenAt
@@ -292,6 +297,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         self.monitorTotal = monitorTotal
         self.tmuxAvailable = tmuxAvailable
         self.cpuConsumers = cpuConsumers
+        self.pressureKills = pressureKills
     }
 
     /// Sessions worth reaping — presentation, not a re-derivation: the flags
@@ -309,7 +315,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, takenAt, totalProcs, agentSessions, ideHelpers, orphans
         case tmuxSessions, appGroups, monitorAgents, monitorTotal, tmuxAvailable
-        case cpuConsumers
+        case cpuConsumers, pressureKills
     }
 
     // Hand-written for the UUID's lowercase-out rule; hard-coded field list,
@@ -328,5 +334,10 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         try c.encode(monitorTotal, forKey: .monitorTotal)
         try c.encode(tmuxAvailable, forKey: .tmuxAvailable)
         try c.encode(cpuConsumers, forKey: .cpuConsumers)
+        if let pressureKills {
+            try c.encode(pressureKills, forKey: .pressureKills)
+        } else {
+            try c.encodeNil(forKey: .pressureKills)
+        }
     }
 }
