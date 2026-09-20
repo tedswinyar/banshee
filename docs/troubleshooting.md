@@ -41,6 +41,19 @@ Common failures, their diagnosis, fixes, and prevention. Each entry follows symp
 
 **Prevention**: Build first; trust the compiler, not the editor overlay.
 
+### build-app.sh: "the release bundle carries a builder path; refusing to finish"
+
+`scripts/lib/bundle-scan.sh` found `/Users/<you>/…` in a release binary. If the sample
+it prints is `…/swift/.build/out/Intermediates.noindex/…`, the Swift build ran under
+SwiftPM's newer `swiftbuild` build system (the default from Swift 6.4 / Xcode 27),
+which records absolute intermediate paths that the compiler's `-file-prefix-map` and
+the linker's `-oso_prefix` do not reach. `build-app.sh` passes `--build-system
+native` for release builds for exactly this reason; check that line is still there
+and that `swift build --help` still lists `native`. If it no longer does, the fix is
+to strip debug stabs from the release app binary before signing (see the bead named
+in `build-app.sh`). The scan is correct to refuse: the first published DMG shipped
+2,163 home-path strings before it existed.
+
 ### Lock file mismatch or "cargo build" fails with dependency errors
 
 **Symptom**: Rust build fails with version conflicts, lock file out of date, or missing dependencies.

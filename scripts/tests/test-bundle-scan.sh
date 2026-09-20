@@ -55,6 +55,8 @@ t "build-app.sh remaps Rust paths (Cargo registry and the checkout)" \
   bash -c "grep -q -- '--remap-path-prefix=\$CARGO_HOME_DIR/registry/src=/cargo/registry' '$BA' && grep -q -- '--remap-path-prefix=\$ROOT_DIR=/banshee' '$BA'"
 t "build-app.sh remaps Swift paths" grep -q -- '-file-prefix-map -Xswiftc "$ROOT_DIR=/banshee"' "$BA"
 t "build-app.sh strips the linker's object-file paths (N_OSO) too" grep -q -- '-Xlinker -oso_prefix -Xlinker "$ROOT_DIR/"' "$BA"
+t "build-app.sh names the native build system (swiftbuild embeds absolute .build/out paths)" \
+  grep -q -- '--build-system native' "$BA"
 t "build-app.sh refuses to finish a release bundle that fails the scan" \
   bash -c "grep -q 'banshee_scan_bundle_for_paths \"\$APP_DIR\"' '$BA' && grep -q 'refusing to finish' '$BA'"
 

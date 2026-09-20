@@ -67,6 +67,15 @@ if [ "$CONFIGURATION" = release ]; then
   # (N_OSO stabs), which the compiler flag cannot reach; ld64's -oso_prefix strips it.
   SWIFT_FLAGS=(-Xswiftc -file-prefix-map -Xswiftc "$ROOT_DIR=/banshee" -Xswiftc -file-prefix-map -Xswiftc "$HOME=/home"
                -Xlinker -oso_prefix -Xlinker "$ROOT_DIR/")
+  # The NATIVE build system, by name. Swift 6.4's SwiftPM switched its default to
+  # "swiftbuild", whose link step records ABSOLUTE .build/out/Intermediates.noindex/…
+  # object and swiftmodule paths in the binary's symbol table — 34 of them, which
+  # neither -file-prefix-map (compiler) nor -oso_prefix (N_OSO only) reaches, so the
+  # scan below refused every release bundle on the first Xcode 27 machine
+  # (2026-09-20, banshee-vas). Older toolchains default to native and accept the
+  # flag, so this is parity, not a workaround; when native is removed this line
+  # fails loudly and the follow-up in that bead (strip debug stabs) takes over.
+  SWIFT_FLAGS+=(--build-system native)
 fi
 (cd "$ROOT_DIR/swift" && swift build -c "$CONFIGURATION" ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"})
 (cd "$ROOT_DIR/rust" && cargo build --workspace $([ "$CONFIGURATION" = release ] && echo --release))
