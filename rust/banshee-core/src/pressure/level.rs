@@ -761,7 +761,7 @@ mod tests {
     fn a_source_is_not_shown_below_the_threshold_even_when_known() {
         let v = Verdict {
             level: Level::Stirring,
-            source: Some(Source::Corporate),
+            source: Some(Source::ManagedAgents),
         };
         assert_eq!(v.glyph(), "🫥");
         assert_eq!(v.accessibility_label(), "Banshee: Stirring");

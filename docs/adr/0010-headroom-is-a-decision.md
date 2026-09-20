@@ -100,7 +100,7 @@ never blocks by default.**
      thermal HEAVY because the kernel is throttling and the load figures
      understate the work, so the arithmetic above cannot be trusted; disk
      because builds write. CPU red needs no rule — at ≥ 3× per core the
-     arithmetic already yields zero. Sprawl and corporate reds inside their
+     arithmetic already yields zero. Sprawl and managed-agents reds inside their
      grace period do not zero it: they are worklist items, not capacity.
    - Otherwise a **floor of 1**: a machine that is not in trouble can always run
      one more thing, and this is what makes `shouldWait` exactly
@@ -113,7 +113,7 @@ never blocks by default.**
 6. **Conditions.** `Ready` (status `True` when the verdict is trustworthy, i.e.
    not `checking`) followed by one condition per source in a fixed order —
    `CpuPressure`, `MemoryPressure`, `ThermalPressure`, `DiskPressure`,
-   `SprawlPressure`, `CorporatePressure`. Status is `True` when any
+   `SprawlPressure`, `ManagedAgentsPressure`. Status is `True` when any
    non-advisory dimension of that source is red, `False` when there is a
    reading and none is red, `Unknown` when the source has no reading yet (no
    census, pre-v11 thermal). `reason` is a CamelCase token naming the worst

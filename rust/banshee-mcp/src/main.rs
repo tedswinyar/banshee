@@ -366,7 +366,7 @@ fn read_and_preview_tools() -> Value {
             "name": "pressure",
             "description": "How is this Mac doing right now? Returns Banshee's whole \
                 verdict: `level` (checking | quiet | stirring | restless | wailing | \
-                shrieking), `source` (which of cpu/memory/disk/sprawl/corporate is \
+                shrieking), `source` (which of cpu/memory/disk/sprawl/managedAgents is \
                 driving it), the `glyph` shown in the menu bar, one reading per \
                 dimension with its `band` and `severity`, and `findings` — a worklist \
                 already ranked by measured impact. Each finding names WHO is behind \

@@ -19,7 +19,7 @@
 //   The managed agents appear as ONE entry, the deduplicated total.
 // - A cumulative-CPU ratio over a short lifetime is noise (a log shipper 109 s
 //   old measured 14.6% off 16 s of CPU), so a group younger than
-//   `corporate_min_life_secs` is not named for CPU at all.
+//   `managed_agents_min_life_secs` is not named for CPU at all.
 // - Memory, swap, kernel pressure and thrash are attributed by RESIDENT size.
 //   RSS is the wrong lens for a machine already deep in swap (the swapped-out
 //   pages are exactly what it does not count — `banshee-75z` is the follow-up),
@@ -84,7 +84,7 @@ pub fn attribute(d: Dimension, census: &Census, config: &PressureConfig) -> Vec<
             .unwrap_or_else(|| by_cumulative_cpu(census, config)),
         Dimension::Agents => stale_sessions_by_program(census),
         Dimension::Orphans => orphans_by_program(census),
-        Dimension::Corporate => managed_agents_by_rate(census, config),
+        Dimension::ManagedAgents => managed_agents_by_rate(census, config),
         Dimension::Disk | Dimension::Uptime => Vec::new(),
     };
     ranked
@@ -228,7 +228,7 @@ fn by_recent_cpu_rate(census: &Census) -> Option<Vec<Ranked>> {
 /// the managed agents as ONE deduplicated entry. Nothing else in the census
 /// carries CPU time (app groups and orphans are sized, not timed).
 fn by_cumulative_cpu(census: &Census, config: &PressureConfig) -> Vec<Ranked> {
-    let min_life = config.corporate_min_life_secs;
+    let min_life = config.managed_agents_min_life_secs;
 
     // (count, Σ cpu_secs, max lifetime) per program.
     let mut groups: BTreeMap<&str, (u32, f64, u64)> = BTreeMap::new();
@@ -240,7 +240,7 @@ fn by_cumulative_cpu(census: &Census, config: &PressureConfig) -> Vec<Ranked> {
     }
     let mut out: Vec<Ranked> = groups
         .into_iter()
-        // The same guard `Dimension::Corporate` applies: a ratio whose
+        // The same guard `Dimension::ManagedAgents` applies: a ratio whose
         // denominator is a lifetime of seconds is a startup burst, not a rate.
         // `life > 0` also keeps the division honest when min_life is tuned to 0.
         .filter(|(_, (_, _, life))| *life >= min_life && *life > 0)
@@ -297,7 +297,7 @@ fn managed_agents_by_rate(census: &Census, config: &PressureConfig) -> Vec<Ranke
         census
             .monitor_agents
             .iter()
-            .filter(|a| a.longest_life_secs >= config.corporate_min_life_secs)
+            .filter(|a| a.longest_life_secs >= config.managed_agents_min_life_secs)
             .filter_map(|a| {
                 Ranked::new(
                     &a.name,

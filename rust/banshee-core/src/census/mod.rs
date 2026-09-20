@@ -160,7 +160,7 @@ pub struct MonitorTotal {
 /// is `Σ(Δ cpu_secs) × 100 ÷ Δ wall_secs` across the two most recent censuses —
 /// "what is burning CPU right now", not "what has burned the most CPU over its
 /// life". The cumulative-CPU rule the memory-shaped who-line uses is right for the
-/// corporate baseline (a daemon's lifetime average) and wrong here: a 30-hour agent
+/// managed-agents baseline (a daemon's lifetime average) and wrong here: a 30-hour agent
 /// session at 46% live reads as 4% cumulative, and a desktop app that just spiked to
 /// 108% has no lifetime figure the census ever collected (`banshee-aen`).
 ///

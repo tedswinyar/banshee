@@ -44,7 +44,7 @@ final class HeadroomWireFormatTests: XCTestCase {
         XCTAssertEqual(h.reason, "Quiet: room for 3 more workers on 8 cores — 53% busy; 0.5× per core.")
         XCTAssertEqual(
             h.conditions.map(\.kind),
-            ["Ready", "CpuPressure", "MemoryPressure", "ThermalPressure", "DiskPressure", "SprawlPressure", "CorporatePressure"]
+            ["Ready", "CpuPressure", "MemoryPressure", "ThermalPressure", "DiskPressure", "SprawlPressure", "ManagedAgentsPressure"]
         )
         let cpu = try XCTUnwrap(h.conditions.first { $0.kind == "CpuPressure" })
         XCTAssertEqual(cpu.status, .false)

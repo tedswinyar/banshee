@@ -106,7 +106,7 @@ fn with_cpu_utils(samples: &mut [Sample], utils: &[f64]) {
     }
 }
 
-fn census(t: i64, stale: u32, orphans: u32, corporate: f64, life: u64) -> Census {
+fn census(t: i64, stale: u32, orphans: u32, managed_agents: f64, life: u64) -> Census {
     let sessions = (0..stale)
         .map(|i| crate::census::AgentSession {
             pid: 1000 + i,
@@ -143,7 +143,7 @@ fn census(t: i64, stale: u32, orphans: u32, corporate: f64, life: u64) -> Census
             proc_count: 13,
             rss_bytes: 577_000_000,
             cpu_secs_total: 1000.0,
-            percent_of_one_core: corporate,
+            percent_of_one_core: managed_agents,
             longest_life_secs: life,
         },
         tmux_available: true,
@@ -1029,7 +1029,7 @@ fn a_cpu_red_with_nothing_to_reap_offers_no_reap_button() {
 
 /// A managed-agent reading derived from a young process is NOT banded. Measured:
 /// a log shipper restarted 109s earlier reported 14.6% off 16s of CPU.
-/// Mutation-proof: drop the `corporate_min_life_secs` filter and a freshly
+/// Mutation-proof: drop the `managed_agents_min_life_secs` filter and a freshly
 /// restarted agent group produces a reading.
 #[test]
 fn a_young_managed_agent_reading_is_skipped_entirely() {
@@ -1037,7 +1037,7 @@ fn a_young_managed_agent_reading_is_skipped_entirely() {
     let censuses = vec![census(0, 0, 2, 200.0, 60), census(300, 0, 2, 200.0, 60)];
     let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
     assert!(
-        p.reading(Dimension::Corporate).is_none(),
+        p.reading(Dimension::ManagedAgents).is_none(),
         "a 60s-old process must not be banded at all"
     );
     assert_eq!(p.level, Level::Quiet, "and must not raise the level");
@@ -1051,7 +1051,7 @@ fn a_mature_managed_agent_group_bands_on_growth() {
         census(300, 0, 2, 70.0, 78_000),
     ];
     let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
-    let corp = p.reading(Dimension::Corporate).unwrap();
+    let corp = p.reading(Dimension::ManagedAgents).unwrap();
     assert_eq!(corp.band, Band::Yellow, "70% is past the 60% line");
     assert!(corp.detail.contains("of one core"));
 }
@@ -1063,7 +1063,10 @@ fn a_mature_managed_agent_group_bands_on_growth() {
 fn todays_managed_agent_baseline_is_not_a_standing_warning() {
     let censuses = vec![healthy_census(0), healthy_census(300)];
     let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
-    assert_eq!(p.reading(Dimension::Corporate).unwrap().band, Band::Green);
+    assert_eq!(
+        p.reading(Dimension::ManagedAgents).unwrap().band,
+        Band::Green
+    );
     assert_eq!(p.level, Level::Quiet);
 }
 
@@ -1079,8 +1082,8 @@ fn the_managed_agent_finding_recommends_no_action() {
     let f = p
         .findings
         .iter()
-        .find(|f| f.dimension == Dimension::Corporate)
-        .expect("a corporate finding");
+        .find(|f| f.dimension == Dimension::ManagedAgents)
+        .expect("a managed-agents finding");
     assert_eq!(f.action, Action::None);
     assert!(
         !p.actions().contains(&Action::None),
@@ -1814,7 +1817,7 @@ fn the_cpu_who_falls_back_to_cumulative_when_no_recent_rate() {
 }
 
 /// A per-program cumulative-CPU ratio over a short lifetime is a startup burst,
-/// not a rate, so a group younger than `corporate_min_life_secs` is not named —
+/// not a rate, so a group younger than `managed_agents_min_life_secs` is not named —
 /// even when it would top the list. Mutation-proof: drop the `life >= min_life`
 /// filter and the 90% newborn leads.
 #[test]
@@ -1876,10 +1879,10 @@ fn the_orphans_who_follows_the_census_breakdown() {
 /// group too young to have a rate: the fixture's log shipper is 109 s old at a
 /// startup-burst 14.6%. Mutation-proof: drop the lifetime filter and it appears.
 #[test]
-fn the_corporate_who_ranks_groups_by_their_own_rate_and_skips_young_ones() {
+fn the_managed_agents_who_ranks_groups_by_their_own_rate_and_skips_young_ones() {
     let c = full_census();
     assert_eq!(
-        who_of(Dimension::Corporate, &c, &cfg()),
+        who_of(Dimension::ManagedAgents, &c, &cfg()),
         vec!["endpoint-shield ×6 at 31% of one core".to_string()]
     );
 }
@@ -2714,7 +2717,7 @@ fn the_glyph_and_the_label_never_disagree_about_the_source() {
             Some(Source::Memory),
             Some(Source::Disk),
             Some(Source::Sprawl),
-            Some(Source::Corporate),
+            Some(Source::ManagedAgents),
         ] {
             let v = Verdict { level, source };
             let glyph = v.glyph();

@@ -1592,7 +1592,7 @@ mod tests {
             "a False pressure is unmarked: {cpu}"
         );
         assert!(cpu.contains("False") && cpu.contains("AllGreen"), "{cpu}");
-        let corp = line_with(&out, "CorporatePressure");
+        let corp = line_with(&out, "ManagedAgentsPressure");
         assert!(
             corp.starts_with("  ? "),
             "Unknown is a question mark: {corp}"

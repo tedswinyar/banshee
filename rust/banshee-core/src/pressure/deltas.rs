@@ -74,7 +74,7 @@ pub struct ConsumerSize {
 }
 
 /// A census reduced to the who-line's inputs: every sized consumer, biggest
-/// first, plus the two scalars the sprawl and corporate dimensions band on.
+/// first, plus the two scalars the sprawl and managed-agents dimensions band on.
 ///
 /// Small enough to store inside an episode row for a year (ADR-0006) and
 /// complete enough to diff against a live census. Zero-sized consumers are
@@ -551,7 +551,7 @@ fn dimension_words(d: Dimension, then: f64, now: f64) -> String {
         Dimension::Thrash => "peak thrash",
         Dimension::Agents => "stale sessions",
         Dimension::Orphans => "orphaned helpers",
-        Dimension::Corporate => "managed agents",
+        Dimension::ManagedAgents => "managed agents",
         Dimension::Disk => "free disk",
         Dimension::Uptime => "uptime",
         Dimension::KernelFree => "kernel reclaimable",
@@ -586,7 +586,9 @@ fn dimension_words(d: Dimension, then: f64, now: f64) -> String {
         Dimension::Agents | Dimension::Orphans | Dimension::Jetsam => {
             format!("{noun} {then:.0} → {now:.0} ({delta:+.0})")
         }
-        Dimension::Corporate => format!("{noun} {then:.1}% → {now:.1}% of one core ({delta:+.1})"),
+        Dimension::ManagedAgents => {
+            format!("{noun} {then:.1}% → {now:.1}% of one core ({delta:+.1})")
+        }
         Dimension::KernelFree => {
             format!("{noun} {then:.0}% → {now:.0}% ({delta:+.0} pts)")
         }

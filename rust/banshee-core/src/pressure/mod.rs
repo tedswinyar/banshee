@@ -877,12 +877,12 @@ fn series_for(
             .iter()
             .map(|c| (c.taken_at, f64::from(c.orphans.orphan_count)))
             .collect(),
-        Dimension::Corporate => censuses
+        Dimension::ManagedAgents => censuses
             .iter()
             // A ratio whose denominator is a process that started moments ago is
             // noise: a log shipper 109s old measured 14.6% off 16s of CPU. Skip
             // the reading rather than band on it.
-            .filter(|c| c.monitor_total.longest_life_secs >= config.corporate_min_life_secs)
+            .filter(|c| c.monitor_total.longest_life_secs >= config.managed_agents_min_life_secs)
             .map(|c| (c.taken_at, c.monitor_total.percent_of_one_core))
             .collect(),
         // The kernel's reclaimability percentage (`kern.memorystatus_level`).
@@ -1022,7 +1022,7 @@ fn detail_for(
         Dimension::Thermal => format!("kernel reports {}", thermal_level_name(value)),
         Dimension::Agents => format!("{value:.0} stale"),
         Dimension::Orphans => format!("{value:.0} orphaned"),
-        Dimension::Corporate => format!("{value:.1}% of one core"),
+        Dimension::ManagedAgents => format!("{value:.1}% of one core"),
         Dimension::Disk => {
             let mut s = format!("{} free", fmt_bytes(value));
             // The projection is the sentinel's whole contribution on disk: a
@@ -1270,7 +1270,7 @@ fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
             "{:.0} orphaned helper processes. Their parent sessions are gone.",
             r.value
         ),
-        Dimension::Corporate => format!(
+        Dimension::ManagedAgents => format!(
             "Managed agents are using {:.0}% of one core — up from the recorded baseline.",
             r.value
         ),
@@ -1336,7 +1336,7 @@ fn action_for(d: Dimension, band: Band, stale_sessions: usize) -> Action {
         // Nothing to reap: these agents are centrally managed and the user cannot
         // remove them. Cutting process churn lowers their cost as a side effect,
         // which the sprawl findings already cover.
-        Dimension::Corporate => Action::None,
+        Dimension::ManagedAgents => Action::None,
         // Heat has no process to reap: the lever is physical (surface, lid,
         // ambient) or simply time. The CPU dimension already routes a sustained
         // load red to reaping; pointing thermal there too would say the same

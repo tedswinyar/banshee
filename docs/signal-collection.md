@@ -297,7 +297,7 @@ list. The rules, per dimension:
 | cpu, thermal | the RECENT-RATE lens: CPU burned since the previous census ÷ the interval (`census.cpu_consumers`), falling back to the cumulative-CPU rule when there is no predecessor | ANY process the census saw, grouped by app-group name or program basename — not just agent sessions. The fallback names agent sessions by program plus the managed agents as ONE deduplicated entry (`monitor_total`), never the sum of per-group percentages, whose denominators differ |
 | agents (stale sessions) | RSS that reaping frees | stale sessions only, by program |
 | orphans | the census's own per-program breakdown (count first) | `orphans_by_program` |
-| corporate | each group's own rate, RANKED not summed | `monitor_agents` |
+| managedAgents | each group's own rate, RANKED not summed | `monitor_agents` |
 | disk, uptime | — | nobody: what is taking the space is a disk tool's question (ADR-0003) |
 
 **Why recent-rate for CPU (`banshee-aen`).** The cumulative-CPU rule named only
@@ -314,7 +314,7 @@ difference), and the who-line falls back to the cumulative rule then so it names
 someone rather than nobody.
 
 Two guards carry over from the census for the CUMULATIVE fallback: a group
-younger than `corporate_min_life_secs` is never named for CPU (a 60-second-old
+younger than `managed_agents_min_life_secs` is never named for CPU (a 60-second-old
 process at 90% is a startup burst, not a rate), and a group that costs nothing
 (zero RSS, zero CPU) is not a consumer. RSS is the honest measure of what a quit-and-relaunch
 reclaims and the wrong lens for a machine already deep in swap — the swapped-out

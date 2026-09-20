@@ -76,7 +76,7 @@ public enum Source: String, Codable, Sendable {
     case memory
     case disk
     case sprawl
-    case corporate
+    case managedAgents
     /// Heat: the kernel is throttling the machine to cool it (schema v11).
     case thermal
     /// A source this build does not recognise — a daemon on a different version

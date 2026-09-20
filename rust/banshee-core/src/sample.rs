@@ -234,7 +234,7 @@ pub struct Rollup {
     pub stale_sessions_max: Option<u32>,
     pub orphans_max: Option<u32>,
     /// `MonitorTotal::percent_of_one_core`, the DEDUPLICATED figure. Raw: the
-    /// live model's `corporate_min_life_secs` guard is interpretation and is
+    /// live model's `managed_agents_min_life_secs` guard is interpretation and is
     /// not applied here, so a bucket right after a reboot can carry a noisy
     /// ratio from young processes.
     pub monitor_percent_max: Option<f64>,

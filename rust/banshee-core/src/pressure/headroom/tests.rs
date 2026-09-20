@@ -420,12 +420,12 @@ fn a_disk_red_forces_a_wait() {
 fn wailing_waits_even_when_the_red_is_not_a_zeroing_source() {
     let p = verdict(
         Level::Wailing,
-        Some(Source::Corporate),
+        Some(Source::ManagedAgents),
         vec![
             cpu(0.10),
             memory(20e9),
             reading(
-                Dimension::Corporate,
+                Dimension::ManagedAgents,
                 Band::Red,
                 110.0,
                 1.25,
@@ -706,7 +706,7 @@ fn conditions_are_ready_then_the_six_sources_in_order() {
             "ThermalPressure",
             "DiskPressure",
             "SprawlPressure",
-            "CorporatePressure",
+            "ManagedAgentsPressure",
         ]
     );
 }

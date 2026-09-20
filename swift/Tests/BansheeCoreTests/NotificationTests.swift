@@ -264,7 +264,7 @@ final class NotificationTests: XCTestCase {
         let sink = RecordingSink()
         let c = NotificationCoordinator(sink: sink)
         let actionless = Finding(
-            dimension: "corporate",
+            dimension: "managedAgents",
             band: .red,
             message: "Managed agents are using 60% of one core.",
             action: .none,

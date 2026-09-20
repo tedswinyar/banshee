@@ -28,7 +28,7 @@ renders what core decided; the view never branches on a raw number.
 We will compute the entire pressure model in `banshee-core` and serve the result
 over the API. Specifically, `banshee-core` owns:
 
-- the dimension definitions (`cpu`, `memory`, `agents`, `orphans`, `corporate`,
+- the dimension definitions (`cpu`, `memory`, `agents`, `orphans`, `managedAgents`,
   `disk`, `uptime`) and their yellow/red bands,
 - hysteresis — enter at threshold, leave at threshold − margin, require N
   consecutive samples,

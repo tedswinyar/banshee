@@ -50,7 +50,7 @@
             "since": null
         },
         {
-            "type": "CorporatePressure",
+            "type": "ManagedAgentsPressure",
             "status": "Unknown",
             "reason": "NoReading",
             "message": "no managed agents reading yet",

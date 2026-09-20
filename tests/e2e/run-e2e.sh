@@ -435,7 +435,7 @@ printf '%s' "$HEADROOM" | jq -e '
   and (.shouldWait == (.retryAfterSecs != null))
   and (if .level == "checking" then .shouldWait else true end)
   and (.reason | length > 0)
-  and ([.conditions[].type] == ["Ready","CpuPressure","MemoryPressure","ThermalPressure","DiskPressure","SprawlPressure","CorporatePressure"])
+  and ([.conditions[].type] == ["Ready","CpuPressure","MemoryPressure","ThermalPressure","DiskPressure","SprawlPressure","ManagedAgentsPressure"])
   and (.conditions | all(
         (.status == "True" or .status == "False" or .status == "Unknown")
         and (.reason | length > 0) and has("since")
@@ -768,12 +768,12 @@ GAPPED="$(printf '%s' "$AFTER" | jq '[.dimensions[] | select(.observationGapSecs
 # The census tier is excluded on purpose: its gap ceiling is 3× ITS cadence
 # (600000ms here → 1800s), so two censuses nine seconds apart — one from before the
 # restart, one taken immediately after — are continuous observation by the model's
-# own rule, and `agents`/`orphans`/`corporate` legitimately report the span. Whether
+# own rule, and `agents`/`orphans`/`managedAgents` legitimately report the span. Whether
 # they appear at all is a race (the post-restart census runs off the reactor and
 # may or may not land before this read), which is why this assertion was green in
 # isolation and red under load with `heldSecs: 9` on exactly those three keys.
 OVERCLAIM="$(printf '%s' "$AFTER" | jq '[.dimensions[]
-  | select(.key != "agents" and .key != "orphans" and .key != "corporate")
+  | select(.key != "agents" and .key != "orphans" and .key != "managedAgents")
   | select(.heldSecs > 3)] | length')"
 [ "${OVERCLAIM:-0}" -eq 0 ] || fail "a dimension claims held time spanning the
   restart gap — held_secs is counting across it:

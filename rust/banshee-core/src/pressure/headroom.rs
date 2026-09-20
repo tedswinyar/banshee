@@ -101,7 +101,7 @@ pub const CONDITION_SOURCES: [Source; 6] = [
     Source::Thermal,
     Source::Disk,
     Source::Sprawl,
-    Source::Corporate,
+    Source::ManagedAgents,
 ];
 
 /// The sources whose RED zeroes the recommendation regardless of level (ADR-0010
@@ -109,7 +109,7 @@ pub const CONDITION_SOURCES: [Source; 6] = [
 /// failing; thermal because a throttled CPU makes the load arithmetic a lie;
 /// disk because builds write. CPU needs no entry — at red utilization the
 /// free-core arithmetic `cores × (1 − utilization)` is already ~0. Sprawl and
-/// corporate are worklist items, not
+/// managed agents are worklist items, not
 /// capacity, and a fresh red on them does not stop new work.
 const ZEROING_SOURCES: [Source; 3] = [Source::Memory, Source::Thermal, Source::Disk];
 
@@ -358,7 +358,7 @@ fn condition_type(source: Source) -> String {
         Source::Thermal => "Thermal",
         Source::Disk => "Disk",
         Source::Sprawl => "Sprawl",
-        Source::Corporate => "Corporate",
+        Source::ManagedAgents => "ManagedAgents",
     };
     format!("{name}Pressure")
 }

@@ -231,7 +231,7 @@ band, a severity, a glyph, or an action's wording.
 | `evaluatedAt` | datetime | no | canonical form |
 | `level` | enum | no | `checking` \| `quiet` \| `stirring` \| `restless` \| `wailing` \| `shrieking` |
 | `levelName` | string | no | the display name; render it, do not derive it |
-| `source` | enum | **yes** | `cpu` \| `memory` \| `disk` \| `sprawl` \| `corporate`; null below `restless` |
+| `source` | enum | **yes** | `cpu` \| `memory` \| `disk` \| `sprawl` \| `managedAgents`; null below `restless` |
 | `glyph` | string | no | **the menu bar renders this verbatim** |
 | `accessibilityLabel` | string | no | spoken by VoiceOver; words, never emoji |
 | `dimensions` | array | no | `[]` when `checking`, never null |
@@ -297,7 +297,7 @@ Advice, not enforcement: an agent hook built on it will return `ask`, never `den
 | `retryAfterSecs` | integer | **yes** | seconds before asking again; **present exactly when `shouldWait`**, null otherwise |
 | `cores` | integer | **yes** | the core count the arithmetic used (newest sample's `ncpu`); null before the first sample |
 | `reason` | string | no | one sentence, composed in core — quote it verbatim |
-| `conditions` | array | no | always 7: `Ready`, then `CpuPressure`, `MemoryPressure`, `ThermalPressure`, `DiskPressure`, `SprawlPressure`, `CorporatePressure`, in that order |
+| `conditions` | array | no | always 7: `Ready`, then `CpuPressure`, `MemoryPressure`, `ThermalPressure`, `DiskPressure`, `SprawlPressure`, `ManagedAgentsPressure`, in that order |
 
 **Condition** (Kubernetes node-condition shape — note the key is `type`, not `kind`,
 and the statuses are spelled `True` / `False` / `Unknown` as Kubernetes spells them):
@@ -349,7 +349,7 @@ ADR).
 
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
-| `dimension`, `key` | enum/string | no | `cpu`, `memory`, `swap`, `kernelPressure`, `thrash`, `agents`, `orphans`, `corporate`, `disk`, `uptime` |
+| `dimension`, `key` | enum/string | no | `cpu`, `memory`, `swap`, `kernelPressure`, `thrash`, `agents`, `orphans`, `managedAgents`, `disk`, `uptime` |
 | `label` | string | no | composed in core, so every surface says the same words |
 | `band` | enum | no | `green` \| `yellow` \| `red`, **after hysteresis** |
 | `value` | number | no | the newest reading, in `unit` |
@@ -423,7 +423,7 @@ re-derive client-side: memory, swap, kernel pressure and thrash rank by RESIDENT
 size; CPU and thermal by the census's cumulative-CPU rule (Σ CPU seconds over the
 group's longest lifetime — a sustained rate, not an instantaneous `%CPU`), with
 the managed agents as ONE deduplicated entry and any group younger than
-`corporate_min_life_secs` skipped; stale sessions by the RSS reaping them frees;
+`managed_agents_min_life_secs` skipped; stale sessions by the RSS reaping them frees;
 orphans by the census's per-program breakdown. A daemon from before the who-line
 existed sends neither key; clients decode that as "names nobody".
 

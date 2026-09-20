@@ -76,7 +76,7 @@ pub enum Dimension {
     /// Agent helper processes orphaned at `ppid == 1`.
     Orphans,
     /// Managed monitoring/security agents, as a share of one core.
-    Corporate,
+    ManagedAgents,
     /// Free bytes on the data volume. Falling is worse.
     Disk,
     /// Days since boot. Advisory — see `is_advisory`.
@@ -97,7 +97,7 @@ pub const ALL_DIMENSIONS: [Dimension; 14] = [
     Dimension::Jetsam,
     Dimension::Agents,
     Dimension::Orphans,
-    Dimension::Corporate,
+    Dimension::ManagedAgents,
     Dimension::Disk,
     Dimension::Uptime,
 ];
@@ -115,7 +115,7 @@ pub enum Source {
     /// Agent-session sprawl: stale sessions and the helpers they leak.
     Sprawl,
     /// Centrally-managed agents the user cannot remove.
-    Corporate,
+    ManagedAgents,
     /// Heat: the kernel is throttling the machine to cool it.
     Thermal,
 }
@@ -132,7 +132,7 @@ impl Source {
             Source::Memory => "🧠",
             Source::Disk => "💽",
             Source::Sprawl => "🕸️",
-            Source::Corporate => "🏢",
+            Source::ManagedAgents => "🏢",
             Source::Thermal => "🌡️",
         }
     }
@@ -143,7 +143,7 @@ impl Source {
             Source::Memory => "memory",
             Source::Disk => "disk",
             Source::Sprawl => "agent sprawl",
-            Source::Corporate => "managed agents",
+            Source::ManagedAgents => "managed agents",
             Source::Thermal => "thermal",
         }
     }
@@ -178,7 +178,7 @@ impl Dimension {
             Dimension::Jetsam => "jetsam",
             Dimension::Agents => "agents",
             Dimension::Orphans => "orphans",
-            Dimension::Corporate => "corporate",
+            Dimension::ManagedAgents => "managedAgents",
             Dimension::Disk => "disk",
             Dimension::Uptime => "uptime",
         }
@@ -197,7 +197,7 @@ impl Dimension {
             Dimension::Jetsam => "Memory kills",
             Dimension::Agents => "Stale agent sessions",
             Dimension::Orphans => "Orphaned helpers",
-            Dimension::Corporate => "Managed agents",
+            Dimension::ManagedAgents => "Managed agents",
             Dimension::Disk => "Disk headroom",
             Dimension::Uptime => "Uptime",
         }
@@ -222,7 +222,7 @@ impl Dimension {
             | Dimension::Jetsam
             | Dimension::Uptime => Source::Memory,
             Dimension::Agents | Dimension::Orphans => Source::Sprawl,
-            Dimension::Corporate => Source::Corporate,
+            Dimension::ManagedAgents => Source::ManagedAgents,
             Dimension::Disk => Source::Disk,
         }
     }
@@ -239,9 +239,9 @@ impl Dimension {
             Dimension::KernelPressure | Dimension::Thermal => Unit::Count,
             // Jetsam is a count of kills in the window; agents/orphans are counts.
             Dimension::Agents | Dimension::Orphans | Dimension::Jetsam => Unit::Count,
-            // KernelFree is the kernel's reclaimability percentage; corporate is a
+            // KernelFree is the kernel's reclaimability percentage; managed agents is a
             // share of one core.
-            Dimension::Corporate | Dimension::KernelFree => Unit::Percent,
+            Dimension::ManagedAgents | Dimension::KernelFree => Unit::Percent,
             Dimension::Uptime => Unit::Days,
         }
     }
@@ -285,7 +285,7 @@ pub struct PressureConfig {
     pub thrash: BandSpec,
     pub agents: BandSpec,
     pub orphans: BandSpec,
-    pub corporate: BandSpec,
+    pub managed_agents: BandSpec,
     pub disk: BandSpec,
     pub uptime: BandSpec,
     pub kernel_free: BandSpec,
@@ -337,14 +337,14 @@ pub struct PressureConfig {
     /// per-dimension cooldown, kept at the same value so notification volume is
     /// unchanged; re-fires swallowed inside it are COUNTED (`suppressed`).
     pub episode_repeat_secs: u64,
-    /// A `Corporate` reading derived from a process younger than this is not
+    /// A `ManagedAgents` reading derived from a process younger than this is not
     /// banded. Measured: a log shipper restarted 109s earlier reported 14.6% off
     /// 16s of CPU, because the ratio's denominator was tiny.
-    pub corporate_min_life_secs: u64,
+    pub managed_agents_min_life_secs: u64,
     /// How many consumers a finding names in its who-line. Two or three
     /// is the useful range: the top of the list is the action, and a fourth name
     /// is where the reader stops reading. Also the CPU rule's minimum-lifetime
-    /// guard reuses `corporate_min_life_secs` — a per-program cumulative-CPU
+    /// guard reuses `managed_agents_min_life_secs` — a per-program cumulative-CPU
     /// ratio is the same arithmetic as the managed-agent one and lies the same
     /// way over a short life.
     pub who_limit: usize,
@@ -387,7 +387,7 @@ pub struct PressureConfig {
     /// actually resolved, so a cadence override cannot leave the two disagreeing.
     pub sample_interval_secs: u64,
     /// Expected spacing of the census tier, in seconds. Its dimensions
-    /// (`agents`, `orphans`, `corporate`) are legitimately ~20× further apart than
+    /// (`agents`, `orphans`, `managedAgents`) are legitimately ~20× further apart than
     /// the sample tier's, which is exactly why one gap threshold cannot serve both.
     pub census_interval_secs: u64,
     /// How many times its tier's cadence an interval may reach before it counts as
@@ -518,7 +518,7 @@ impl Default for PressureConfig {
             // (2026-08-31) against roughly 32% inferred for 2026-08-04, so the
             // thresholds sit above today's normal in order to catch GROWTH rather
             // than to complain permanently about a baseline the user cannot change.
-            corporate: BandSpec::rising(60.0, 100.0, 5.0, 2),
+            managed_agents: BandSpec::rising(60.0, 100.0, 5.0, 2),
 
             // Free bytes on the data volume. Measured 65–71 GB free; the
             // 2026-07-16 crisis bottomed out at 1.1 GB. Raised from 50/15 after
@@ -566,7 +566,7 @@ impl Default for PressureConfig {
             episode_up_secs: 120,
             episode_down_secs: 600,
             episode_repeat_secs: 3600,
-            corporate_min_life_secs: 600,
+            managed_agents_min_life_secs: 600,
             who_limit: 3,
             disk_projection_red_secs: 3600.0,
             disk_projection_yellow_secs: 7200.0,
@@ -611,7 +611,7 @@ impl PressureConfig {
     /// stop.
     pub fn max_interval_secs(&self, d: Dimension) -> u64 {
         let cadence = match d {
-            Dimension::Agents | Dimension::Orphans | Dimension::Corporate => {
+            Dimension::Agents | Dimension::Orphans | Dimension::ManagedAgents => {
                 self.census_interval_secs
             }
             _ => self.sample_interval_secs,
@@ -631,7 +631,7 @@ impl PressureConfig {
             Dimension::Thrash => &self.thrash,
             Dimension::Agents => &self.agents,
             Dimension::Orphans => &self.orphans,
-            Dimension::Corporate => &self.corporate,
+            Dimension::ManagedAgents => &self.managed_agents,
             Dimension::Disk => &self.disk,
             Dimension::Uptime => &self.uptime,
             Dimension::KernelFree => &self.kernel_free,
@@ -679,7 +679,7 @@ mod tests {
             Dimension::Jetsam,
             Dimension::Agents,
             Dimension::Orphans,
-            Dimension::Corporate,
+            Dimension::ManagedAgents,
             Dimension::Disk,
             Dimension::Uptime,
         ] {
@@ -855,20 +855,24 @@ mod tests {
         // Green, so the dimension reports GROWTH rather than complaining forever
         // about something the user cannot remove.
         assert_eq!(
-            c.corporate.raw_band(49.2),
+            c.managed_agents.raw_band(49.2),
             Band::Green,
             "today's baseline must not be a standing warning"
         );
-        assert_eq!(c.corporate.raw_band(65.0), Band::Yellow, "but growth trips");
+        assert_eq!(
+            c.managed_agents.raw_band(65.0),
+            Band::Yellow,
+            "but growth trips"
+        );
     }
 
-    /// The short-lifetime guard exists because the corporate ratio is noisy for
+    /// The short-lifetime guard exists because the managed-agents ratio is noisy for
     /// young processes: a log shipper 109s old reported 14.6% off 16s of CPU.
     #[test]
-    fn the_corporate_minimum_lifetime_exceeds_the_observed_noise_case() {
+    fn the_managed_agents_minimum_lifetime_exceeds_the_observed_noise_case() {
         let c = PressureConfig::default();
         assert!(
-            c.corporate_min_life_secs > 109,
+            c.managed_agents_min_life_secs > 109,
             "must exclude the 109s restart that measured 14.6%"
         );
     }
@@ -908,7 +912,7 @@ mod tests {
             Source::Memory,
             Source::Disk,
             Source::Sprawl,
-            Source::Corporate,
+            Source::ManagedAgents,
         ];
         let mut glyphs: Vec<&str> = sources.iter().map(|s| s.glyph()).collect();
         let n = glyphs.len();
@@ -931,7 +935,7 @@ mod tests {
             Source::Memory,
             Source::Disk,
             Source::Sprawl,
-            Source::Corporate,
+            Source::ManagedAgents,
         ] {
             assert!(
                 ALL_DIMENSIONS.iter().any(|d| d.source() == s),
@@ -957,7 +961,7 @@ mod tests {
         // Census tier: 300s × 3 = 900s.
         assert_eq!(c.max_interval_secs(Dimension::Agents), 900);
         assert_eq!(c.max_interval_secs(Dimension::Orphans), 900);
-        assert_eq!(c.max_interval_secs(Dimension::Corporate), 900);
+        assert_eq!(c.max_interval_secs(Dimension::ManagedAgents), 900);
 
         // The census ceiling must comfortably exceed one census interval, or every
         // census-derived run would be reported as instantaneous.
@@ -998,7 +1002,7 @@ mod tests {
         );
         assert!(v.get("windowSamples").is_some());
         assert!(v.get("catastrophicSeverity").is_some());
-        assert!(v.get("corporateMinLifeSecs").is_some());
+        assert!(v.get("managedAgentsMinLifeSecs").is_some());
         assert!(v.get("cpuContentionDemandPerCore").is_some());
         assert!(v.get("episodeUpSecs").is_some());
         assert!(v.get("episodeDownSecs").is_some());

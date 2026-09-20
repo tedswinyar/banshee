@@ -118,8 +118,8 @@
       "detail": "orphaned helpers 5 → 5 (+0)"
     },
     {
-      "dimension": "corporate",
-      "key": "corporate",
+      "dimension": "managedAgents",
+      "key": "managedAgents",
       "label": "Managed agents",
       "unit": "percent",
       "then": 49.2,

@@ -219,7 +219,7 @@ final class WireFormatTests: XCTestCase {
                 "Action must decode \(raw)"
             )
         }
-        for raw in ["cpu", "memory", "disk", "sprawl", "corporate"] {
+        for raw in ["cpu", "memory", "disk", "sprawl", "managedAgents"] {
             XCTAssertNoThrow(
                 try Wire.decoder().decode(Source.self, from: Data("\"\(raw)\"".utf8)),
                 "Source must decode \(raw)"

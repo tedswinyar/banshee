@@ -269,7 +269,7 @@ pub fn reconcile_episodes(
             (Some(e), Some(r)) => step(e, r, pressure, census, now, config),
             (None, Some(r)) => open_if_due(r, pressure, census, now, config).map(|e| (e, true)),
             // An open episode whose dimension is not observed this tick (no census
-            // yet, a corporate reading skipped for a young process) is left alone:
+            // yet, a managed-agents reading skipped for a young process) is left alone:
             // "not measured" is not "below red".
             (Some(_), None) | (None, None) => None,
         };
