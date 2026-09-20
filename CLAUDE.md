@@ -415,6 +415,16 @@ class); add your own the moment one bites.
   Same runner, same commit, one env var. The test now `unset`s the drill's mode
   variables at the top. **A test that drives a script by env must start from a clean
   env**, not the caller's; `env -u` per case is not enough when a new variable arrives.
+- **A gate that runs BEFORE a step cannot see what that step commits, and `--no-verify`
+  makes sure nothing else does (2026-09-20, `banshee-282`).** `release.sh` runs verify,
+  THEN generates `THIRD-PARTY-NOTICES.html` and `sbom/*.cdx.json` and commits them, and
+  `release.yml` pushes main `--no-verify` (verify had "just run"). The first end-to-end
+  release landed 311 third-party author e-mail addresses on public main, and the next
+  verify on the dev machine went red on the residue gate's real-tree check — found only because C3
+  called for a fresh-clone gate run. The gate now masks addresses in exactly those two
+  generated files (a home path in a `path+file:///Users/…` purl is still refused — the
+  SBOM embeds the build user's), and `release.sh` re-gates the tree after the commit.
+  **Every gate must run after the last write it is meant to catch.**
 - **macOS file permissions, verified by execution (2026-08-06):** `chmod 600`
   does not remove an ACL (`chmod -N` does); `ls -l` cannot show you whether an
   ACL exists (use `ls -le`); `/bin/chmod 600 -- f` exits 1 *while still

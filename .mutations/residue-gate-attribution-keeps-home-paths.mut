@@ -1,0 +1,14 @@
+# Generated attribution files (sbom/*.cdx.json, THIRD-PARTY-NOTICES.html) have their
+# e-mail addresses masked — and NOTHING else waived. cargo-cyclonedx embeds
+# `path+file:///Users/<user>/…` purls for workspace crates, so a release cut on a laptop
+# names its owner in every SBOM. Turning the mask into a blanket waiver hides exactly that;
+# the sbom/dirty.cdx.json fixture catches it.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+    if is_attribution(path):
+        # Third-party authors' addresses are the file's purpose, not residue. Mask them so
+---NEW---
+    if is_attribution(path):
+        return []
+        # Third-party authors' addresses are the file's purpose, not residue. Mask them so

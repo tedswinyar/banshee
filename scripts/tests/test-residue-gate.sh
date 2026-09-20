@@ -150,6 +150,34 @@ t "a denylisted word in a commit message is refused" bash -c "printf '%s' \"\$1\
 run --no-denylist
 t "…and files-only mode does not look at messages" test "$RC" -eq 0
 
+# --- 6b. Generated attribution: e-mail addresses are masked there, nothing else is waived ---
+# cargo-about's notices and cargo-cyclonedx's SBOMs carry third-party authors' addresses by
+# nature (the first end-to-end release committed 311 of them and turned verify red). In
+# exactly those files an address is not residue — but a home path in a purl, an RFC 1918
+# address, or a denylisted word OUTSIDE an address still is, and the class is narrow.
+add "sbom/thing.cdx.json" '      "author": "Someone <someone@vendor-corp.test>, Other <other@zorblatt.test>",'
+run --denylist "$DENY2"
+t "an SBOM's author addresses pass, even one whose domain is a denylisted word" test "$RC" -eq 0
+git -C "$REPO" rm -q --cached sbom/thing.cdx.json
+add "THIRD-PARTY-NOTICES.html" '<pre>Copyright (c) 2016 Someone &lt;someone@somewhere.test&gt;'
+run --no-denylist
+t "the notices file's copyright addresses pass" test "$RC" -eq 0
+git -C "$REPO" rm -q --cached THIRD-PARTY-NOTICES.html
+add "sbom/dirty.cdx.json" '      "purl": "pkg:cargo/banshee-core@0.1.5?download_url=path+file:///Users/alice/Code/banshee/rust/banshee-core",'
+run --no-denylist
+t "a home path inside an SBOM purl is still refused" test "$RC" -eq 1
+t "…as a home-path finding on its line" bash -c "printf '%s' \"\$1\" | grep -q '^sbom/dirty.cdx.json:1: private residue: matches /Users/'" _ "$ERR"
+git -C "$REPO" rm -q --cached sbom/dirty.cdx.json
+add "sbom/dirty2.cdx.json" '      "description": "zorblatt widgets, by someone@somewhere.test",'
+run --denylist "$DENY2"
+t "a denylisted word OUTSIDE an address in an SBOM is still refused" test "$RC" -eq 1
+t "…and the address itself was not the reason" bash -c "! printf '%s' \"\$1\" | grep -q 'private residue'" _ "$ERR"
+git -C "$REPO" rm -q --cached sbom/dirty2.cdx.json
+add "sbom/notes.md" "questions to someone@somewhere.test"
+run --no-denylist
+t "a non-SBOM file under sbom/ gets no waiver (the class is narrow)" test "$RC" -eq 1
+git -C "$REPO" rm -q --cached sbom/notes.md
+
 # ---------------------------------------------------------------------------
 # 7. THE REAL TREE. This is the gate. private/residue-denylist.txt is read when the
 #    notebook is present (the maintainer's machine); a fresh clone or the CI runner

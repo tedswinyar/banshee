@@ -105,6 +105,15 @@ for f in THIRD-PARTY-NOTICES.html sbom; do [ -e "$f" ] && to_add+=("$f"); done
 git add -- "${to_add[@]}"
 git diff --cached --quiet || git commit -m "release: v$VERSION attribution + SBOM"
 
+# That commit is the ONE commit verify never saw: verify ran before the notices and SBOM
+# existed, and release.yml pushes main with --no-verify. The first end-to-end release
+# (v0.1.5, 2026-09-20) landed 311 third-party author e-mails on main this way and turned
+# the residue gate red for every push that followed. Gate the tree again here, before
+# anything is tagged — on the runner this is the generic checks (no notebook there).
+info "residue gate over the tree, including the attribution commit"
+python3 "$SCRIPT_DIR/lib/residue-gate.py" --messages \
+  || die "the tree carries residue after the attribution commit; nothing tagged, nothing pushed"
+
 # ---------------------------------------------------------------------------
 # Tag
 # ---------------------------------------------------------------------------

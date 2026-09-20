@@ -1,0 +1,9 @@
+# The attribution waiver applies to exactly `sbom/*.cdx.json` and the notices file. Widening
+# it to everything under sbom/ makes that directory the one place an address (or a
+# denylisted word inside one) can be committed unseen; the sbom/notes.md fixture catches it.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+ATTRIBUTION_SUFFIX = ".cdx.json"
+---NEW---
+ATTRIBUTION_SUFFIX = ""

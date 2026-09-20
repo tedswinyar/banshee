@@ -174,6 +174,13 @@ t "notices are prepared before the DMG is assembled" bash -c \
 # release.sh generates notices BEFORE it builds the DMG
 t "release.sh generates notices before building the DMG" bash -c \
   "grep -n 'cargo about generate\|build-dmg.sh' '$SCRIPT_DIR/release.sh' | head -2 | paste -sd: - | awk -F: '{ exit !(\$1 < \$3) }'"
+# release.sh gates the tree AFTER the attribution commit and BEFORE tagging — the notices
+# and SBOM are generated after verify ran, and the release job pushes with --no-verify,
+# so this is the only gate those files ever meet (banshee-282).
+t "release.sh runs the residue gate after the attribution commit" bash -c \
+  "grep -n 'attribution + SBOM\|lib/residue-gate.py' '$SCRIPT_DIR/release.sh' | grep -v '^[0-9]*:#' | cut -d: -f1 | head -2 | paste -sd: - | awk -F: '{ exit !(\$1 < \$2) }'"
+t "…and before the tag is made" bash -c \
+  "grep -n 'lib/residue-gate.py\|git tag -a' '$SCRIPT_DIR/release.sh' | grep -v '^[0-9]*:#' | cut -d: -f1 | head -2 | paste -sd: - | awk -F: '{ exit !(\$1 < \$2) }'"
 
 echo "test-release-checklist: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
