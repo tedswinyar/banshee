@@ -36,6 +36,23 @@ public final class PressureModel {
     /// When the displayed verdict was fetched, so the UI can say how stale it is.
     public var lastRefresh: Date?
 
+    /// The daemon's own version, from `/health`, read every time this app (re)connects.
+    /// `nil` until the first successful connection.
+    public var daemonVersion: String?
+    /// This app's marketing version, set by the app at launch (`Version.marketing`
+    /// lives in the app target; core cannot see it). `nil` in tests that do not care.
+    public var appVersion: String?
+
+    /// Whether the daemon and this app are the same release. A Sparkle update moves
+    /// the APP and leaves the LaunchAgent where it was, and the lenient wire format
+    /// means nothing errors — the app just quietly shows less than the CLI does
+    /// (`banshee-b25`, observed the first time Sparkle ran for real). `nil` until both
+    /// versions are known; the UI offers the daemon update when this says `daemonBehind`.
+    public var daemonAgreement: DaemonAgreement? {
+        guard let daemonVersion, let appVersion else { return nil }
+        return DaemonAgreement.compare(daemonVersion: daemonVersion, appVersion: appVersion)
+    }
+
     public enum ConnectionState: Equatable {
         case connecting
         case connected
@@ -188,6 +205,11 @@ public final class PressureModel {
             lastRefresh = now()
             if connectionState != .connected {
                 Self.logger.notice("connected over \(self.transportDescription, privacy: .public)")
+                // Every (re)connection re-reads the daemon's version: an install or
+                // update restarts the daemon, which shows here as a failed refresh
+                // followed by this transition, so the version can never go stale
+                // without passing through this line.
+                daemonVersion = try? await client.healthInfo().version
             }
             connectionState = .connected
             lastError = nil

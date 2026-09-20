@@ -1,0 +1,9 @@
+# The update badge is the gentle reminder in the menu bar (banshee-xpu). A badge that
+# sets up its rect and colour but never fills draws nothing, and an invisible reminder
+# is the failure MenuBarGlyph exists to prevent; the rendered-bytes comparison catches it.
+file: swift/Sources/DesignKit/MenuBarGlyph.swift
+test: testABadgedGlyphRendersDifferentlyFromAnUnbadgedOne
+---OLD---
+            NSBezierPath(ovalIn: dot).fill()
+---NEW---
+            _ = NSBezierPath(ovalIn: dot)

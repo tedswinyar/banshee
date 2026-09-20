@@ -101,6 +101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let notifier = preferences.notificationsEnabled
             ? NotificationCoordinator(sink: UserNotificationSink())
             : nil
+        // Core cannot see Version.swift; it needs this to notice a daemon that a
+        // Sparkle update left behind (banshee-b25).
+        PressureModel.shared.appVersion = Version.marketing
         PressureModel.shared.start(notifier: notifier)
 
         if preferences.notificationsEnabled {

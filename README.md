@@ -95,7 +95,10 @@ and the glyph appears once the first samples are in. On that first launch from
 `/Applications` the app also adds itself to your Login Items so the glyph returns
 after a restart; macOS tells you, and Settings › "Open at login" turns it off. The
 daemon starts at login regardless, because it is a background service the app only
-reads from. Updates arrive through "Check for Updates…" (Sparkle, signed appcast).
+reads from. Updates arrive through "Check for Updates…" in the popover (Sparkle,
+signed appcast); a scheduled check that finds one badges the menu bar glyph. An app
+update does not touch the daemon — the popover says when the two are different
+releases and offers to update it.
 
 **Requirements.** macOS 14 or newer on Apple silicon. The release build is
 arm64-only. The DMG carries the app, the daemon, the CLI and the MCP server, and

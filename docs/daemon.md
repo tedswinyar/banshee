@@ -26,6 +26,12 @@ Also: `make daemon-restart` (restart without reinstalling) and `make daemon-logs
 
 ## The one thing everybody gets wrong once
 
+**An app update does not update the daemon either.** Sparkle replaces the app bundle
+and knows nothing about the LaunchAgent; the app compares `/health`'s version with its
+own on every (re)connection and, when the daemon is behind, offers "Update the daemon"
+in the popover — the same `DaemonInstaller` a DMG user's first install runs, from the
+daemon in `Contents/Helpers`. On a source checkout, `make daemon-install`.
+
 **Rebuilding does not update the running service. Reinstalling does.**
 
 `cargo build` writes to `rust/target/`. The LaunchAgent runs an *installed* copy at

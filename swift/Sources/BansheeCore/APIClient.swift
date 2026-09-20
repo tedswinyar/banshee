@@ -41,10 +41,28 @@ public enum APIError: Error, LocalizedError, Equatable {
 /// is a 400, `from`/`to` are half-open `[from, to)`, combining `limit` with a
 /// window is a 400. The client passes them through rather than pre-validating —
 /// the server's error message is the authoritative one.
+/// The daemon's `/health` body. `version` is its `CARGO_PKG_VERSION`; `gitRev` the
+/// revision it was built from (`+dirty` when the tree was, `unknown` outside git).
+public struct HealthInfo: Decodable, Equatable, Sendable {
+    public let status: String
+    public let version: String
+    public let gitRev: String
+
+    public init(status: String, version: String, gitRev: String) {
+        self.status = status
+        self.version = version
+        self.gitRev = gitRev
+    }
+}
+
 public protocol APIClientProtocol: Sendable {
     func pressure() async throws -> Pressure
     func headroom() async throws -> Headroom
     func health() async throws -> Bool
+    /// `/health` in full: status plus the daemon's version and the revision it was
+    /// built from. `health()` is the yes/no reduction of this; the version is what
+    /// lets the app notice it has moved on without the daemon (`banshee-b25`).
+    func healthInfo() async throws -> HealthInfo
     func samples(limit: Int?, from: Date?, to: Date?) async throws -> [Sample]
     func rollups(limit: Int?, from: Date?, to: Date?) async throws -> [Rollup]
     /// The most recent census, or nil when none has been taken yet (the server's
@@ -351,9 +369,15 @@ public struct APIClient: APIClientProtocol {
     }
 
     public func health() async throws -> Bool {
+        // Decodes ONLY the status: this is the liveness probe, and it must not start
+        // failing against a daemon whose /health body is leaner than `HealthInfo`.
         struct Health: Decodable { let status: String }
         let h: Health = try await request("GET", "/health")
         return h.status == "ok"
+    }
+
+    public func healthInfo() async throws -> HealthInfo {
+        try await request("GET", "/health")
     }
 
     /// Raw samples, oldest first (last 24h by retention). Dates encode in the

@@ -25,7 +25,16 @@ public enum MenuBarGlyph {
     /// two emoji sit on the baseline without touching the bar's edges.
     public static let pointSize: CGFloat = 15
 
+    /// The update badge: a small filled dot in the glyph's top-right corner, drawn
+    /// when a scheduled Sparkle check has found a newer version (banshee-xpu). Purple
+    /// is the accent (`Palette.accent`), spelled as an `NSColor` because this image
+    /// is drawn with AppKit. Sized to read as a badge, not as a third emoji.
+    public static let badgeDiameter: CGFloat = 6
+    public static let badgeColor = NSColor.systemPurple
+
     /// Render `glyph` as a full-colour image suitable for `NSStatusItem.button.image`.
+    /// `badged` overlays the update dot; it never changes the image's size, so the
+    /// status item does not jump when a reminder appears or clears.
     ///
     /// Returns nil rather than a zero-sized image whenever there is nothing to draw —
     /// an empty string, or anything else that measures to no pixels. A zero-sized
@@ -36,7 +45,7 @@ public enum MenuBarGlyph {
     /// proved it dead — an empty string measures to zero, so the size guard below
     /// already returns nil for it. Two guards where one suffices is two things to keep
     /// true.
-    public static func image(for glyph: String) -> NSImage? {
+    public static func image(for glyph: String, badged: Bool = false) -> NSImage? {
         let attributed = NSAttributedString(
             string: glyph,
             attributes: [.font: NSFont.systemFont(ofSize: pointSize)]
@@ -49,6 +58,13 @@ public enum MenuBarGlyph {
         let image = NSImage(size: size)
         image.lockFocus()
         attributed.draw(at: .zero)
+        if badged {
+            let dot = NSRect(
+                x: size.width - badgeDiameter, y: size.height - badgeDiameter,
+                width: badgeDiameter, height: badgeDiameter)
+            badgeColor.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+        }
         image.unlockFocus()
 
         // THE line. Template = drawn as a mask = every level looks the same.

@@ -1,0 +1,8 @@
+# The model must actually READ the daemon's version on connection; without it
+# daemonAgreement is nil forever and the post-Sparkle mismatch (banshee-b25) is
+# invisible again — exactly the state the first real update shipped in.
+file: swift/Sources/BansheeCore/PressureModel.swift
+test: testADaemonLeftBehindByAnAppUpdateIsReported
+---OLD---
+                daemonVersion = try? await client.healthInfo().version
+---NEW---

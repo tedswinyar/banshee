@@ -28,6 +28,7 @@ final class MenuBarController: NSObject {
     private var statusItem: NSStatusItem!
     private var popover: NSPopover!
     private let model = PressureModel.shared
+    private let updater = Updater.shared
 
     private override init() {
         super.init()
@@ -87,6 +88,7 @@ final class MenuBarController: NSObject {
         withObservationTracking {
             _ = model.menuBarGlyph
             _ = model.menuBarAccessibilityLabel
+            _ = updater.availableVersion
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.updateTitle()
@@ -104,15 +106,23 @@ final class MenuBarController: NSObject {
         //
         // A nil image (empty glyph) leaves the previous one in place rather than
         // emptying the menu bar, which would be indistinguishable from a crash.
-        if let image = MenuBarGlyph.image(for: model.menuBarGlyph) {
+        // The badge is the gentle update reminder (banshee-xpu): a scheduled check
+        // found a newer version and Sparkle could not show it in focus.
+        let available = updater.availableVersion
+        if let image = MenuBarGlyph.image(for: model.menuBarGlyph, badged: available != nil) {
             button.image = image
         }
 
         // An emoji is invisible to VoiceOver, so the spoken label is the verdict's own
         // words — composed in core, so every surface says the same thing (ADR-0005).
-        // This sets AXDescription, which VoiceOver prefers over AXTitle.
-        button.setAccessibilityLabel(model.menuBarAccessibilityLabel)
-        button.toolTip = model.menuBarAccessibilityLabel
+        // This sets AXDescription, which VoiceOver prefers over AXTitle. The badge is
+        // invisible to VoiceOver too, so the reminder is spoken as well.
+        var label = model.menuBarAccessibilityLabel
+        if let available {
+            label += ". Update to \(available) available"
+        }
+        button.setAccessibilityLabel(label)
+        button.toolTip = label
     }
 
     // MARK: - Interaction

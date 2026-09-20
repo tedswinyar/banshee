@@ -54,6 +54,27 @@ final class MenuBarGlyphTests: XCTestCase {
         XCTAssertNil(MenuBarGlyph.image(for: "\u{200B}"), "a zero-width space draws nothing")
     }
 
+    /// The update badge draws REAL pixels (banshee-xpu). Compared as rendered bytes,
+    /// because the badge is the whole gentle reminder in the menu bar and an
+    /// invisible reminder is the failure this file exists to catch. Mutation-proof:
+    /// remove the `fill()` and the two renderings are identical.
+    func testABadgedGlyphRendersDifferentlyFromAnUnbadgedOne() throws {
+        let plain = try XCTUnwrap(MenuBarGlyph.image(for: "😴"))
+        let badged = try XCTUnwrap(MenuBarGlyph.image(for: "😴", badged: true))
+        XCTAssertNotEqual(
+            plain.tiffRepresentation, badged.tiffRepresentation,
+            "the badge must change what is drawn, or it is not a reminder")
+    }
+
+    /// The badge is an overlay: the image keeps its size, so the status item does not
+    /// jump when a reminder appears or clears.
+    func testTheBadgeDoesNotChangeTheImageSize() throws {
+        let plain = try XCTUnwrap(MenuBarGlyph.image(for: "💀🧠"))
+        let badged = try XCTUnwrap(MenuBarGlyph.image(for: "💀🧠", badged: true))
+        XCTAssertEqual(plain.size, badged.size)
+        XCTAssertFalse(badged.isTemplate, "a template badge would be a grey mask too")
+    }
+
     /// The point size has to leave room in a 22pt menu bar for two emoji.
     func testThePointSizeFitsTheMenuBar() {
         XCTAssertLessThan(MenuBarGlyph.pointSize, 22)

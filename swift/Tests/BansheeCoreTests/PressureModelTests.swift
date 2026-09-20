@@ -20,6 +20,76 @@ final class PressureModelTests: XCTestCase {
         XCTAssertNotNil(model.lastRefresh)
     }
 
+    /// After a Sparkle update the app is newer than the LaunchAgent and nothing
+    /// errors (banshee-b25). The model reads the daemon's version on connection and
+    /// says so. Mutation-proof: drop the `healthInfo()` read in `refresh()` and
+    /// `daemonAgreement` stays nil; make `compare` return `.agree` and it says agree.
+    func testADaemonLeftBehindByAnAppUpdateIsReported() async {
+        let mock = MockAPIClient()
+        mock.verdict = .stub(level: .quiet, source: nil, glyph: "😴")
+        mock.healthInfoResult = HealthInfo(status: "ok", version: "0.1.4", gitRev: "abc1234")
+        let model = PressureModel(client: mock, connectionState: .connecting)
+        model.appVersion = "0.1.5"
+
+        await model.refresh()
+
+        XCTAssertEqual(model.daemonVersion, "0.1.4")
+        XCTAssertEqual(model.daemonAgreement, .daemonBehind(daemon: "0.1.4", app: "0.1.5"))
+    }
+
+    /// Same release: nothing to say. Paired with the test above so the fixture can
+    /// tell "compares versions" from "always complains".
+    func testAMatchingDaemonAgrees() async {
+        let mock = MockAPIClient()
+        mock.verdict = .stub(level: .quiet, source: nil, glyph: "😴")
+        mock.healthInfoResult = HealthInfo(status: "ok", version: "0.1.5", gitRev: "abc1234")
+        let model = PressureModel(client: mock, connectionState: .connecting)
+        model.appVersion = "0.1.5"
+
+        await model.refresh()
+
+        XCTAssertEqual(model.daemonAgreement, .agree)
+    }
+
+    /// The version is re-read on every RE-connection, not once: an install restarts
+    /// the daemon, which shows as a failed refresh and then a connected transition,
+    /// and the row must clear when the new daemon answers. Steady-state refreshes do
+    /// not re-read it (that would be a second request every 15 seconds for nothing).
+    func testTheDaemonVersionIsReReadOnReconnectionOnly() async {
+        let mock = MockAPIClient()
+        mock.verdict = .stub(level: .quiet, source: nil, glyph: "😴")
+        mock.healthInfoResult = HealthInfo(status: "ok", version: "0.1.4", gitRev: "old")
+        let model = PressureModel(client: mock, connectionState: .connecting)
+        model.appVersion = "0.1.5"
+
+        await model.refresh()
+        await model.refresh()
+        XCTAssertEqual(mock.healthInfoCalls, 1, "a steady connection does not re-read /health")
+
+        // The daemon restarts under an update: one refresh fails, the next reconnects.
+        mock.failWith = .httpError(status: 503, message: "restarting")
+        await model.refresh()
+        mock.failWith = nil
+        mock.healthInfoResult = HealthInfo(status: "ok", version: "0.1.5", gitRev: "new")
+        await model.refresh()
+
+        XCTAssertEqual(mock.healthInfoCalls, 2)
+        XCTAssertEqual(model.daemonAgreement, .agree)
+    }
+
+    /// Without the app's version there is nothing to compare against, and nil — not
+    /// a false "agree" — is the honest answer.
+    func testNoAppVersionMeansNoVerdictOnAgreement() async {
+        let mock = MockAPIClient()
+        mock.verdict = .stub(level: .quiet, source: nil, glyph: "😴")
+        let model = PressureModel(client: mock, connectionState: .connecting)
+
+        await model.refresh()
+
+        XCTAssertNotNil(model.daemonVersion)
+        XCTAssertNil(model.daemonAgreement)
+    }
+
     /// **The glyph is rendered VERBATIM.** The model must not map a level to a face
     /// — that mapping lives once, in banshee-core, and travels over the wire
     /// (ADR-0005). A Swift `switch` here would have to be kept in step with a Rust

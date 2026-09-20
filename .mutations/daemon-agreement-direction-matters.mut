@@ -1,0 +1,9 @@
+# "Daemon behind" and "app behind" have different fixes (install the bundled daemon
+# vs. update the app). Collapsing the newer-daemon case into daemonBehind would offer
+# a DOWNGRADE of the daemon; the 0.2.0-vs-0.1.9 fixture catches it.
+file: swift/Sources/BansheeCore/DaemonAgreement.swift
+test: testADaemonNewerThanTheAppIsAppBehind
+---OLD---
+            if dv > av { return .appBehind(daemon: daemonVersion, app: appVersion) }
+---NEW---
+            if dv > av { return .daemonBehind(daemon: daemonVersion, app: appVersion) }

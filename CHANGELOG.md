@@ -6,7 +6,24 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Update reminders you can see.** When a scheduled update check finds a newer
+  Banshee and cannot show the alert in front of you, the menu bar glyph wears a small
+  dot and the popover's footer names the version; either brings the update window
+  forward. "Check for Updates…" now sits in the popover beside Settings as well as on
+  the status item's right-click menu, which was the only place before.
+- **The daemon is told when the app has moved on.** An app update (Sparkle) replaces
+  the app and leaves the background monitor where it was, and nothing errors — the
+  app just quietly shows less than the daemon could tell it. The popover and the
+  window now say when the two are different releases, name both versions, and offer
+  "Update the daemon" (the app's own installer, from the daemon it carries).
+
+### Fixed
+
+- The release pipeline's attribution commit (third-party notices, SBOM) is now gated
+  for residue before it is tagged; the first end-to-end release had committed it
+  unchecked.
 
 ## [0.1.5] — 2026-09-15
 

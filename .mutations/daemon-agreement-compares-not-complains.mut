@@ -1,0 +1,11 @@
+# The daemon/app agreement must COMPARE versions, not assume a mismatch. A comparison
+# that always says "behind" would nag every user with a matching install; the paired
+# fixtures (0.1.4 vs 0.1.5 behind, 0.1.5 vs 0.1.5 agree) tell the two apart.
+file: swift/Sources/BansheeCore/DaemonAgreement.swift
+test: testAMatchingDaemonAgrees
+---OLD---
+        return .agree
+    }
+---NEW---
+        return .daemonBehind(daemon: daemonVersion, app: appVersion)
+    }

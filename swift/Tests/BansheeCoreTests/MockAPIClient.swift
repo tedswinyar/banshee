@@ -65,9 +65,21 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return headroomResult
     }
 
+    /// What `/health` reports. The version defaults to something no real release
+    /// would carry, so a test that forgets to set it cannot accidentally agree with
+    /// an `appVersion` it also forgot to set.
+    var healthInfoResult = HealthInfo(status: "ok", version: "0.0.0-mock", gitRev: "mock")
+    var healthInfoCalls = 0
+
     func health() async throws -> Bool {
         try checkFailure()
         return true
+    }
+
+    func healthInfo() async throws -> HealthInfo {
+        healthInfoCalls += 1
+        try checkFailure()
+        return healthInfoResult
     }
 
     func samples(limit: Int?, from: Date?, to: Date?) async throws -> [Sample] {

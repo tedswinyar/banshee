@@ -14,6 +14,7 @@ struct MenuBarPanel: View {
     @Environment(PressureModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    private let updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -22,6 +23,13 @@ struct MenuBarPanel: View {
             if case .failed(let message) = model.connectionState, model.pressure == nil {
                 daemonMissing(message)
             } else {
+                // The daemon and this app are different releases (banshee-b25). Above
+                // the verdict, because the verdict below may be missing whatever the
+                // newer half knows about.
+                if let agreement = model.daemonAgreement, agreement != .agree {
+                    DaemonMismatchRow(agreement: agreement)
+                    Divider()
+                }
                 // Locked out, or unreachable past `staleAfter`: say so ABOVE the verdict,
                 // because the verdict below is the last one this app saw, not the
                 // machine now. The menu bar has already stopped presenting it as
@@ -218,6 +226,21 @@ struct MenuBarPanel: View {
                 openSettings()
             }
             .keyboardShortcut(",")
+            // Here as well as on the status item's right-click menu: the right-click
+            // menu was the ONLY place, and the person who built it could not find it
+            // (banshee-uab). When a scheduled check has found a version, this row IS
+            // the gentle reminder, and clicking it brings Sparkle's alert forward.
+            if let available = updater.availableVersion {
+                Button("Update to \(available) available…") {
+                    updater.checkForUpdates()
+                }
+                .foregroundStyle(Palette.accent)
+            } else {
+                Button("Check for Updates…") {
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates)
+            }
             Button("Quit Banshee") {
                 NSApplication.shared.terminate(nil)
             }

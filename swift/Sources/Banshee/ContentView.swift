@@ -70,6 +70,9 @@ struct ContentView: View {
             if let pressure = model.pressure {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
+                        if let agreement = model.daemonAgreement, agreement != .agree {
+                            DaemonMismatchRow(agreement: agreement)
+                        }
                         VerdictHeader(pressure: pressure, lastRefresh: model.lastRefresh)
                         if pressure.level == .checking {
                             checkingNotice
