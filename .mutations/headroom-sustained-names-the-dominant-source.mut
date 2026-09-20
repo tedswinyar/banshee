@@ -1,8 +1,12 @@
-# When the LEVEL forces the wait, the reason names the dominant source's worst
-# dimension — what the menu bar names — not whichever zeroing red is declared
-# first. In the 2026-08-04 fixture that is swap, not cpu.
+# When the LEVEL forces the wait, the reason names the PUBLISHED dominant
+# source's worst dimension — what the menu bar names — not a re-derived "worst
+# red across every dimension". The discriminating fixture has CPU as the
+# dominant, non-advisory red and Compressed memory (advisory) red at a HIGHER
+# severity, so worst-red-over-all-dimensions and dominant-source-worst come
+# apart (banshee-z1y: the shrieking fixture co-varied them and could not catch
+# this).
 file: rust/banshee-core/src/pressure/headroom.rs
-test: the_shrieking_fixture_waits_five_minutes_and_names_the_dominant_source
+test: the_sustained_cause_names_the_dominant_source_not_the_worst_advisory_red
 ---OLD---
         let cause = if sustained {
             p.source

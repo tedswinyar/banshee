@@ -9,7 +9,10 @@ test: headroom_serves_the_published_decision_verbatim
 ---NEW---
     Json(banshee_core::pressure::headroom::derive(
         &state.pressure_now(Utc::now()),
-        Some(8),
+        Some(banshee_core::pressure::headroom::MachineFacts {
+            cores: 8,
+            mem_total_bytes: 25_769_803_776,
+        }),
         &banshee_core::pressure::config::PressureConfig::default(),
     ))
     .into_response()

@@ -265,6 +265,50 @@ fn the_shrieking_fixture_waits_five_minutes_and_names_the_dominant_source() {
     assert_matches_fixture(&h, HEADROOM_SHRIEKING);
 }
 
+/// banshee-z1y: when the LEVEL forces the wait, the cause names the PUBLISHED
+/// dominant source's worst dimension — never a re-derived "worst red across
+/// every dimension". Here CPU is the sustained, non-advisory red that drives
+/// Wailing and IS the dominant source, while Compressed memory reads red at a
+/// HIGHER severity. Compressor is advisory, so it is excluded from `scoring` and
+/// can never be the dominant source — but the mutation that replaces the cause
+/// with `worst_reading(p, |r| r.band == Band::Red)` ranges over ALL dimensions
+/// and would name it. The shrieking fixture could not catch that mutation
+/// because there swap was BOTH the dominant source's worst AND the globally
+/// worst red (the co-varying-fixture false-pin shape); here the two come apart.
+#[test]
+fn the_sustained_cause_names_the_dominant_source_not_the_worst_advisory_red() {
+    let p = verdict(
+        Level::Wailing,
+        Some(Source::Cpu),
+        vec![
+            // Dominant, non-advisory, sustained red: it drives the level and the source.
+            reading(Dimension::Cpu, Band::Red, 0.99, 1.4, 600, "99% busy"),
+            // Advisory red with a HIGHER severity — shown, never leveled. The
+            // mutation would name this; the published-source contract must not.
+            reading(
+                Dimension::Compressor,
+                Band::Red,
+                0.98,
+                5.0,
+                600,
+                "compressor 98% occupied",
+            ),
+        ],
+    );
+    let h = derive(&p, eight(), &config());
+    assert!(h.should_wait);
+    assert!(
+        h.reason.starts_with("Wailing: CPU utilization is red"),
+        "cause must be the dominant source's worst, not the worst advisory red: {}",
+        h.reason
+    );
+    assert!(
+        !h.reason.contains("Compressed memory"),
+        "the advisory red must never be named as the cause: {}",
+        h.reason
+    );
+}
+
 /// THE co-variance breaker. Level and cores alone say "room for 2" (Restless caps
 /// 8 cores at 2; 20% busy leaves 6; memory 12 GB leaves 12). A FRESH thermal
 /// red — 45 s held, inside the grace period, so the level is only Restless —
