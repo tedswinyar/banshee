@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::{CoreError, Result};
 
 /// Bump this when adding a migration below.
-pub const CURRENT_VERSION: i64 = 13;
+pub const CURRENT_VERSION: i64 = 14;
 
 /// Validate an existing database or initialize a fresh one, applying any
 /// pending forward migrations. Refuses databases newer than this build.
@@ -455,12 +455,36 @@ fn migrate_step(conn: &Connection, from: i64) -> Result<()> {
             // ahead of the limits dimension, to become the daily driver). The
             // earlier plan had the limits dimension share this arm so prod migrated
             // once; that was reversed when the memory pass shipped first. The
-            // limits dimension therefore gets its OWN `13 =>` arm and bumps
-            // CURRENT_VERSION to 14 — it must NOT append to THIS step, because prod
-            // is already at v13 and would never re-run it.
+            // next migration therefore gets its OWN arm and bumps
+            // CURRENT_VERSION — it must NOT append to THIS step, because prod
+            // is already at v13 and would never re-run it. (That arm is the
+            // `13 =>` CPU-consumers migration below; the limits dimension, when it
+            // lands, becomes v15.)
             conn.execute_batch(
                 "ALTER TABLE samples ADD COLUMN kernel_free_percent INTEGER;
                  ALTER TABLE samples ADD COLUMN jetsam_kills INTEGER;",
+            )?;
+        }
+        13 => {
+            // v14: the CPU/thermal who-line's recent-rate consumers
+            // (`banshee-aen`). The cumulative-CPU lens named only agent sessions
+            // and the managed-agent rollup, so at 800% busy the finding accounted
+            // for 78% of one core and never named Word, clippy or WindowServer —
+            // the desktop apps and build tools the census sizes but never timed.
+            // The census now differences per-pid `time=` between its two most
+            // recent cycles and stores the ranked result here (a rate, not a
+            // snapshot — see `census::CpuConsumer`). A child table, cascading with
+            // its census like every other census list; empty rows are normal (the
+            // first census after a start has no predecessor to difference).
+            conn.execute_batch(
+                "CREATE TABLE census_cpu_consumers (
+                    census_id           TEXT    NOT NULL REFERENCES censuses(id) ON DELETE CASCADE,
+                    rank                INTEGER NOT NULL,
+                    name                TEXT    NOT NULL,
+                    proc_count          INTEGER NOT NULL,
+                    percent_of_one_core REAL    NOT NULL,
+                    PRIMARY KEY (census_id, rank)
+                );",
             )?;
         }
         other => {
@@ -569,18 +593,6 @@ mod tests {
         );
     }
 
-    fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
-        let mut stmt = conn
-            .prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))
-            .unwrap();
-        let names: Vec<String> = stmt
-            .query_map([], |r| r.get(0))
-            .unwrap()
-            .collect::<std::result::Result<_, _>>()
-            .unwrap();
-        names.iter().any(|n| n == column)
-    }
-
     fn table_exists(conn: &Connection, name: &str) -> bool {
         let n: i64 = conn
             .query_row(
@@ -643,6 +655,7 @@ mod tests {
             "census_tmux_sessions",
             "census_app_groups",
             "census_monitor_agents",
+            "census_cpu_consumers",
         ] {
             let n: i64 = conn
                 .query_row(
@@ -825,13 +838,19 @@ mod tests {
             // Simulate a migration interrupted mid-flight: apply the DDL and
             // the version bump inside a transaction, then roll it back (== a
             // crash before COMMIT under the atomic design). The DDL here must
-            // BE the newest arm's (v13, the memory second-pass columns), or this test
-            // quietly stops covering the step it claims to. Copy it verbatim
-            // from the `12 =>` arm after any `cargo fmt`.
+            // BE the newest arm's (v14, the CPU who-line consumers table), or
+            // this test quietly stops covering the step it claims to. Copy it
+            // verbatim from the `13 =>` arm after any `cargo fmt`.
             let tx = conn.unchecked_transaction().unwrap();
             tx.execute_batch(
-                "ALTER TABLE samples ADD COLUMN kernel_free_percent INTEGER;
-                 ALTER TABLE samples ADD COLUMN jetsam_kills INTEGER;",
+                "CREATE TABLE census_cpu_consumers (
+                    census_id           TEXT    NOT NULL REFERENCES censuses(id) ON DELETE CASCADE,
+                    rank                INTEGER NOT NULL,
+                    name                TEXT    NOT NULL,
+                    proc_count          INTEGER NOT NULL,
+                    percent_of_one_core REAL    NOT NULL,
+                    PRIMARY KEY (census_id, rank)
+                );",
             )
             .unwrap();
             tx.pragma_update(None, "user_version", CURRENT_VERSION)
@@ -848,8 +867,8 @@ mod tests {
                 "rolled-back migration must leave the version where it was"
             );
             assert!(
-                !column_exists(&conn, "samples", "kernel_free_percent"),
-                "the rolled-back ALTER TABLE must not have taken effect"
+                !table_exists(&conn, "census_cpu_consumers"),
+                "the rolled-back CREATE TABLE must not have taken effect"
             );
         }
 
@@ -861,8 +880,8 @@ mod tests {
             .unwrap();
         assert_eq!(v, CURRENT_VERSION);
         assert!(
-            column_exists(&conn, "samples", "kernel_free_percent"),
-            "the retry completes the ALTER TABLE"
+            table_exists(&conn, "census_cpu_consumers"),
+            "the retry completes the CREATE TABLE"
         );
         // A fresh v10 table starts empty — episodes are not backfilled from the
         // pre-v10 alert_events rows (ADR-0009 consequences).

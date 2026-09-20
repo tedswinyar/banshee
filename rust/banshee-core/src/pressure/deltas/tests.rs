@@ -110,6 +110,7 @@ fn census(
             longest_life_secs: 78_000,
         },
         tmux_available: true,
+        cpu_consumers: Vec::new(),
     }
 }
 

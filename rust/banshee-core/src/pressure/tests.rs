@@ -147,6 +147,7 @@ fn census(t: i64, stale: u32, orphans: u32, corporate: f64, life: u64) -> Census
             longest_life_secs: life,
         },
         tmux_available: true,
+        cpu_consumers: Vec::new(),
     }
 }
 
@@ -1731,17 +1732,21 @@ fn the_memory_who_ranks_by_resident_size_not_process_count() {
     }
 }
 
-/// CPU is attributed by the census's cumulative-CPU RULE — Σ cpu seconds over the
-/// longest lifetime in the group — not by raw cumulative seconds. In the fixture
-/// `claude` has 62× the CPU seconds of `kiro-cli` but ran 82× longer, so by
-/// seconds claude ranks above kiro-cli and by rate it ranks below. The managed
-/// agents appear ONCE, as the deduplicated total (7 processes, 29.2%), never as
-/// the sum of the per-group percentages (8 processes, 46.0%).
+/// CPU FALLBACK is the census's cumulative-CPU RULE — Σ cpu seconds over the
+/// longest lifetime in the group — not by raw cumulative seconds. Reached only
+/// when there are no recent-rate consumers (`cpu_consumers` empty: first census
+/// after a restart), so the who-line names someone rather than nobody
+/// (`banshee-aen`). In the fixture `claude` has 62× the CPU seconds of `kiro-cli`
+/// but ran 82× longer, so by seconds claude ranks above kiro-cli and by rate it
+/// ranks below. The managed agents appear ONCE, as the deduplicated total (7
+/// processes, 29.2%), never as the sum of the per-group percentages (8 processes,
+/// 46.0%).
 /// Mutation-proof: rank on `cpu` instead of `cpu / life`, or sum the per-agent
 /// list, and this fails.
 #[test]
 fn the_cpu_who_uses_the_cumulative_cpu_rule_and_the_deduplicated_total() {
-    let c = full_census();
+    let mut c = full_census();
+    c.cpu_consumers.clear(); // force the cumulative fallback
     let expected = vec![
         "managed agents ×7 at 29% of one core".to_string(),
         "kiro-cli ×1 at 2% of one core".to_string(),
@@ -1757,6 +1762,57 @@ fn the_cpu_who_uses_the_cumulative_cpu_rule_and_the_deduplicated_total() {
     );
 }
 
+/// CPU prefers the RECENT-RATE lens (`banshee-aen`): the consumers the census
+/// computed from the CPU-time delta between the last two censuses, which name
+/// what is hot NOW rather than what has the largest lifetime total. The fixture's
+/// recent consumers are led by a browser helper the census does not otherwise
+/// size for CPU — proving the lens covers ANY process, not just stored agent
+/// sessions, which is the whole point of the who-line delta-rate fix. The
+/// cumulative fallback would instead name `managed agents` first.
+/// Mutation-proof: skip `by_recent_cpu_rate` and the browser helper vanishes.
+#[test]
+fn the_cpu_who_prefers_the_recent_rate_lens_over_cumulative() {
+    let c = full_census();
+    let expected = vec![
+        "Chrome Helper (Renderer) ×4 at 312% of one core".to_string(),
+        "claude ×2 at 88% of one core".to_string(),
+        "swift-frontend ×1 at 47% of one core".to_string(),
+    ];
+    assert_eq!(who_of(Dimension::Cpu, &c, &cfg()), expected);
+    // Heat is the same question: thermal names the same recent consumers.
+    assert_eq!(who_of(Dimension::Thermal, &c, &cfg()), expected);
+    // The cumulative fleet total is NOT what a recent-rate census leads with.
+    assert!(
+        !who_of(Dimension::Cpu, &c, &cfg())
+            .iter()
+            .any(|w| w.starts_with("managed agents")),
+        "recent-rate must not fall back while it has consumers"
+    );
+}
+
+/// The recent-rate lens is EMPTY on the first census after a (re)start, and the
+/// who-line must not regress to naming nobody — it falls back to the cumulative
+/// rule. Distinguishes "measured, empty" (fall back) from "populated" (use it):
+/// with consumers present the output is the recent-rate one, with them cleared it
+/// is the cumulative one, and the two are different lines.
+/// Mutation-proof: return `Some(Vec::new())` from `by_recent_cpu_rate` instead of
+/// `None`, and the fallback never fires — this asserts a non-empty fallback line.
+#[test]
+fn the_cpu_who_falls_back_to_cumulative_when_no_recent_rate() {
+    let mut c = full_census();
+    let recent = who_of(Dimension::Cpu, &c, &cfg());
+    c.cpu_consumers.clear();
+    let fallback = who_of(Dimension::Cpu, &c, &cfg());
+    assert_ne!(
+        recent, fallback,
+        "the two lenses must produce different lines"
+    );
+    assert!(
+        fallback.iter().any(|w| w.starts_with("managed agents")),
+        "the fallback must still name someone: {fallback:?}"
+    );
+}
+
 /// A per-program cumulative-CPU ratio over a short lifetime is a startup burst,
 /// not a rate, so a group younger than `corporate_min_life_secs` is not named —
 /// even when it would top the list. Mutation-proof: drop the `life >= min_life`
@@ -1764,6 +1820,7 @@ fn the_cpu_who_uses_the_cumulative_cpu_rule_and_the_deduplicated_total() {
 #[test]
 fn the_cpu_who_skips_a_group_too_young_for_the_ratio_to_mean_anything() {
     let mut c = full_census();
+    c.cpu_consumers.clear(); // the young-group guard lives in the cumulative fallback
     c.agent_sessions.push(crate::census::AgentSession {
         pid: 99,
         program: "newborn".into(),
@@ -2163,6 +2220,121 @@ fn decodes_the_jetsam_fixture_at_full_depth() {
     );
     assert_eq!(p.findings[0].dimension, Dimension::Jetsam);
     assert_eq!(p.findings[0].action, Action::RelaunchApps);
+}
+
+/// banshee-714: the jetsam counter only sees the SUSTAINED-PRESSURE kill path
+/// (`kern.memorystatus.kill_on_sustained_pressure_count`). On 2026-09-15 the
+/// kernel killed ~170 processes via idle-exit (`rf:high`) and one via a
+/// per-process-limit, and this counter stayed 0 the whole time — so the
+/// zero-case detail must NOT say "no kills", which reads as "nothing was
+/// killed". It says "no sustained-pressure kills" so the limitation is on the
+/// wire, not just in a doc. (The honest cross-path counter is banshee-2dq.)
+#[test]
+fn the_zero_jetsam_detail_scopes_itself_to_sustained_pressure() {
+    let detail = detail_for(Dimension::Jetsam, 0.0, None, None, None, &cfg());
+    assert!(
+        detail.contains("sustained-pressure"),
+        "a zero must name the ONE kill path it counts, not imply none happened: {detail:?}"
+    );
+    assert_ne!(
+        detail, "no kills this window",
+        "the bare reassurance is the banshee-714 lie: it was 0 while 170 processes died"
+    );
+
+    // A positive count still reads as a confirmed kill under memory pressure.
+    let killed = detail_for(Dimension::Jetsam, 2.0, None, None, None, &cfg());
+    assert!(
+        killed.contains('2') && killed.contains("memory pressure"),
+        "got {killed:?}"
+    );
+}
+
+/// banshee-cwl helper: a DimensionReading with just the fields the render
+/// functions read, so `detail_for` / `message_for` can be driven at the seam.
+fn dr(dimension: Dimension, value: f64, trend: Option<f64>) -> DimensionReading {
+    DimensionReading {
+        dimension,
+        key: dimension.key().to_string(),
+        label: dimension.label().to_string(),
+        band: Band::Red,
+        value,
+        unit: dimension.unit(),
+        severity: 2.0,
+        held_secs: 0,
+        observation_gap_secs: None,
+        trend_per_sec: trend,
+        detail: String::new(),
+        advisory: dimension.is_advisory(),
+        pending: None,
+        recovering: false,
+    }
+}
+
+/// banshee-cwl part 2: the swap detail reports how full the ALLOCATED POOL is
+/// (used/total), which no other surface said. Without the total it must NOT
+/// invent a percentage — the co-varying trap is a fixed pool size that happens
+/// to match the value.
+#[test]
+fn swap_detail_names_pool_fill_only_when_the_total_is_known() {
+    // 96 of a 100-byte pool in use -> "pool 96% full".
+    let with_total = detail_for(Dimension::Swap, 96.0, None, None, Some(100), &cfg());
+    assert!(with_total.contains("pool 96% full"), "got {with_total:?}");
+
+    // No pool total (pre-sample, or swap off): the fill clause is absent, not 0%.
+    let without = detail_for(Dimension::Swap, 96.0, None, None, None, &cfg());
+    assert!(
+        !without.contains("pool"),
+        "must not fabricate a fill%: {without:?}"
+    );
+    assert!(!without.contains('%'), "got {without:?}");
+}
+
+/// banshee-cwl part 1: the disk finding names the swap that lives on the same
+/// volume — but ONLY when the pool rivals what is free, which is the spiral. On
+/// a roomy volume the coupling is noise and must stay silent.
+#[test]
+fn disk_finding_names_swap_only_when_it_rivals_free_space() {
+    let disk = dr(Dimension::Disk, 12.0, None); // 12 bytes free
+
+    // 24-byte pool on a volume with 12 free: swap >= free, name it.
+    let coupled = message_for(&disk, Some(24));
+    assert!(coupled.contains("of the volume is swap"), "got {coupled:?}");
+
+    // A small pool on the same low volume: real, but not the story — stay quiet.
+    let roomy = message_for(&disk, Some(6));
+    assert!(
+        !roomy.contains("swap"),
+        "6<12, coupling is not material: {roomy:?}"
+    );
+
+    // No total at all: never claim a coupling.
+    let unknown = message_for(&disk, None);
+    assert!(
+        !unknown.contains("of the volume is swap"),
+        "got {unknown:?}"
+    );
+}
+
+/// banshee-cwl part 3: swap gets a projection to its OWN ceiling (the allocated
+/// pool), not the volume's. It appears only while climbing; a flat pool has no
+/// exhaustion time.
+#[test]
+fn swap_finding_projects_pool_exhaustion_while_climbing() {
+    // 96 of 100 used, climbing 1 byte/sec -> 4 bytes headroom -> ~4s to full.
+    let climbing = message_for(&dr(Dimension::Swap, 96.0, Some(1.0)), Some(100));
+    assert!(
+        climbing.contains("allocated pool is 96% full"),
+        "got {climbing:?}"
+    );
+    assert!(climbing.contains("exhausted in"), "got {climbing:?}");
+
+    // Not climbing: fill% still stated, but no false "exhausted in X".
+    let flat = message_for(&dr(Dimension::Swap, 96.0, None), Some(100));
+    assert!(flat.contains("allocated pool is 96% full"), "got {flat:?}");
+    assert!(
+        !flat.contains("exhausted in"),
+        "a flat pool has no projection: {flat:?}"
+    );
 }
 
 /// A finding from a daemon that predates the who-line decodes with an empty

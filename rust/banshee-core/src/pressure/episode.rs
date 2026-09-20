@@ -702,6 +702,7 @@ mod tests {
             monitor_agents: Vec::new(),
             monitor_total: MonitorTotal::default(),
             tmux_available: true,
+            cpu_consumers: Vec::new(),
         }
     }
 

@@ -76,7 +76,12 @@ pub fn attribute(d: Dimension, census: &Census, config: &PressureConfig) -> Vec<
         | Dimension::Jetsam => by_resident_size(census),
         // Heat is the work: naming the CPU consumers is the honest answer to
         // "what is making it hot", even though the lever is physical.
-        Dimension::Cpu | Dimension::Thermal => by_cumulative_cpu(census, config),
+        Dimension::Cpu | Dimension::Thermal => by_recent_cpu_rate(census)
+            // Empty on the first census after a (re)start, or when no pid is
+            // shared with the previous one — never a census with data. Fall back
+            // to the cumulative lens so the who-line names SOMEONE rather than
+            // regressing to naming nobody the moment the daemon restarts.
+            .unwrap_or_else(|| by_cumulative_cpu(census, config)),
         Dimension::Agents => stale_sessions_by_program(census),
         Dimension::Orphans => orphans_by_program(census),
         Dimension::Corporate => managed_agents_by_rate(census, config),
@@ -186,6 +191,37 @@ fn by_resident_size(census: &Census) -> Vec<Ranked> {
         Measure::Bytes,
     ));
     rank(out)
+}
+
+/// CPU by RECENT rate: the consumers the census computed from the CPU-time delta
+/// between the last two censuses (`census::recent_cpu_consumers`, `banshee-aen`).
+/// This is the honest answer to "what is hot NOW" — a process that burned a core
+/// for the last five minutes outranks one that has a large cumulative total from
+/// an hour of startup work and is now idle. Already ranked and capped by core;
+/// `rank` here only re-sorts on the unrounded percent so the wording never
+/// decides the order.
+///
+/// `None` (not an empty `Vec`) when the census carries no recent-rate consumers,
+/// so the caller can distinguish "measured, nobody" from "could not measure yet"
+/// and fall back to the cumulative lens.
+fn by_recent_cpu_rate(census: &Census) -> Option<Vec<Ranked>> {
+    if census.cpu_consumers.is_empty() {
+        return None;
+    }
+    Some(rank(
+        census
+            .cpu_consumers
+            .iter()
+            .filter_map(|c| {
+                Ranked::new(
+                    &c.name,
+                    c.proc_count,
+                    c.percent_of_one_core,
+                    Measure::PercentOfOneCore,
+                )
+            })
+            .collect(),
+    ))
 }
 
 /// CPU: interactive agent sessions by program under the cumulative-CPU rule, and

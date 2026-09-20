@@ -108,5 +108,22 @@
         "percentOfOneCore": 29.183,
         "longestLifeSecs": 49812
     },
-    "tmuxAvailable": true
+    "tmuxAvailable": true,
+    "cpuConsumers": [
+        {
+            "name": "Chrome Helper (Renderer)",
+            "procCount": 4,
+            "percentOfOneCore": 312.4
+        },
+        {
+            "name": "claude",
+            "procCount": 2,
+            "percentOfOneCore": 88.0
+        },
+        {
+            "name": "swift-frontend",
+            "procCount": 1,
+            "percentOfOneCore": 47.0
+        }
+    ]
 }

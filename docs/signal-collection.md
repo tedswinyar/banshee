@@ -289,16 +289,29 @@ list. The rules, per dimension:
 | Dimension | Ranked by | Candidates |
 |---|---|---|
 | memory, swap, kernel pressure, thrash | resident size (RSS) | app groups, agent sessions grouped by program, and the three rollups: `IDE agent helpers`, `orphaned helpers`, `managed agents` |
-| cpu, thermal | the cumulative-CPU rule: Σ CPU seconds ÷ the group's LONGEST lifetime | agent sessions by program; the managed agents as ONE deduplicated entry (`monitor_total`) — never the sum of per-group percentages, whose denominators differ |
+| cpu, thermal | the RECENT-RATE lens: CPU burned since the previous census ÷ the interval (`census.cpu_consumers`), falling back to the cumulative-CPU rule when there is no predecessor | ANY process the census saw, grouped by app-group name or program basename — not just agent sessions. The fallback names agent sessions by program plus the managed agents as ONE deduplicated entry (`monitor_total`), never the sum of per-group percentages, whose denominators differ |
 | agents (stale sessions) | RSS that reaping frees | stale sessions only, by program |
 | orphans | the census's own per-program breakdown (count first) | `orphans_by_program` |
 | corporate | each group's own rate, RANKED not summed | `monitor_agents` |
 | disk, uptime | — | nobody: what is taking the space is a disk tool's question (ADR-0003) |
 
-Two guards carry over from the census: a group younger than
-`corporate_min_life_secs` is never named for CPU (a 60-second-old process at 90%
-is a startup burst, not a rate), and a group that costs nothing (zero RSS, zero
-CPU) is not a consumer. RSS is the honest measure of what a quit-and-relaunch
+**Why recent-rate for CPU (`banshee-aen`).** The cumulative-CPU rule named only
+agent sessions and the managed-agent rollup, so a machine at 800% busy could show
+a CPU finding that accounted for one core and never named Word, a compiler, or
+`WindowServer` — the desktop apps and build tools the census sizes but does not
+otherwise time. The census now differences each process's cumulative `time=`
+between its two most recent cycles and stores the ranked result
+(`census::recent_cpu_consumers` → the `census_cpu_consumers` table, schema v14).
+This answers "what is hot NOW": a process that burned a core for the last five
+minutes outranks one with a large lifetime total that has since gone idle. The
+list is empty on the first census after a start or a wake (no predecessor to
+difference), and the who-line falls back to the cumulative rule then so it names
+someone rather than nobody.
+
+Two guards carry over from the census for the CUMULATIVE fallback: a group
+younger than `corporate_min_life_secs` is never named for CPU (a 60-second-old
+process at 90% is a startup burst, not a rate), and a group that costs nothing
+(zero RSS, zero CPU) is not a consumer. RSS is the honest measure of what a quit-and-relaunch
 reclaims and the wrong lens for a machine already deep in swap — the swapped-out
 pages are exactly what it does not count; per-process swap/compressed accounting
 is the follow-up. The line is composed once in core and rendered verbatim by the

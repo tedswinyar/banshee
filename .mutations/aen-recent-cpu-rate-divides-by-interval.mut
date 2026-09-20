@@ -1,0 +1,10 @@
+# banshee-aen: the recent CPU consumers are a RATE — CPU burned since the last census
+# divided by the interval. Dropping the division turns 300% of one core into 18000%
+# (the raw seconds scaled by 100), so the who-line would report an impossible rate.
+# The pure-fn test pins the exact 300% that 180 s over 60 s must produce.
+file: rust/banshee-core/src/census/mod.rs
+test: recent_cpu_consumers_rank_by_recent_burn_not_lifetime_total
+---OLD---
+            let percent_of_one_core = sum * 100.0 / dt;
+---NEW---
+            let percent_of_one_core = sum * 100.0;

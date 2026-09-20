@@ -12,8 +12,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use uuid::Uuid;
 
 use crate::census::{
-    AgentSession, AppGroup, Census, HelperRollup, MonitorAgent, MonitorTotal, OrphanCensus,
-    ProgramCount, TmuxSessionInfo,
+    AgentSession, AppGroup, Census, CpuConsumer, HelperRollup, MonitorAgent, MonitorTotal,
+    OrphanCensus, ProgramCount, TmuxSessionInfo,
 };
 use crate::pressure::episode::AlertEpisode;
 use crate::sample::{
@@ -584,6 +584,24 @@ impl SampleStore {
                 ])?;
             }
         }
+        {
+            // Stored WITH their rank, so the hydrated order is the ranked order —
+            // the who-line takes the top of this list and must not re-sort a float
+            // it only sees rounded (`banshee-aen`).
+            let mut st = tx.prepare(
+                "INSERT INTO census_cpu_consumers (census_id, rank, name, proc_count,
+                    percent_of_one_core) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )?;
+            for (rank, cpu) in c.cpu_consumers.iter().enumerate() {
+                st.execute(params![
+                    id,
+                    rank as i64,
+                    cpu.name,
+                    cpu.proc_count,
+                    cpu.percent_of_one_core,
+                ])?;
+            }
+        }
         tx.commit()?;
         Ok(())
     }
@@ -823,6 +841,21 @@ impl SampleStore {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+        let cpu_consumers = self
+            .conn
+            .prepare(
+                "SELECT name, proc_count, percent_of_one_core FROM census_cpu_consumers
+                 WHERE census_id = ?1 ORDER BY rank ASC",
+            )?
+            .query_map(params![cid], |r| {
+                Ok(CpuConsumer {
+                    name: r.get(0)?,
+                    proc_count: r.get(1)?,
+                    percent_of_one_core: r.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
         Ok(Some(Census {
             id: uuid,
             taken_at,
@@ -844,6 +877,7 @@ impl SampleStore {
             monitor_agents,
             monitor_total: mtot,
             tmux_available,
+            cpu_consumers,
         }))
     }
 
@@ -1854,6 +1888,21 @@ mod tests {
                 longest_life_secs: 78_000,
             },
             tmux_available: true,
+            // Ranked as core produced them: rank 0 first. Ordering is DATA the
+            // store must preserve (the who-line takes the top), so the round-trip
+            // test asserts it comes back in the same order.
+            cpu_consumers: vec![
+                CpuConsumer {
+                    name: "Google Chrome".into(),
+                    proc_count: 3,
+                    percent_of_one_core: 241.5,
+                },
+                CpuConsumer {
+                    name: "rustc".into(),
+                    proc_count: 1,
+                    percent_of_one_core: 96.0,
+                },
+            ],
         }
     }
 
@@ -1886,6 +1935,15 @@ mod tests {
         assert_eq!(got.app_groups[0].name, "Google Chrome");
         assert_eq!(got.monitor_agents[0].name, "ExampleEDR");
         assert!((got.monitor_agents[0].percent_of_one_core - 18.2).abs() < 1e-9);
+
+        // The recent-rate CPU consumers survive with their RANK ORDER intact —
+        // Chrome (rank 0) before rustc (rank 1) — because the who-line reads the
+        // top of this list and must not re-derive the order from a rounded float.
+        assert_eq!(got.cpu_consumers.len(), 2);
+        assert_eq!(got.cpu_consumers[0].name, "Google Chrome");
+        assert_eq!(got.cpu_consumers[0].proc_count, 3);
+        assert!((got.cpu_consumers[0].percent_of_one_core - 241.5).abs() < 1e-6);
+        assert_eq!(got.cpu_consumers[1].name, "rustc");
     }
 
     /// A non-stale session's NULL cwd means "we did not run lsof", not "no cwd".

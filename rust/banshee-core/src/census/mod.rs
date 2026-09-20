@@ -18,6 +18,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
+
 use crate::Result;
 use config::CensusConfig;
 use exec::CommandRunner;
@@ -151,6 +154,133 @@ pub struct MonitorTotal {
     pub longest_life_secs: u64,
 }
 
+/// One consumer behind the CPU/thermal who-line, measured as a RECENT rate.
+///
+/// Every other census figure is a snapshot; this one is a DELTA. `percent_of_one_core`
+/// is `Σ(Δ cpu_secs) × 100 ÷ Δ wall_secs` across the two most recent censuses —
+/// "what is burning CPU right now", not "what has burned the most CPU over its
+/// life". The cumulative-CPU rule the memory-shaped who-line uses is right for the
+/// corporate baseline (a daemon's lifetime average) and wrong here: a 30-hour agent
+/// session at 46% live reads as 4% cumulative, and a desktop app that just spiked to
+/// 108% has no lifetime figure the census ever collected (`banshee-aen`).
+///
+/// Because every consumer shares ONE denominator — the census interval, not a
+/// per-group lifetime — these percentages, unlike `MonitorAgent::percent_of_one_core`,
+/// MAY be summed. Each process is counted once, under a single label.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpuConsumer {
+    /// The app-group name if the process matched one (so 115 Chrome helpers read
+    /// as one `Google Chrome`), otherwise the program's `comm` basename — which is
+    /// how desktop apps and build tools (`Microsoft Word`, `clippy-driver`,
+    /// `WindowServer`) finally get named at all.
+    pub name: String,
+    /// Processes in the group that burned CPU over the interval.
+    pub proc_count: u32,
+    /// Recent rate, in percent of one core. See the type docs: summable.
+    pub percent_of_one_core: f64,
+}
+
+/// The per-pid cumulative CPU seconds of ONE census cycle, kept in memory so the
+/// NEXT cycle can difference against it. Never serialized — the differenced
+/// result (`Census::cpu_consumers`) is what survives storage; this is scaffolding
+/// the collector holds between cycles, the "keep the previous census's per-pid
+/// times" the fix calls for (`banshee-aen`). A fresh daemon has none, so its first
+/// census names CPU by the cumulative fallback until a second census exists.
+#[derive(Debug, Clone)]
+pub struct CpuSnapshot {
+    pub at: DateTime<Utc>,
+    pub cpu_by_pid: HashMap<u32, f64>,
+}
+
+/// How many consumers the census stores. The who-line cuts this to its own
+/// `who_limit`; the census keeps a few more so a client asking a different
+/// question is not starved by the finding's shorter list.
+const CPU_CONSUMER_CAP: usize = 12;
+
+/// The current cycle's per-pid CPU snapshot, to difference next cycle.
+pub fn cpu_snapshot(rows: &[ProcRow], at: DateTime<Utc>) -> CpuSnapshot {
+    CpuSnapshot {
+        at,
+        cpu_by_pid: rows.iter().map(|r| (r.pid, r.cpu_secs)).collect(),
+    }
+}
+
+/// The single label a process is grouped under for the recent-rate lens: its
+/// app-group name if it matches one, else its `comm` basename. ONE label per
+/// pid, so the rates never double-count the way summing overlapping monitor
+/// patterns would.
+fn cpu_label(r: &ProcRow, config: &CensusConfig) -> String {
+    match config.app_groups_matching(&r.args).next() {
+        Some(name) => name.to_string(),
+        None => r.program().to_string(),
+    }
+}
+
+/// Rank CPU consumers by their recent rate over the census interval.
+///
+/// Pure and driven from raw `ProcRow`s: the co-varying-fixture trap for this one
+/// is a long-lived process with a low cumulative ratio but a large recent burst,
+/// which the cumulative lens ranks last and this one ranks first. A process
+/// present in only ONE of the two cycles has no rate and is skipped, and a pid
+/// whose cumulative time went DOWN was reused by a different process — also
+/// skipped, never recorded as a negative or a spurious spike.
+pub fn recent_cpu_consumers(
+    prev: Option<&CpuSnapshot>,
+    rows: &[ProcRow],
+    at: DateTime<Utc>,
+    config: &CensusConfig,
+    limit: usize,
+) -> Vec<CpuConsumer> {
+    let Some(prev) = prev else {
+        return Vec::new();
+    };
+    let dt = (at - prev.at).num_milliseconds() as f64 / 1000.0;
+    if dt <= 0.0 {
+        return Vec::new();
+    }
+
+    // (proc_count, Σ Δcpu_secs) per label.
+    let mut groups: BTreeMap<String, (u32, f64)> = BTreeMap::new();
+    for r in rows {
+        let Some(&prev_cpu) = prev.cpu_by_pid.get(&r.pid) else {
+            continue;
+        };
+        if r.cpu_secs < prev_cpu {
+            // pid reuse: a new process inherited the number; its cumulative time
+            // is lower than the one we recorded. Not this process's burn.
+            continue;
+        }
+        let delta = r.cpu_secs - prev_cpu;
+        if delta <= 0.0 {
+            continue;
+        }
+        let e = groups.entry(cpu_label(r, config)).or_insert((0, 0.0));
+        e.0 += 1;
+        e.1 += delta;
+    }
+
+    let mut out: Vec<CpuConsumer> = groups
+        .into_iter()
+        .filter_map(|(name, (proc_count, sum))| {
+            let percent_of_one_core = sum * 100.0 / dt;
+            (percent_of_one_core > 0.0).then_some(CpuConsumer {
+                name,
+                proc_count,
+                percent_of_one_core,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.percent_of_one_core
+            .partial_cmp(&a.percent_of_one_core)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    out.truncate(limit);
+    out
+}
+
 /// One census cycle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -172,6 +302,12 @@ pub struct Census {
     /// server). Distinguished from "zero sessions" so the UI can say "no tmux"
     /// rather than implying a clean machine.
     pub tmux_available: bool,
+    /// The recent-rate CPU consumers, differenced against the previous census
+    /// (`banshee-aen`). Empty on the first census after a daemon start, and for a
+    /// census whose predecessor shared no pids. The CPU/thermal who-line reads
+    /// this; every other dimension is attributed by resident size or cumulative
+    /// CPU.
+    pub cpu_consumers: Vec<CpuConsumer>,
 }
 
 impl Census {
@@ -194,11 +330,20 @@ impl Census {
 pub struct CensusCollector<R: CommandRunner> {
     runner: R,
     config: CensusConfig,
+    /// The previous cycle's per-pid CPU, to difference the recent-rate consumers
+    /// against. Interior-mutable because the collector is `Arc`-shared and called
+    /// once per census tick, serially — the one piece of state the census keeps
+    /// between cycles.
+    prev_cpu: Mutex<Option<CpuSnapshot>>,
 }
 
 impl<R: CommandRunner> CensusCollector<R> {
     pub fn new(runner: R, config: CensusConfig) -> Self {
-        Self { runner, config }
+        Self {
+            runner,
+            config,
+            prev_cpu: Mutex::new(None),
+        }
     }
 
     pub fn config(&self) -> &CensusConfig {
@@ -225,6 +370,17 @@ impl<R: CommandRunner> CensusCollector<R> {
         let (monitor_agents, monitor_total) = self.classify_monitor_agents(&rows);
         let (tmux_sessions, tmux_available) = self.classify_tmux(at);
 
+        // The recent-rate CPU consumers, differenced against the previous
+        // cycle's per-pid times (`banshee-aen`). One lock: read the predecessor,
+        // rank, then replace it with this cycle's snapshot for the next tick.
+        let cpu_consumers = {
+            let mut prev = self.prev_cpu.lock().unwrap_or_else(|e| e.into_inner());
+            let consumers =
+                recent_cpu_consumers(prev.as_ref(), &rows, at, &self.config, CPU_CONSUMER_CAP);
+            *prev = Some(cpu_snapshot(&rows, at));
+            consumers
+        };
+
         // `lsof` runs ONLY for sessions already flagged stale. `perf-scan` calls
         // it per agent pid; at a 5-minute cadence over nine sessions that is
         // wasted I/O, and lsof is the slowest thing in the census.
@@ -245,6 +401,7 @@ impl<R: CommandRunner> CensusCollector<R> {
             monitor_agents,
             monitor_total,
             tmux_available,
+            cpu_consumers,
         })
     }
 
@@ -988,6 +1145,141 @@ mod tests {
         assert!(c.orphans.orphan_count <= c.orphans.total_count);
     }
 
+    // ---- recent-rate CPU consumers (banshee-aen) ------------------------
+
+    fn cpu_row(pid: u32, cpu_secs: f64, comm: &str, args: &str) -> ProcRow {
+        ProcRow {
+            pid,
+            ppid: 1,
+            rss_kb: 1000,
+            etime_secs: 100_000,
+            cpu_secs,
+            tty: "??".into(),
+            comm: comm.into(),
+            args: args.into(),
+        }
+    }
+
+    const CHROME_ARGS: &str =
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --type=renderer";
+
+    /// The recent-rate lens ranks by CPU burned SINCE the last census, not by
+    /// lifetime total, so a long-lived process that has gone quiet loses to a
+    /// process that just started working. THE co-varying trap for this feature:
+    /// `steady-worker` has ~24× the cumulative CPU of the two Chrome processes
+    /// combined (5008 s vs 210 s) yet Chrome ranks FIRST because it burned 180 s
+    /// in the last minute against steady-worker's 8. A cumulative lens ranks them
+    /// the other way round.
+    /// Also proves the two group-defining rules: pids sharing a label (both
+    /// Chrome renderers) collapse to one entry with `proc_count == 2` and their
+    /// deltas summed, and a process is labelled by its app GROUP when it matches
+    /// one, by its `comm` basename otherwise.
+    #[test]
+    fn recent_cpu_consumers_rank_by_recent_burn_not_lifetime_total() {
+        let cfg = CensusConfig::default();
+        let t0 = DateTime::from_timestamp(1_788_190_000, 0).unwrap();
+        let t1 = t0 + chrono::Duration::seconds(60);
+
+        let prev_rows = [
+            cpu_row(100, 10.0, "Google Chrome", CHROME_ARGS),
+            cpu_row(101, 20.0, "Google Chrome", CHROME_ARGS),
+            cpu_row(200, 5000.0, "steady-worker", "steady-worker"),
+            cpu_row(500, 100.0, "idle-daemon", "idle-daemon"),
+            cpu_row(400, 900.0, "before-reuse", "before-reuse"),
+        ];
+        let prev = cpu_snapshot(&prev_rows, t0);
+
+        let now_rows = [
+            cpu_row(100, 130.0, "Google Chrome", CHROME_ARGS), // +120
+            cpu_row(101, 80.0, "Google Chrome", CHROME_ARGS),  // +60  → Chrome sum 180
+            cpu_row(200, 5008.0, "steady-worker", "steady-worker"), // +8
+            cpu_row(500, 100.0, "idle-daemon", "idle-daemon"), // +0 → skipped
+            cpu_row(400, 2.0, "after-reuse", "after-reuse"), // cumulative DOWN → pid reuse, skipped
+            cpu_row(300, 55.0, "newcomer", "newcomer"),      // absent from prev → no rate, skipped
+        ];
+
+        let out = recent_cpu_consumers(Some(&prev), &now_rows, t1, &cfg, 12);
+
+        assert_eq!(
+            out.len(),
+            2,
+            "only the two with a real positive delta: {out:?}"
+        );
+        assert_eq!(out[0].name, "Google Chrome", "biggest recent burn first");
+        assert_eq!(out[0].proc_count, 2, "two renderers collapse to one label");
+        assert!(
+            (out[0].percent_of_one_core - 300.0).abs() < 1e-6,
+            "180 s over 60 s = 300% of one core, got {}",
+            out[0].percent_of_one_core
+        );
+        assert_eq!(out[1].name, "steady-worker");
+        assert_eq!(out[1].proc_count, 1);
+        // The trap, made explicit: steady-worker dwarfs Chrome on lifetime CPU and
+        // still ranks below it on the recent lens.
+        assert!(out[1].percent_of_one_core < out[0].percent_of_one_core);
+        // The skips never appear as consumers.
+        for skipped in ["idle-daemon", "after-reuse", "before-reuse", "newcomer"] {
+            assert!(
+                !out.iter().any(|c| c.name == skipped),
+                "{skipped} must not be a consumer: {out:?}"
+            );
+        }
+    }
+
+    /// No previous snapshot (the FIRST census after a start) and a non-positive
+    /// interval both yield NO consumers — never a spurious rate. This is what
+    /// makes the who-line fall back to the cumulative lens rather than name
+    /// nobody, and it is the case that fired minutes after every daemon restart.
+    #[test]
+    fn recent_cpu_consumers_are_empty_without_a_usable_prior_interval() {
+        let cfg = CensusConfig::default();
+        let t0 = DateTime::from_timestamp(1_788_190_000, 0).unwrap();
+        let rows = [cpu_row(100, 130.0, "Google Chrome", CHROME_ARGS)];
+
+        assert!(
+            recent_cpu_consumers(None, &rows, t0, &cfg, 12).is_empty(),
+            "no prior snapshot → no rate"
+        );
+        let prev = cpu_snapshot(&rows, t0);
+        assert!(
+            recent_cpu_consumers(Some(&prev), &rows, t0, &cfg, 12).is_empty(),
+            "dt = 0 → no rate"
+        );
+    }
+
+    /// The cap is load-bearing: more distinct hot labels than the limit truncate
+    /// to the top `limit`, ranked. Mutation-proof: drop the `truncate` and the
+    /// full set comes back.
+    #[test]
+    fn recent_cpu_consumers_truncate_to_the_limit() {
+        let cfg = CensusConfig::default();
+        let t0 = DateTime::from_timestamp(1_788_190_000, 0).unwrap();
+        let t1 = t0 + chrono::Duration::seconds(60);
+        let prev_rows: Vec<ProcRow> = (0..6)
+            .map(|i| cpu_row(1000 + i, 0.0, &format!("hog{i}"), &format!("hog{i}")))
+            .collect();
+        let prev = cpu_snapshot(&prev_rows, t0);
+        // Each burns i+1 seconds, so hog5 is hottest and hog0 coolest.
+        let now_rows: Vec<ProcRow> = (0..6)
+            .map(|i| {
+                cpu_row(
+                    1000 + i,
+                    (i + 1) as f64,
+                    &format!("hog{i}"),
+                    &format!("hog{i}"),
+                )
+            })
+            .collect();
+
+        let out = recent_cpu_consumers(Some(&prev), &now_rows, t1, &cfg, 3);
+        assert_eq!(out.len(), 3, "truncated to the limit");
+        assert_eq!(
+            out.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+            ["hog5", "hog4", "hog3"],
+            "the three hottest, ranked"
+        );
+    }
+
     impl Census {
         fn config_program_is_known(&self, program: &str) -> bool {
             CensusConfig::default().is_agent_cli(program)
@@ -1057,5 +1349,14 @@ mod tests {
         assert!(summed > c.monitor_total.percent_of_one_core);
         assert_eq!(c.monitor_total.proc_count, 7);
         assert_eq!(c.monitor_agents[1].longest_life_secs, 109);
+
+        // The recent-rate CPU consumers (`banshee-aen`): ranked, and NOT limited
+        // to stored agent sessions — the top consumer is a browser helper the
+        // census does not otherwise size for CPU. This is the coverage the
+        // cumulative lens lacks.
+        assert_eq!(c.cpu_consumers.len(), 3);
+        assert_eq!(c.cpu_consumers[0].name, "Chrome Helper (Renderer)");
+        assert_eq!(c.cpu_consumers[0].proc_count, 4);
+        assert!((c.cpu_consumers[0].percent_of_one_core - 312.4).abs() < 1e-6);
     }
 }

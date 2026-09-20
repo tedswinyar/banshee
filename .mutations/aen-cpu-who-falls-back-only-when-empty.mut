@@ -1,0 +1,10 @@
+# banshee-aen: the CPU who-line uses the recent-rate consumers when the census HAS them
+# and falls back to the cumulative lens only when it does NOT. Flipping the emptiness
+# guard makes a populated census fall back (naming the fleet total instead of the hot
+# processes) and an empty one map to Some(empty) — the exact regression the fix undoes.
+file: rust/banshee-core/src/pressure/who.rs
+test: the_cpu_who_prefers_the_recent_rate_lens_over_cumulative
+---OLD---
+    if census.cpu_consumers.is_empty() {
+---NEW---
+    if !census.cpu_consumers.is_empty() {

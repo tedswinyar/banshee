@@ -639,6 +639,7 @@ mod tests {
                 longest_life_secs: 78_000,
             },
             tmux_available: true,
+            cpu_consumers: Vec::new(),
         };
         let s = CensusScalars::from(&c);
         assert_eq!(s.stale_sessions, 1, "stale sessions, not all sessions");

@@ -282,12 +282,43 @@ final class RecordWireFormatTests: XCTestCase {
             [
                 "id", "takenAt", "totalProcs", "agentSessions", "ideHelpers",
                 "orphans", "tmuxSessions", "appGroups", "monitorAgents",
-                "monitorTotal", "tmuxAvailable",
+                "monitorTotal", "tmuxAvailable", "cpuConsumers",
             ],
             "encode(to:) key set drifted — a Census field was added without a matching encode line"
         )
         // Lowercase-out for the census id too.
         XCTAssertEqual(obj["id"] as? String, "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f")
+    }
+
+    /// The recent-rate CPU consumers decode, keep their RANK ORDER, and cover a
+    /// process the census never sizes for CPU (a browser helper) — the whole
+    /// point of the who-line delta-rate fix (`banshee-aen`). Cross-language pin:
+    /// the SAME fixture bytes the Rust suite asserts on.
+    func testCensusCarriesRankedRecentCpuConsumers() throws {
+        let c = try Wire.decoder().decode(
+            Census.self, from: WireFormatTests.fixture("census-full.json")
+        )
+        XCTAssertEqual(c.cpuConsumers.count, 3)
+        XCTAssertEqual(c.cpuConsumers.first?.name, "Chrome Helper (Renderer)")
+        XCTAssertEqual(c.cpuConsumers.first?.procCount, 4)
+        XCTAssertEqual(c.cpuConsumers.first?.percentOfOneCore ?? 0, 312.4, accuracy: 1e-6)
+        // Ranked, biggest recent burn first.
+        XCTAssertEqual(c.cpuConsumers.map(\.name), ["Chrome Helper (Renderer)", "claude", "swift-frontend"])
+    }
+
+    func testEncodeCoversEveryCpuConsumerField() throws {
+        let c = try Wire.decoder().decode(
+            Census.self, from: WireFormatTests.fixture("census-full.json")
+        )
+        let consumer = try XCTUnwrap(c.cpuConsumers.first)
+        let obj = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Wire.encoder().encode(consumer)) as? [String: Any]
+        )
+        XCTAssertEqual(
+            Set(obj.keys),
+            ["name", "procCount", "percentOfOneCore"],
+            "encode(to:) key set drifted — a CpuConsumer field was added without a matching encode line"
+        )
     }
 
     func testEncodeCoversEveryAgentSessionField() throws {

@@ -227,6 +227,30 @@ public struct MonitorTotal: Codable, Equatable, Sendable {
     }
 }
 
+/// One consumer behind the CPU/thermal who-line, ranked by CPU burned SINCE the
+/// previous census — a RATE over the last interval, not a lifetime total
+/// (`banshee-aen`). Unlike `monitorAgents`, this covers ANY process the census
+/// saw, not just stored agent sessions, so a desktop app or a build tool can be
+/// named. All fields required; nothing here is present-as-null, so the synthesized
+/// `Codable` is correct.
+public struct CpuConsumer: Codable, Identifiable, Equatable, Sendable {
+    public var id: String { name }
+
+    /// The census's label: an app-group name if the process matched one, else its
+    /// program basename. ONE label per process, so rates never double-count.
+    public let name: String
+    public let procCount: Int
+    /// Against ONE core, over the last census interval. Can exceed 100 for a
+    /// multi-process group on a multi-core machine.
+    public let percentOfOneCore: Double
+
+    public init(name: String, procCount: Int, percentOfOneCore: Double) {
+        self.name = name
+        self.procCount = procCount
+        self.percentOfOneCore = percentOfOneCore
+    }
+}
+
 /// One census cycle.
 public struct Census: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
@@ -244,13 +268,17 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     /// True when `tmux` could be reached at all. False is "could not look",
     /// which is a different sentence from "zero sessions".
     public let tmuxAvailable: Bool
+    /// The CPU/thermal who-line's recent-rate consumers, ranked. Empty on the
+    /// first census after a start (no predecessor to difference).
+    public let cpuConsumers: [CpuConsumer]
 
     public init(
         id: UUID, takenAt: Date, totalProcs: Int,
         agentSessions: [AgentSession], ideHelpers: HelperRollup,
         orphans: OrphanCensus, tmuxSessions: [TmuxSessionInfo],
         appGroups: [AppGroup], monitorAgents: [MonitorAgent],
-        monitorTotal: MonitorTotal, tmuxAvailable: Bool
+        monitorTotal: MonitorTotal, tmuxAvailable: Bool,
+        cpuConsumers: [CpuConsumer]
     ) {
         self.id = id
         self.takenAt = takenAt
@@ -263,6 +291,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         self.monitorAgents = monitorAgents
         self.monitorTotal = monitorTotal
         self.tmuxAvailable = tmuxAvailable
+        self.cpuConsumers = cpuConsumers
     }
 
     /// Sessions worth reaping — presentation, not a re-derivation: the flags
@@ -280,6 +309,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, takenAt, totalProcs, agentSessions, ideHelpers, orphans
         case tmuxSessions, appGroups, monitorAgents, monitorTotal, tmuxAvailable
+        case cpuConsumers
     }
 
     // Hand-written for the UUID's lowercase-out rule; hard-coded field list,
@@ -297,5 +327,6 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         try c.encode(monitorAgents, forKey: .monitorAgents)
         try c.encode(monitorTotal, forKey: .monitorTotal)
         try c.encode(tmuxAvailable, forKey: .tmuxAvailable)
+        try c.encode(cpuConsumers, forKey: .cpuConsumers)
     }
 }
