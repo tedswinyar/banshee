@@ -6,6 +6,13 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.6] — 2026-09-20
+
+The second release cut by the pipeline, one working day after the first; everything
+here came out of watching that first update land.
+
 ### Added
 
 - **Update reminders you can see.** When a scheduled update check finds a newer
@@ -24,6 +31,9 @@ All notable changes to Banshee. The format follows
 - The release pipeline's attribution commit (third-party notices, SBOM) is now gated
   for residue before it is tagged; the first end-to-end release had committed it
   unchecked.
+- Release builds name SwiftPM's native build system: the newer default (Swift 6.4)
+  embedded absolute build-directory paths in the app binary, which the packaging scan
+  correctly refused.
 
 ## [0.1.5] — 2026-09-15
 
