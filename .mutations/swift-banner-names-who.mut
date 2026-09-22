@@ -3,6 +3,6 @@
 file: swift/Sources/BansheeCore/Notifications.swift
 test: testTheBannerNamesWhoIsBehindIt
 ---OLD---
-            let who = action.whoLine.map { "\n\($0)" } ?? ""
+        let who = finding.whoLine.map { "\n\($0)" } ?? ""
 ---NEW---
-            let who = ""
+        let who = ""

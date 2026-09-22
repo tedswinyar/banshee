@@ -39,7 +39,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Notify at Wailing and above", isOn: $notificationsEnabled)
+                Toggle("Notify at Wailing and above, and when the disk leaves green", isOn: $notificationsEnabled)
                     .onChange(of: notificationsEnabled) { _, new in
                         preferences.notificationsEnabled = new
                         if new { requestAuthorizationIfNeeded() }

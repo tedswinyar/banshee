@@ -114,7 +114,8 @@ port is a hard startup failure, loudly, in the log. Dev keeps the ladder (so
 
 ## Slack escalation alerts (optional)
 
-By default, alerts live in the app: the menu bar glyph, a banner at Wailing, and
+By default, alerts live in the app: the menu bar glyph, a banner at Wailing (and a
+banner for the disk alone whenever it leaves green, whatever else is red), and
 the year-long episode log. To ALSO push the most severe notices — an episode
 opening, re-escalating or repeating while the machine is Shrieking, and the ONE
 recovery notice for an episode that peaked at Shrieking (ADR-0009) — to a Slack

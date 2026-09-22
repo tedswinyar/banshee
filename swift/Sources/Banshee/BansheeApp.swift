@@ -61,8 +61,23 @@ struct UserNotificationSink: NotificationSink {
         content.title = notification.title
         content.body = notification.body
         // Sound, because the levels that reach here are the ones worth looking up
-        // for: Wailing and above.
+        // for: Wailing and above, and a disk that has left green.
         content.sound = .default
+        // Never left at the default again (banshee-3ue): the default is `.active`,
+        // which auto-dismisses and is withheld under Focus, so the 03:16 disk warning
+        // that preceded a <1 GB morning was shown to an empty room. The coordinator
+        // decides which banners are time-sensitive; this only carries it out.
+        //
+        // No `.critical` case exists to map (maintainer ruling, 2026-09-22). Note
+        // also that `.timeSensitive` is honoured fully only when the app carries the
+        // time-sensitive notifications capability; without it the system presents
+        // the banner as `.active`. The app is currently signed with no entitlements
+        // (`scripts/build-app.sh`), so adding that capability is a signing change to
+        // make deliberately, on the build server, not here.
+        content.interruptionLevel = switch notification.interruption {
+        case .active: .active
+        case .timeSensitive: .timeSensitive
+        }
 
         let request = UNNotificationRequest(
             identifier: notification.identifier,

@@ -6,7 +6,18 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A filling disk is named even when something else is redder** (banshee-3ue). The
+  banner used to describe only the verdict's single dominant source, so on a machine
+  where CPU, swap or thermal are red for hours a red disk produced a banner titled
+  "Wailing, CPU" whose body described swap — which is how the maintainer reached under
+  1 GB free with no warning he could see. The disk now has its own banner: on entering
+  yellow (below 60 GB) and then at most every six hours, and on entering red (below
+  30 GB) and then every fifteen minutes for as long as it stays red. The red disk
+  banner and any Shrieking banner are time-sensitive, so they are presented at once
+  and through Focus; before, no banner ever set an interruption level and every one
+  auto-dismissed. Thresholds are unchanged. No critical-alert entitlement is used.
 
 ## [0.1.6] — 2026-09-20
 

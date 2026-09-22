@@ -1,0 +1,9 @@
+# A red disk banner is time-sensitive, so it is presented at once and through
+# Focus. Posting it `.active` is how the 03:16 warning of 2026-09-22 was shown to
+# an empty room (banshee-3ue).
+file: swift/Sources/BansheeCore/Notifications.swift
+test: testARedDiskIsNamedEvenWhenCPUIsRedder
+---OLD---
+            interruption: reading.band == .red ? .timeSensitive : .active
+---NEW---
+            interruption: .active

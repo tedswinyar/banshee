@@ -1,0 +1,8 @@
+# When disk is the dominant source the disk channel owns it; the overall path
+# must not echo it as "Wailing, disk" fifteen seconds later (banshee-3ue).
+file: swift/Sources/BansheeCore/Notifications.swift
+test: testADiskDrivenVerdictDoesNotSpeakTwice
+---OLD---
+        if pressure.source == .disk, Self.diskReading(in: pressure) != nil { return nil }
+---NEW---
+        // mutated: the overall path may echo the disk channel
