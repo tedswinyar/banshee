@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.3",
   "version": 1,
-  "serialNumber": "urn:uuid:a22aa5ec-c6e7-42bf-acb0-e904c71e2db7",
+  "serialNumber": "urn:uuid:04b8dbaa-b611-4a0f-bdb0-a6a5fd5e2bc8",
   "metadata": {
-    "timestamp": "2026-09-24T02:29:57.038667000Z",
+    "timestamp": "2026-09-24T13:41:04.132281000Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -14,23 +14,23 @@
     ],
     "component": {
       "type": "application",
-      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.7",
+      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.8",
       "name": "banshee-mcp",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "scope": "required",
       "licenses": [
         {
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/banshee-mcp@0.1.7?download_url=file://.",
+      "purl": "pkg:cargo/banshee-mcp@0.1.8?download_url=file://.",
       "components": [
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.7 bin-target-0",
+          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.8 bin-target-0",
           "name": "banshee-mcp",
-          "version": "0.1.7",
-          "purl": "pkg:cargo/banshee-mcp@0.1.7?download_url=file://.#src/main.rs"
+          "version": "0.1.8",
+          "purl": "pkg:cargo/banshee-mcp@0.1.8?download_url=file://.#src/main.rs"
         }
       ]
     },
@@ -44,16 +44,16 @@
   "components": [
     {
       "type": "library",
-      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.7",
+      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
       "name": "banshee-core",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "scope": "required",
       "licenses": [
         {
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/banshee-core@0.1.7?download_url=file://../banshee-core"
+      "purl": "pkg:cargo/banshee-core@0.1.8?download_url=file://../banshee-core"
     },
     {
       "type": "library",
@@ -4620,7 +4620,7 @@
   ],
   "dependencies": [
     {
-      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.7",
+      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#chrono@0.4.45",
         "registry+https://github.com/rust-lang/crates.io-index#dirs@6.0.0",
@@ -4635,9 +4635,9 @@
       ]
     },
     {
-      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.7",
+      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-mcp#0.1.8",
       "dependsOn": [
-        "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.7",
+        "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
         "registry+https://github.com/rust-lang/crates.io-index#dirs@6.0.0",
         "registry+https://github.com/rust-lang/crates.io-index#reqwest@0.12.28",
         "registry+https://github.com/rust-lang/crates.io-index#serde@1.0.229",
