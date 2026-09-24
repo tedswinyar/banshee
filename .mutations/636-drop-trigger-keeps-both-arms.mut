@@ -1,0 +1,14 @@
+# The burst rule fires on WHICHEVER trigger is smaller for the volume —
+# >= 10 GB absolute, or >= 2% of the volume total (banshee-636). Dropping the
+# fraction arm leaves small volumes covered only by the flat 10 GB trigger,
+# which on a 100 GB volume means losing a tenth of it before a word is said.
+file: rust/banshee-core/src/pressure/disk.rs
+test: the_drop_trigger_is_judged_against_the_volume_total
+---OLD---
+    let threshold = if total_bytes > 0.0 {
+        drop_bytes.min(drop_fraction * total_bytes)
+    } else {
+        drop_bytes
+    };
+---NEW---
+    let threshold = drop_bytes;

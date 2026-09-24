@@ -390,6 +390,24 @@ pub struct PressureConfig {
     /// a two-week horizon is a standing debt to schedule, not an emergency, and
     /// red stays owned by bytes and the ten-minute projection.
     pub disk_trend_alert_secs: f64,
+    /// The rolling window of the disk burst-drop rule (`banshee-636`): free
+    /// space falling by `disk_drop_bytes` — or `disk_drop_fraction` of the
+    /// volume TOTAL — within this window forces at least yellow, whatever the
+    /// absolute level. Measured 2026-09-22: the data volume lost 79% of its
+    /// remaining headroom in five hours and produced only short projection
+    /// blips; a drop rule fires early in that slide, while there is still room
+    /// to act. Direction-only — no forecast, so none of `banshee-wql`'s
+    /// confidence problem — which makes it the cheapest of the three horizons
+    /// to trust.
+    pub disk_drop_window_secs: u64,
+    /// The absolute-drop trigger of the burst rule, in bytes.
+    pub disk_drop_bytes: f64,
+    /// The relative-drop trigger, as a fraction of the VOLUME TOTAL — never of
+    /// current free space (Ted's explicit rule): losing 2 GB of a 5 GB
+    /// remainder is 40% of free, and a free-relative rule goes hypersensitive
+    /// exactly when the byte bands already own the alert. The rule fires on
+    /// whichever of the two triggers is smaller for the volume.
+    pub disk_drop_fraction: f64,
     /// The minimum time the rollup points must SPAN before the week trend is
     /// trusted at all. A fresh database with a day of rollups can produce a
     /// perfectly-fitted slope that reverses tomorrow (`banshee-wql`'s
@@ -610,6 +628,13 @@ impl Default for PressureConfig {
             disk_trend_window_secs: 7 * 86_400,
             disk_trend_alert_secs: 14.0 * 86_400.0,
             disk_trend_min_span_secs: 7 * 86_400 / 2,
+            // The burst horizon (banshee-636), calibrated against the
+            // 2026-09-22 slide (43.8 → 9.2 GB at ~7 GB/hour on a 494 GB
+            // volume): >= 10 GB or >= 2% of the volume within a rolling hour
+            // fires around 14:00 that day, with ~30 GB still in hand.
+            disk_drop_window_secs: 3600,
+            disk_drop_bytes: 10e9,
+            disk_drop_fraction: 0.02,
             // perf-scan's "SATURATED" heuristic, repurposed as the run-queue
             // depth that triggers the contention framing. The 2026-09-09 incident
             // sat at 3.26× per core with the cores half idle.
@@ -670,7 +695,11 @@ impl PressureConfig {
     /// delay would never be met. Twice the delay, so a hold well past the line is
     /// still measured rather than saturated.
     pub fn history_samples(&self) -> usize {
-        let span = self.disk_yellow_episode_up_secs * 2;
+        // Enough to measure the yellow up-delay with room to spare, PLUS the
+        // burst-drop window: judging whether a drop-forced yellow has held for
+        // the delay means every recent sample must still see a full drop
+        // window behind it (`banshee-636`).
+        let span = self.disk_drop_window_secs + self.disk_yellow_episode_up_secs * 2;
         let interval = self.sample_interval_secs.max(1);
         self.window_samples.max(span.div_ceil(interval) as usize)
     }
@@ -964,6 +993,17 @@ mod tests {
         assert!(
             c.history_samples() as u64 * c.sample_interval_secs
                 >= c.disk_yellow_episode_up_secs * 2
+        );
+        // The burst rule, at Ted's calibration (banshee-636): >= 10 GB or
+        // >= 2% of the VOLUME TOTAL within a rolling hour — and the history
+        // must let a drop-forced yellow both see its window and meet the
+        // episode delay.
+        assert_eq!(c.disk_drop_window_secs, 3600);
+        assert_eq!(c.disk_drop_bytes, 10e9);
+        assert_eq!(c.disk_drop_fraction, 0.02);
+        assert!(
+            c.history_samples() as u64 * c.sample_interval_secs
+                >= c.disk_drop_window_secs + c.disk_yellow_episode_up_secs
         );
     }
 

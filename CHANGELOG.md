@@ -8,6 +8,16 @@ All notable changes to Banshee. The format follows
 
 ### Added
 
+- **A burst-drop disk alert** (banshee-636). Free space falling by 10 GB — or 2%
+  of the volume TOTAL, whichever is smaller for the volume — within a rolling hour
+  now forces disk at least yellow whatever the absolute level, with the drop named
+  in the detail ("down 12.0 GB in the last 1h0m"). Calibrated against the
+  2026-09-22 slide (43.8 → 9.2 GB at ~7 GB/hour), where it fires with ~30 GB still
+  in hand. The fraction reads the volume total, never current free, so the rule
+  does not go hypersensitive once free space is already small — there the byte
+  bands own the alert. Direction-only: no forecast, so none of the projection's
+  confidence problem.
+
 - **A second, week-scale disk projection** (banshee-nio). Time-to-full read a
   ten-minute window, so it could only ever fire during a burst: 90 GB lost over
   7 days (~150 KB/s) projected "full in a week" and produced nothing — never

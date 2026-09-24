@@ -1,0 +1,18 @@
+# The burst-drop fraction reads the VOLUME TOTAL, never current free (Ted's
+# explicit rule, banshee-636). A free-relative threshold goes hypersensitive
+# exactly when free space is already small — losing 2 GB of a 5 GB remainder is
+# 40% — and there the byte bands already own the alert. This mutation is that
+# wrong rule, verbatim.
+file: rust/banshee-core/src/pressure/disk.rs
+test: the_drop_trigger_is_judged_against_the_volume_total
+---OLD---
+    let threshold = if total_bytes > 0.0 {
+        drop_bytes.min(drop_fraction * total_bytes)
+    } else {
+        drop_bytes
+    };
+---NEW---
+    let threshold = points
+        .last()
+        .map(|(_, v)| drop_bytes.min(drop_fraction * v))
+        .unwrap_or(drop_bytes);

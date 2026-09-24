@@ -33,7 +33,7 @@
 // A median of pairwise slopes ignores a minority of artifact intervals the same
 // way `Series::max_interval`'s median ignores a minority of outlier gaps.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 use super::band::Band;
 
@@ -249,6 +249,69 @@ pub(super) fn trend_floor(
         }
     };
     confirmed_floor(points.len(), floor_at, confirm)
+}
+
+/// The drop the burst rule acts on (`banshee-636`): the sample's shortfall
+/// from the HIGHEST free-space reading inside its trailing window. Peak-minus-
+/// current rather than first-minus-current, so space that was freed and then
+/// consumed again inside the window still counts as the loss it is — and a
+/// restored volume (current back at the peak) reads zero and clears the rule.
+fn drop_within(points: &[(DateTime<Utc>, f64)], i: usize, window_secs: u64) -> f64 {
+    let cutoff = points[i].0 - Duration::seconds(window_secs as i64);
+    let peak = points[..=i]
+        .iter()
+        .rev()
+        .take_while(|(t, _)| *t >= cutoff)
+        .map(|(_, v)| *v)
+        .fold(f64::NEG_INFINITY, f64::max);
+    (peak - points[i].1).max(0.0)
+}
+
+/// The band floor a BURST DROP forces (`banshee-636`): free space falling by
+/// `drop_bytes` — or `drop_fraction` of the volume TOTAL, whichever is the
+/// smaller trigger — inside the rolling window is at least Yellow, whatever
+/// the absolute level. The fraction is of the TOTAL, never of current free
+/// (Ted's explicit rule): a free-relative trigger goes hypersensitive exactly
+/// when free space is already small, and there the byte bands own the alert.
+/// Direction-only — no forecast, so none of `banshee-wql`'s confidence
+/// problem — judged per-sample through the same confirm machine as the other
+/// floors, so one glitched reading cannot fire it.
+pub(super) fn drop_floor(
+    points: &[(DateTime<Utc>, f64)],
+    total_bytes: f64,
+    window_secs: u64,
+    drop_bytes: f64,
+    drop_fraction: f64,
+    confirm: usize,
+) -> (Band, usize) {
+    let threshold = if total_bytes > 0.0 {
+        drop_bytes.min(drop_fraction * total_bytes)
+    } else {
+        drop_bytes
+    };
+    let floor_at = |i: usize| -> Band {
+        if drop_within(points, i, window_secs) >= threshold {
+            Band::Yellow
+        } else {
+            Band::Green
+        }
+    };
+    confirmed_floor(points.len(), floor_at, confirm)
+}
+
+/// The burst clause of the disk detail line — "down 12.4 GB in the last 1h0m".
+/// The newest sample's own drop, so the number a banner carries is the number
+/// the floor fired on.
+pub(super) fn drop_note(points: &[(DateTime<Utc>, f64)], window_secs: u64) -> Option<String> {
+    if points.is_empty() {
+        return None;
+    }
+    let drop = drop_within(points, points.len() - 1, window_secs);
+    Some(format!(
+        ", down {} in the last {}",
+        super::fmt_bytes(drop),
+        super::fmt_duration(window_secs as f64)
+    ))
 }
 
 /// The week-trend clause of the disk detail line: what was lost, over how

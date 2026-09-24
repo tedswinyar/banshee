@@ -972,6 +972,99 @@ fn week_rollups(end_t: i64, hours: usize, avail_at: impl Fn(usize) -> u64) -> Ve
         .collect()
 }
 
+/// Thirty minutes of samples in which the data volume falls `from_gb` →
+/// `to_gb` between minutes 5 and 10 and then sits FLAT for twenty — so the
+/// ten-minute slope window sees a flat volume (no projection, no byte-band
+/// movement) and only the rolling-drop rule has anything to say.
+fn dropping_samples(from_gb: f64, to_gb: f64, total_bytes: u64) -> Vec<Sample> {
+    let n = 121;
+    let mut samples = healthy(n, 1800);
+    for (i, s) in samples.iter_mut().enumerate() {
+        let avail = if i < 20 {
+            from_gb
+        } else if i < 40 {
+            from_gb - (from_gb - to_gb) * ((i - 20) as f64 / 20.0)
+        } else {
+            to_gb
+        };
+        s.volumes[0].avail_bytes = (avail * 1e9) as u64;
+        s.volumes[0].total_bytes = total_bytes;
+    }
+    samples
+}
+
+/// The burst horizon (`banshee-636`): a dramatic drop forces yellow whatever
+/// the absolute level. 400 → 388 GB is deep green by bytes and flat across the
+/// slope window by the time it is judged — before this rule, that shape said
+/// nothing at all. The 5 GB contrast is the co-varying-fixture rule: same
+/// timing, same flatness, under both triggers — so it is the drop's SIZE the
+/// band answered, not the shape of the fixture.
+#[test]
+fn a_dramatic_drop_forces_yellow_whatever_the_level() {
+    let p = evaluate(
+        at(1800),
+        &dropping_samples(400.0, 388.0, 494_384_795_648),
+        &[],
+        &[],
+        &cfg(),
+    );
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow, "detail: {}", disk.detail);
+    assert!(
+        disk.detail.contains("in the last"),
+        "the detail must name the drop: {}",
+        disk.detail
+    );
+
+    let p = evaluate(
+        at(1800),
+        &dropping_samples(400.0, 395.0, 494_384_795_648),
+        &[],
+        &[],
+        &cfg(),
+    );
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Green, "5 GB is under both triggers");
+    assert!(!disk.detail.contains("in the last"), "{}", disk.detail);
+}
+
+/// The relative trigger reads the VOLUME TOTAL, never current free — Ted's
+/// explicit rule (`banshee-636`): losing 2 GB of a 5 GB remainder is 40% of
+/// free, and a free-relative rule goes hypersensitive exactly when the byte
+/// bands already own the alert. The two cases distinguish the rules: 4 GB off
+/// 65 GB free is 6% of FREE (a free-relative rule fires) but 0.8% of the
+/// 494 GB volume (this rule must not); 3 GB on a 100 GB volume is under the
+/// flat 10 GB trigger (a bytes-only rule stays silent) but 3% of the TOTAL
+/// (the fraction trigger must fire).
+#[test]
+fn the_drop_trigger_is_judged_against_the_volume_total() {
+    let p = evaluate(
+        at(1800),
+        &dropping_samples(65.0, 61.0, 494_384_795_648),
+        &[],
+        &[],
+        &cfg(),
+    );
+    assert_eq!(
+        p.reading(Dimension::Disk).unwrap().band,
+        Band::Green,
+        "0.8% of the volume is not a burst, however large a share of free it is"
+    );
+
+    let p = evaluate(
+        at(1800),
+        &dropping_samples(90.0, 87.0, 100_000_000_000),
+        &[],
+        &[],
+        &cfg(),
+    );
+    assert_eq!(
+        p.reading(Dimension::Disk).unwrap().band,
+        Band::Yellow,
+        "2% of a small volume fires below the flat 10 GB trigger"
+    );
+}
+
 /// The third disk horizon (`banshee-nio`): a genuine slow drain — 90 GB over
 /// 7 days, ~150 KB/s — is structurally invisible to the ten-minute slope (it
 /// projects "full in 7.8 days", which no burst window can say), so the week

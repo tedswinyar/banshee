@@ -562,10 +562,30 @@ pub fn evaluate(
             // (full within `disk_trend_alert_secs`), its own ceiling (Yellow,
             // never Red, never severity): three horizons, deliberately, not
             // one window retuned (`banshee-wql`).
-            let mount = history
-                .last()
-                .and_then(|s| s.volumes.first())
-                .map(|v| v.mount_point.clone());
+            let newest_volume = history.last().and_then(|s| s.volumes.first());
+
+            // The BURST horizon (`banshee-636`): a dramatic drop notifies
+            // whatever the absolute level — the shape that actually precedes
+            // trouble here. Measured 2026-09-22: 43.8 → 9.2 GB in five hours
+            // produced only short projection blips; this rule fires early in
+            // that slide, with room still in hand to act.
+            let total = newest_volume.map(|v| v.total_bytes as f64).unwrap_or(0.0);
+            let (drop_band, drop_held) = disk::drop_floor(
+                &series.points,
+                total,
+                config.disk_drop_window_secs,
+                config.disk_drop_bytes,
+                config.disk_drop_fraction,
+                spec.confirm_samples,
+            );
+            if drop_band > band {
+                band = drop_band;
+                held = drop_held;
+            } else if drop_band == band && drop_held > held {
+                held = drop_held;
+            }
+
+            let mount = newest_volume.map(|v| v.mount_point.clone());
             let week = disk::week_points(rollups, mount.as_deref().unwrap_or_default());
             let week_slope = disk::week_slope_per_sec(&week, config.disk_trend_min_span_secs);
             let (trend_band, trend_held) = disk::trend_floor(
@@ -583,10 +603,23 @@ pub fn evaluate(
                 // slow drain meet the yellow episode delay (`banshee-dok`).
                 held = trend_held;
             }
+            // The detail carries every horizon that is speaking, burst first,
+            // so the finding, the episode message and the app banner all say
+            // why the band is what it is (ADR-0005).
+            let mut notes = String::new();
+            if drop_band == Band::Yellow
+                && let Some(n) = disk::drop_note(&series.points, config.disk_drop_window_secs)
+            {
+                notes.push_str(&n);
+            }
             if trend_band == Band::Yellow
                 && let Some(s) = week_slope
+                && let Some(n) = disk::trend_note(&week, s, outcome.value)
             {
-                disk_note = disk::trend_note(&week, s, outcome.value);
+                notes.push_str(&n);
+            }
+            if !notes.is_empty() {
+                disk_note = Some(notes);
             }
             (band, held, severity, slope)
         } else {
