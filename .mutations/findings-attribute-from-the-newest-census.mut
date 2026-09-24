@@ -4,6 +4,6 @@
 file: rust/banshee-core/src/pressure/mod.rs
 test: findings_name_who_from_the_newest_census
 ---OLD---
-        build_findings(&readings, &verdict, censuses.last(), config)
+        build_findings(&readings, &verdict, censuses.last(), swap_total, config)
 ---NEW---
-        build_findings(&readings, &verdict, censuses.first(), config)
+        build_findings(&readings, &verdict, censuses.first(), swap_total, config)

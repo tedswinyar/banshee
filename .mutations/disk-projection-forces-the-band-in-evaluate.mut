@@ -4,6 +4,6 @@
 file: rust/banshee-core/src/pressure/mod.rs
 test: a_fast_emptying_disk_is_red_though_its_bytes_say_yellow
 ---OLD---
-            if forced > outcome.band {
+            let (mut band, mut held) = if forced > outcome.band {
 ---NEW---
-            if false {
+            let (mut band, mut held) = if false {

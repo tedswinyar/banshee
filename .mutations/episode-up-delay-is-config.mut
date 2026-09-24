@@ -4,6 +4,6 @@
 file: rust/banshee-core/src/pressure/episode.rs
 test: the_up_delay_is_load_bearing_config
 ---OLD---
-    if r.held_secs < config.episode_up_secs {
+        Band::Red => r.held_secs >= config.episode_up_secs,
 ---NEW---
-    if r.held_secs < 120 {
+        Band::Red => r.held_secs >= 120,

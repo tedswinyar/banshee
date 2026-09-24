@@ -4,7 +4,7 @@
 file: rust/banshee-core/src/pressure/episode.rs
 test: a_flap_reopens_the_same_episode_and_counts_the_swallowed_notice
 ---OLD---
-            if !escalated && !repeat_due {
+            if !escalated && !crossed && !repeat_due {
                 next.suppressed = next.suppressed.saturating_add(1);
             }
 ---NEW---
