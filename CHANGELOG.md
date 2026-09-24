@@ -4,7 +4,12 @@ All notable changes to Banshee. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) as described in `VERSIONING.md`.
 
-## [Unreleased]
+## [0.1.8] — 2026-09-24
+
+The daemon half of the disk-alerting work: 0.1.7 taught the app to name a filling
+disk; this release teaches the daemon to notice one sooner. Two new signals and one
+episode-policy fix, all disk-only. The two new signals raise disk to yellow and no
+further — severity still belongs to the byte bands alone.
 
 ### Added
 
