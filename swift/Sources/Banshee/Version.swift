@@ -4,5 +4,5 @@
 // (VERSIONING.md documents the policy.)
 
 enum Version {
-    static let marketing = "0.1.6"
+    static let marketing = "0.1.7"
 }

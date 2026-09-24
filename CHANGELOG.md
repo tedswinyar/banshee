@@ -4,7 +4,10 @@ All notable changes to Banshee. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) as described in `VERSIONING.md`.
 
-## [Unreleased]
+## [0.1.7] — 2026-09-23
+
+One fix, cut on its own because it is the reason the maintainer's disk emergency
+arrived unannounced.
 
 ### Fixed
 
