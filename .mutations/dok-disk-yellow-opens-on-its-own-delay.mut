@@ -1,0 +1,10 @@
+# Disk yellow opens an episode behind its OWN long up-delay (banshee-dok), not
+# the fast red one. Judging it on episode_up_secs re-imports the muting hazard
+# the red-only policy existed to avoid: every two-minute yellow blip becomes an
+# episode, and a channel that hears every blip gets muted.
+file: rust/banshee-core/src/pressure/episode.rs
+test: a_sustained_disk_yellow_opens_behind_its_own_delay
+---OLD---
+            r.held_secs >= config.disk_yellow_episode_up_secs
+---NEW---
+            r.held_secs >= config.episode_up_secs

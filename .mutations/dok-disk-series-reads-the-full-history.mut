@@ -1,0 +1,15 @@
+# The disk series replays the FULL sample slice, not the ten-minute model
+# window (banshee-dok): held_secs counts only what the series covers, so a
+# windowed disk series caps every observable hold at ten minutes and the
+# 30-minute yellow up-delay is structurally unreachable — yellow episodes
+# compile, test green at the unit level, and never open on a real machine.
+file: rust/banshee-core/src/pressure/mod.rs
+test: a_long_disk_yellow_is_held_past_the_window_and_opens_an_episode
+---OLD---
+        let history: &[Sample] = if d == Dimension::Disk {
+            samples
+        } else {
+            window
+        };
+---NEW---
+        let history: &[Sample] = window;

@@ -494,7 +494,19 @@ pub fn evaluate(
     let mut contributions = Vec::new();
 
     for d in ALL_DIMENSIONS {
-        let Some(series) = series_for(d, window, censuses, config) else {
+        // Disk reads the FULL slice the sampler fetched, not the ten-minute
+        // window: its yellow episode up-delay is minutes long (`banshee-dok`),
+        // and `held_secs` counts only what the series covers, so a ten-minute
+        // series caps every observable hold at ten minutes. The replay is
+        // causal — more history never changes the current band, it only lets
+        // the hold be measured instead of saturated. Every other dimension
+        // keeps the window; so does disk's SLOPE (see below).
+        let history: &[Sample] = if d == Dimension::Disk {
+            samples
+        } else {
+            window
+        };
+        let Some(series) = series_for(d, history, censuses, config) else {
             continue;
         };
         let values = series.values();
@@ -510,7 +522,13 @@ pub fn evaluate(
         // ceiling, `dominant_source`, the glyph, headroom's reason line —
         // follows from the severity and band with no disk-specific rules.
         let (band, held_samples, severity, trend) = if d == Dimension::Disk {
+            // The slope and the projection floor stay on the ten-minute window
+            // even though the byte band above replays the longer history: one
+            // window cannot serve both a burst and a trend (`banshee-wql`), and
+            // widening this one would retune the "full in …" projection, not
+            // add a second horizon.
             let tail = series.contiguous_tail();
+            let tail = &tail[tail.len().saturating_sub(config.window_samples)..];
             let slope = disk::slope_per_sec(tail);
             let projection = disk::projected_full_secs(outcome.value, slope);
             let severity = disk::severity(

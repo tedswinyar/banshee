@@ -118,6 +118,10 @@ impl SamplerConfig {
         p.episode_up_secs = env_secs("BANSHEE_EPISODE_UP_SECS", p.episode_up_secs);
         p.episode_down_secs = env_secs("BANSHEE_EPISODE_DOWN_SECS", p.episode_down_secs);
         p.episode_repeat_secs = env_secs("BANSHEE_EPISODE_REPEAT_SECS", p.episode_repeat_secs);
+        p.disk_yellow_episode_up_secs = env_secs(
+            "BANSHEE_DISK_YELLOW_EPISODE_UP_SECS",
+            p.disk_yellow_episode_up_secs,
+        );
         // The headroom read's memory budget per worker (ADR-0010). Bytes, via the
         // same lenient reader — the unit is seconds there and bytes here, but the
         // parse-or-fall-back rule is identical. Zero is refused: a zero budget
@@ -445,7 +449,10 @@ fn evaluate_now(
     let now = Utc::now();
 
     let st = store.lock().unwrap_or_else(|e| e.into_inner());
-    let samples = st.recent_samples(config.window_samples)?;
+    // More than the model window: the extra history is disk's, whose yellow
+    // episode up-delay is longer than the window spans (`banshee-dok`). The
+    // model still bands everything else on the trailing `window_samples`.
+    let samples = st.recent_samples(config.history_samples())?;
     // Two censuses is enough for the census-derived dimensions to have a series to
     // apply hysteresis over; more would only slow the read.
     let censuses = st.recent_censuses(3)?;

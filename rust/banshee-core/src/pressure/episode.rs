@@ -324,18 +324,29 @@ fn open_if_due(
 ) -> Option<AlertEpisode> {
     // Red is the actionable state. A yellow dimension is worth SEEING, in the
     // window and the time series, but not worth an episode — and interrupting
-    // for it is exactly how a monitor gets muted.
-    if r.band != Band::Red {
+    // for it is exactly how a monitor gets muted. That reasoning holds for CPU
+    // and memory, which flap through yellow on every build. It does NOT hold
+    // for disk (`banshee-dok`): disk barely flaps and moves one way, so a
+    // SUSTAINED disk yellow is a standing debt — and its 30–60 GB yellow band
+    // is precisely "leaving the target floor while action is still cheap".
+    // Disk yellow therefore opens too, behind its own much longer up-delay,
+    // so `banshee alerts` and the app's yellow banner tell one story.
+    //
+    // The up delays reuse `held_secs`, which counts only CONTINUOUS observation:
+    // a red that "held" across a 17-minute hole in the series
+    // is 45 seconds of evidence, not 17 minutes, and does not open an episode.
+    let due = match r.band {
+        Band::Red => r.held_secs >= config.episode_up_secs,
+        Band::Yellow if r.dimension == Dimension::Disk => {
+            r.held_secs >= config.disk_yellow_episode_up_secs
+        }
+        _ => false,
+    };
+    if !due {
         return None;
     }
     // Advisory dimensions never alert. A 30-day uptime is not an event.
     if r.advisory {
-        return None;
-    }
-    // The up delay reuses `held_secs`, which counts only CONTINUOUS observation:
-    // a red that "held" across a 17-minute hole in the series
-    // is 45 seconds of evidence, not 17 minutes, and does not open an episode.
-    if r.held_secs < config.episode_up_secs {
         return None;
     }
     let mut episode = AlertEpisode {
@@ -409,11 +420,20 @@ fn step(
     config: &PressureConfig,
 ) -> Option<(AlertEpisode, bool)> {
     let mut next = e.clone();
-    let red = r.band == Band::Red;
+    // What keeps THIS episode firing. Disk fires on yellow-or-worse
+    // (`banshee-dok`): one excursion below the target floor is one incident,
+    // however many times it crosses the red line inside it — matching the app's
+    // single-identifier disk banner, where red→yellow says nothing and the
+    // banner clears only on green. Every other dimension fires on red alone.
+    let in_band = if e.dimension == Dimension::Disk {
+        r.band >= Band::Yellow
+    } else {
+        r.band == Band::Red
+    };
     let repeat = Duration::seconds(config.episode_repeat_secs as i64);
     let repeat_due = next.last_notified_at.is_none_or(|t| now - t >= repeat);
 
-    match (e.state, red) {
+    match (e.state, in_band) {
         (EpisodeState::Firing, true) => {
             let escalated = record_peak(&mut next, r, pressure, census, now);
             let crossed = record_projection(&mut next, r, config);
@@ -938,6 +958,74 @@ mod tests {
                 .episodes
                 .is_empty()
         );
+    }
+
+    /// Disk is the exception (`banshee-dok`): a disk yellow that has held past
+    /// its OWN long delay opens an episode. The 30–60 GB yellow band is exactly
+    /// "leaving the target floor while action is still cheap", and it was the
+    /// one range that produced no record — the app's banner spoke on yellow
+    /// while `banshee alerts` stayed silent. Mutation-proof both ways: judge
+    /// disk yellow on `episode_up_secs` and the 25-minute hold below opens;
+    /// drop the disk yellow arm and the 30-minute hold never does.
+    #[test]
+    fn a_sustained_disk_yellow_opens_behind_its_own_delay() {
+        let short = pressure(
+            Level::Stirring,
+            vec![reading(Dimension::Disk, Band::Yellow, 1500)],
+        );
+        assert!(
+            reconcile_episodes(&[], &short, None, at(0), &cfg())
+                .episodes
+                .is_empty(),
+            "25 minutes is well past the fast delay and still not enough"
+        );
+
+        let sustained = pressure(
+            Level::Stirring,
+            vec![reading(Dimension::Disk, Band::Yellow, 1800)],
+        );
+        let out = reconcile_episodes(&[], &sustained, None, at(0), &cfg());
+        assert_eq!(out.episodes.len(), 1);
+        assert_eq!(out.episodes[0].peak.band, Band::Yellow);
+        assert_eq!(out.episodes[0].state, EpisodeState::Firing);
+        assert_eq!(out.notifications.len(), 1);
+        assert_eq!(out.notifications[0].kind, NotificationKind::Opened);
+    }
+
+    /// A disk episode rides THROUGH yellow (`banshee-dok`): one excursion below
+    /// the target floor is one incident, however many times it crosses the red
+    /// line inside it — the app's single-identifier disk banner clears only on
+    /// green, and the episode record must tell the same story. Every other
+    /// dimension still starts recovery the moment it leaves red; the CPU
+    /// contrast pins that the ride-through is disk's alone.
+    #[test]
+    fn a_disk_episode_rides_through_yellow_and_recovers_on_green() {
+        let disk = firing(Dimension::Disk, -3600, Some(-600), Level::Wailing);
+        let eased = pressure(
+            Level::Stirring,
+            vec![reading(Dimension::Disk, Band::Yellow, 300)],
+        );
+        let out = reconcile_episodes(std::slice::from_ref(&disk), &eased, None, at(0), &cfg());
+        assert!(
+            out.episodes.is_empty(),
+            "still firing, unchanged — recovery must not have started: {:?}",
+            out.episodes
+        );
+
+        let green = pressure(
+            Level::Quiet,
+            vec![reading(Dimension::Disk, Band::Green, 60)],
+        );
+        let out = reconcile_episodes(&[disk], &green, None, at(0), &cfg());
+        assert_eq!(out.episodes[0].state, EpisodeState::Recovering);
+
+        let cpu = firing(Dimension::Cpu, -3600, Some(-600), Level::Wailing);
+        let eased = pressure(
+            Level::Stirring,
+            vec![reading(Dimension::Cpu, Band::Yellow, 300)],
+        );
+        let out = reconcile_episodes(&[cpu], &eased, None, at(0), &cfg());
+        assert_eq!(out.episodes[0].state, EpisodeState::Recovering);
     }
 
     /// Advisory dimensions never alert, however red and however long.

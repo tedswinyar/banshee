@@ -4,6 +4,22 @@ All notable changes to Banshee. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) as described in `VERSIONING.md`.
 
+## [Unreleased]
+
+### Fixed
+
+- **A sustained disk yellow now opens an episode** (banshee-dok). The daemon opened
+  episodes only on red, so the 30–60 GB yellow band — exactly "leaving the target
+  floor while action is still cheap" — never reached the episode log: the app's
+  banner (0.1.7) spoke on yellow while `banshee alerts` said nothing. Disk yellow now
+  opens behind its own long up-delay (30 minutes held, `BANSHEE_DISK_YELLOW_EPISODE_UP_SECS`),
+  and a disk episode rides through yellow — one excursion is one incident, closed
+  only on green, matching the app banner's single identifier. CPU and memory keep
+  the red-only policy: they flap through yellow on every build, disk moves one way.
+  To make the long hold measurable at all, the disk band now replays over a longer
+  sample history (an hour by default); the ten-minute slope and projection windows
+  are unchanged.
+
 ## [0.1.7] — 2026-09-23
 
 One fix, cut on its own because it is the reason the maintainer's disk emergency

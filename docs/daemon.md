@@ -147,6 +147,15 @@ below red before the episode closes; a red inside this window REOPENS the same
 episode) and `BANSHEE_EPISODE_REPEAT_SECS` (default 3600). Like the cadence
 overrides, a bad value is a warning and the default, never a crash.
 
+Disk is the one dimension whose YELLOW also opens an episode, behind its own much
+longer delay — `BANSHEE_DISK_YELLOW_EPISODE_UP_SECS` (default 1800: how long disk
+must hold yellow before the sustained drift is an episode). CPU and memory flap
+through yellow on every build; disk barely flaps and moves one way, so a sustained
+disk yellow is a standing debt, not noise. The episode then rides THROUGH yellow:
+one excursion below the target range is one incident however many times it crosses
+the red line inside it, and it closes only once the volume is back in the green —
+which is also when the app's disk banner stops re-posting.
+
 ## Running a second instance on purpose
 
 The daemon holds the prod database. To poke at something without disturbing it:

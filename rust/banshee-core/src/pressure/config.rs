@@ -341,6 +341,16 @@ pub struct PressureConfig {
     /// per-dimension cooldown, kept at the same value so notification volume is
     /// unchanged; re-fires swallowed inside it are COUNTED (`suppressed`).
     pub episode_repeat_secs: u64,
+    /// How long DISK must have held yellow — continuously observed — before that
+    /// alone opens an episode (`banshee-dok`). Disk is the one dimension whose
+    /// yellow opens anything: CPU and memory flap through yellow on every build,
+    /// but disk barely flaps and moves one way, so a SUSTAINED disk yellow is a
+    /// standing debt, not noise. Much longer than `episode_up_secs` on purpose —
+    /// the fast delay answers "is this red real", this one answers "has the slow
+    /// drift stopped being ignorable". Ted's ruling: held 30–60 minutes; the
+    /// default is the early edge, because the 30–60 GB yellow band is precisely
+    /// "leaving the target floor while action is still cheap".
+    pub disk_yellow_episode_up_secs: u64,
     /// A `ManagedAgents` reading derived from a process younger than this is not
     /// banded. Measured: a log shipper restarted 109s earlier reported 14.6% off
     /// 16s of CPU, because the ratio's denominator was tiny.
@@ -570,6 +580,7 @@ impl Default for PressureConfig {
             episode_up_secs: 120,
             episode_down_secs: 600,
             episode_repeat_secs: 3600,
+            disk_yellow_episode_up_secs: 1800,
             managed_agents_min_life_secs: 600,
             who_limit: 3,
             disk_projection_red_secs: 3600.0,
@@ -623,6 +634,21 @@ impl PressureConfig {
         // Round up, and never return 0 — a zero ceiling would treat every interval
         // as a gap and report every run as instantaneous.
         ((cadence as f64) * self.gap_tolerance).ceil().max(1.0) as u64
+    }
+
+    /// How many trailing samples the sampler should feed `evaluate`.
+    ///
+    /// The model WINDOW stays `window_samples` — bands, slopes and the level all
+    /// read the last ten minutes exactly as before. The extra history exists for
+    /// the disk dimension only (`banshee-dok`): its yellow up-delay is minutes
+    /// long, and `held_secs` can only count what the series covers, so a window
+    /// that spans ten minutes caps every observable hold at ten minutes and the
+    /// delay would never be met. Twice the delay, so a hold well past the line is
+    /// still measured rather than saturated.
+    pub fn history_samples(&self) -> usize {
+        let span = self.disk_yellow_episode_up_secs * 2;
+        let interval = self.sample_interval_secs.max(1);
+        self.window_samples.max(span.div_ceil(interval) as usize)
     }
 
     pub fn spec(&self, d: Dimension) -> &BandSpec {
@@ -895,6 +921,18 @@ mod tests {
         assert_eq!(
             c.episode_repeat_secs, 3600,
             "the point-event cooldown, unchanged"
+        );
+        // The slow delay must be much longer than the fast one — a disk yellow
+        // that opened as fast as a red would re-import the muting problem the
+        // red-only policy existed to avoid — and inside Ted's 30–60 min ruling.
+        assert!(c.disk_yellow_episode_up_secs >= c.episode_up_secs * 10);
+        assert!((1800..=3600).contains(&c.disk_yellow_episode_up_secs));
+        // The yellow up-delay must be OBSERVABLE: `held_secs` can only count what
+        // the evaluation window covers, so the history the sampler feeds the
+        // model has to span the delay with room to spare.
+        assert!(
+            c.history_samples() as u64 * c.sample_interval_secs
+                >= c.disk_yellow_episode_up_secs * 2
         );
     }
 

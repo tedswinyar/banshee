@@ -933,6 +933,34 @@ fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
     assert_eq!(p.reading(Dimension::Disk).unwrap().band, Band::Yellow);
 }
 
+/// The disk series reads the FULL slice the sampler hands over, not the
+/// ten-minute model window (`banshee-dok`): the disk yellow episode delay is
+/// half an hour, and `held_secs` can only count what the series covers, so a
+/// ten-minute series caps every observable hold at ten minutes and the delay
+/// could never be met. Fifty minutes of flat yellow must read as ~50 minutes
+/// held, and `assess` must open the episode the window alone structurally
+/// never could. Mutation-proof: hand disk the `window` slice like every other
+/// dimension and the hold saturates at ten minutes.
+#[test]
+fn a_long_disk_yellow_is_held_past_the_window_and_opens_an_episode() {
+    let n = 201; // 50 minutes at the 15s cadence
+    let mut samples = healthy(n, 3000);
+    for s in samples.iter_mut() {
+        s.volumes[0].avail_bytes = 45_000_000_000; // mid-yellow, flat
+    }
+    let a = assess(at(3000), &samples, &[], &[], &cfg());
+    let disk = a.pressure.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow);
+    assert!(
+        disk.held_secs >= cfg().disk_yellow_episode_up_secs,
+        "the hold must span past the model window: {}",
+        disk.held_secs
+    );
+    assert_eq!(a.episodes.len(), 1, "episodes: {:?}", a.episodes);
+    assert_eq!(a.episodes[0].dimension, Dimension::Disk);
+    assert_eq!(a.episodes[0].peak.band, Band::Yellow);
+}
+
 /// Banshee never walks the filesystem, so the disk finding hands off to a disk-usage tool
 /// rather than answering "what is taking the space" itself (ADR-0003).
 /// Mutation-proof: change the action and this fails.
