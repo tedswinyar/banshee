@@ -128,17 +128,26 @@ pub(super) fn forced_floor(
         }
     };
 
-    if points.is_empty() {
+    // One point has no slope, so the seed is always Green: forcing needs at
+    // least `confirm` more samples of evidence, never a single tick.
+    confirmed_floor(points.len(), floor_at, confirm)
+}
+
+/// Run one per-sample floor judgement through the confirm state machine:
+/// a NEW floor — in EITHER direction — must persist `confirm` consecutive
+/// samples before it is adopted. Shared by the projection floor above and the
+/// week-trend floor below, so the two horizons cannot drift apart in how much
+/// evidence a floor change needs.
+fn confirmed_floor(n: usize, floor_at: impl Fn(usize) -> Band, confirm: usize) -> (Band, usize) {
+    if n == 0 {
         return (Band::Green, 0);
     }
     let confirm = confirm.max(1);
-    // One point has no slope, so the seed is always Green: forcing needs at
-    // least `confirm` more samples of evidence, never a single tick.
     let mut band = floor_at(0);
     let mut held = 1usize;
     let mut pending: Option<Band> = None;
     let mut run = 0usize;
-    for i in 1..points.len() {
+    for i in 1..n {
         let want = floor_at(i);
         if want == band {
             held += 1;
@@ -162,6 +171,103 @@ pub(super) fn forced_floor(
         }
     }
     (band, held)
+}
+
+/// The banded volume's week series out of the rollup tier (`banshee-nio`):
+/// one point per bucket, the bucket's AVERAGE free bytes. Averages rather than
+/// minima on purpose — the trend wants the level the volume actually sat at,
+/// not the deepest instant of every bucket.
+pub(super) fn week_points(
+    rollups: &[crate::sample::Rollup],
+    mount_point: &str,
+) -> Vec<(DateTime<Utc>, f64)> {
+    rollups
+        .iter()
+        .filter_map(|r| {
+            r.volumes
+                .iter()
+                .find(|v| v.mount_point == mount_point)
+                .map(|v| (r.bucket_start, v.avail_avg as f64))
+        })
+        .collect()
+}
+
+/// Change per second across the WEEK tier, by least squares — `None` unless the
+/// points span at least `min_span_secs` and the fitted slope is a genuine
+/// drain. Least squares rather than Theil–Sen here: the inputs are already
+/// bucket averages, and this window's job is the long fit, not flicker
+/// suppression — a one-off deletion mid-week legitimately flattens it.
+/// Gaps are NORMAL in this tier (a sleeping machine writes no rollups), so
+/// there is no contiguity requirement; the span guard is what stops a thin
+/// series masquerading as a week of evidence.
+pub(super) fn week_slope_per_sec(
+    points: &[(DateTime<Utc>, f64)],
+    min_span_secs: u64,
+) -> Option<f64> {
+    let (first, last) = (points.first()?, points.last()?);
+    let span = (last.0 - first.0).num_seconds();
+    if span < min_span_secs as i64 {
+        return None;
+    }
+    let n = points.len() as f64;
+    let (mut sx, mut sy, mut sxy, mut sxx) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    for (t, v) in points {
+        let x = (*t - first.0).num_milliseconds() as f64 / 1000.0;
+        sx += x;
+        sy += v;
+        sxy += x * v;
+        sxx += x * x;
+    }
+    let denom = n * sxx - sx * sx;
+    if denom <= 0.0 {
+        return None;
+    }
+    let slope = (n * sxy - sy * sx) / denom;
+    // Only a drain is a countdown; a flat or refilling week projects nothing.
+    (slope < 0.0).then_some(slope)
+}
+
+/// The band floor the WEEK trend forces (`banshee-nio`): full within
+/// `alert_secs` at the fitted week rate is at least Yellow. Never Red — a
+/// two-week horizon is a standing debt to schedule, not an emergency; red
+/// stays owned by bytes and the ten-minute projection. Judged per-sample
+/// against each sample's own free bytes through the same confirm machine as
+/// the projection floor, so a fresh reading cannot flip it alone.
+pub(super) fn trend_floor(
+    points: &[(DateTime<Utc>, f64)],
+    week_slope: Option<f64>,
+    alert_secs: f64,
+    confirm: usize,
+) -> (Band, usize) {
+    let Some(slope) = week_slope else {
+        return (Band::Green, 0);
+    };
+    let floor_at = |i: usize| -> Band {
+        match projected_full_secs(points[i].1, Some(slope)) {
+            Some(p) if p <= alert_secs => Band::Yellow,
+            _ => Band::Green,
+        }
+    };
+    confirmed_floor(points.len(), floor_at, confirm)
+}
+
+/// The week-trend clause of the disk detail line: what was lost, over how
+/// long, and where it lands — "down 92.0 GB over 7d0h, full in ~7d18h at this
+/// rate". Composed here so every surface says the same words (ADR-0005).
+pub(super) fn trend_note(
+    points: &[(DateTime<Utc>, f64)],
+    slope: f64,
+    free_bytes: f64,
+) -> Option<String> {
+    let (first, last) = (points.first()?, points.last()?);
+    let span = (last.0 - first.0).num_seconds().max(0) as f64;
+    let full_in = projected_full_secs(free_bytes, Some(slope))?;
+    Some(format!(
+        ", down {} over {}, full in ~{} at this rate",
+        super::fmt_bytes(-slope * span),
+        super::fmt_duration(span),
+        super::fmt_duration(full_in)
+    ))
 }
 
 #[cfg(test)]

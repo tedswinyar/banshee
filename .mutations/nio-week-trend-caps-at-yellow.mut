@@ -1,0 +1,10 @@
+# The week-trend floor caps at YELLOW (banshee-nio): a two-week horizon is a
+# standing debt to schedule, not an emergency, and red stays owned by bytes and
+# the ten-minute projection. Promoting the arm to Red hands the crisis band to
+# a forecast that reverses over days — banshee-wql's complaint at week scale.
+file: rust/banshee-core/src/pressure/disk.rs
+test: the_week_trend_caps_at_yellow_and_never_touches_severity
+---OLD---
+            Some(p) if p <= alert_secs => Band::Yellow,
+---NEW---
+            Some(p) if p <= alert_secs => Band::Red,

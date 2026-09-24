@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::census::Census;
 use crate::rates::counter_rates;
-use crate::sample::Sample;
+use crate::sample::{Rollup, Sample};
 use band::{Band, replay};
 use config::{ALL_DIMENSIONS, Dimension, PressureConfig, Source, Unit};
 use episode::{AlertEpisode, EpisodeState, Notification, RecentActivity, reconcile_episodes};
@@ -466,12 +466,16 @@ impl Series {
 
 /// Evaluate the model against stored history.
 ///
-/// `samples` and `censuses` must be OLDEST FIRST. Both may be short or empty; a
-/// thin history produces `Checking`, never a confident `Quiet`.
+/// `samples`, `censuses` and `rollups` must be OLDEST FIRST. All may be short
+/// or empty; a thin history produces `Checking`, never a confident `Quiet`.
+/// `rollups` is the week tier — the disk trend's whole input (`banshee-nio`);
+/// empty means no week trend, which is exactly right for the callers that
+/// compare short windows (deltas) rather than watch the machine.
 pub fn evaluate(
     now: DateTime<Utc>,
     samples: &[Sample],
     censuses: &[Census],
+    rollups: &[Rollup],
     config: &PressureConfig,
 ) -> Pressure {
     let window: &[Sample] = if samples.len() > config.window_samples {
@@ -521,6 +525,7 @@ pub fn evaluate(
         // regardless of bytes. Everything downstream — `decide`'s catastrophic
         // ceiling, `dominant_source`, the glyph, headroom's reason line —
         // follows from the severity and band with no disk-specific rules.
+        let mut disk_note: Option<String> = None;
         let (band, held_samples, severity, trend) = if d == Dimension::Disk {
             // The slope and the projection floor stay on the ten-minute window
             // even though the byte band above replays the longer history: one
@@ -543,11 +548,47 @@ pub fn evaluate(
                 config.disk_projection_yellow_secs,
                 spec.confirm_samples,
             );
-            if forced > outcome.band {
-                (forced, forced_held, severity, slope)
+            let (mut band, mut held) = if forced > outcome.band {
+                (forced, forced_held)
             } else {
-                (outcome.band, outcome.held_samples, severity, slope)
+                (outcome.band, outcome.held_samples)
+            };
+
+            // The THIRD horizon (`banshee-nio`): a projection over the week
+            // tier, because the ten-minute slope can only ever fire during a
+            // burst — 90 GB lost over 7 days is ~150 KB/s, which against
+            // 100 GB free projects "full in a week" and yet could never move
+            // the band above. Its own window (the rollups), its own trigger
+            // (full within `disk_trend_alert_secs`), its own ceiling (Yellow,
+            // never Red, never severity): three horizons, deliberately, not
+            // one window retuned (`banshee-wql`).
+            let mount = history
+                .last()
+                .and_then(|s| s.volumes.first())
+                .map(|v| v.mount_point.clone());
+            let week = disk::week_points(rollups, mount.as_deref().unwrap_or_default());
+            let week_slope = disk::week_slope_per_sec(&week, config.disk_trend_min_span_secs);
+            let (trend_band, trend_held) = disk::trend_floor(
+                &series.points,
+                week_slope,
+                config.disk_trend_alert_secs,
+                spec.confirm_samples,
+            );
+            if trend_band > band {
+                band = trend_band;
+                held = trend_held;
+            } else if trend_band == band && trend_held > held {
+                // Same band from two causes: the band has stood as long as the
+                // LONGEST-standing cause, and the standing trend is what lets a
+                // slow drain meet the yellow episode delay (`banshee-dok`).
+                held = trend_held;
             }
+            if trend_band == Band::Yellow
+                && let Some(s) = week_slope
+            {
+                disk_note = disk::trend_note(&week, s, outcome.value);
+            }
+            (band, held, severity, slope)
         } else {
             (
                 outcome.band,
@@ -557,6 +598,10 @@ pub fn evaluate(
             )
         };
         let held = series.held(held_samples);
+        let mut detail = detail_for(d, outcome.value, trend, cpu_demand, swap_total, config);
+        if let Some(note) = disk_note {
+            detail.push_str(&note);
+        }
 
         contributions.push(Contribution {
             dimension: d,
@@ -575,7 +620,7 @@ pub fn evaluate(
             held_secs: held.secs,
             observation_gap_secs: held.gap_secs,
             trend_per_sec: trend,
-            detail: detail_for(d, outcome.value, trend, cpu_demand, swap_total, config),
+            detail,
             advisory: d.is_advisory(),
             pending: outcome.pending,
             recovering: false,
@@ -644,10 +689,11 @@ pub fn assess(
     now: DateTime<Utc>,
     samples: &[Sample],
     censuses: &[Census],
+    rollups: &[Rollup],
     recent_episodes: &[AlertEpisode],
     config: &PressureConfig,
 ) -> Assessment {
-    let mut pressure = evaluate(now, samples, censuses, config);
+    let mut pressure = evaluate(now, samples, censuses, rollups, config);
     let open: Vec<AlertEpisode> = recent_episodes
         .iter()
         .filter(|e| e.is_open())

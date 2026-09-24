@@ -457,8 +457,14 @@ fn evaluate_now(
     // apply hysteresis over; more would only slow the read.
     let censuses = st.recent_censuses(3)?;
     let recent = st.episodes_since(now - chrono::Duration::hours(24))?;
+    // The week tier, for the disk trend (`banshee-nio`): an indexed read of a
+    // few thousand buckets, milliseconds against the 15s cadence.
+    let rollups = st.rollups_between(
+        now - chrono::Duration::seconds(config.disk_trend_window_secs as i64),
+        now,
+    )?;
 
-    let assessment = assess(now, &samples, &censuses, &recent, config);
+    let assessment = assess(now, &samples, &censuses, &rollups, &recent, config);
     for e in &assessment.episodes {
         st.upsert_episode(e)?;
     }

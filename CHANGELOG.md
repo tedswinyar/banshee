@@ -6,6 +6,19 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **A second, week-scale disk projection** (banshee-nio). Time-to-full read a
+  ten-minute window, so it could only ever fire during a burst: 90 GB lost over
+  7 days (~150 KB/s) projected "full in a week" and produced nothing — never
+  yellow, never an episode, no banner. The disk dimension now also fits a least-squares
+  trend over 7 days of retained rollups (`volumes[].availAvg`) and forces at least
+  yellow when that rate forecasts full within 14 days, with the story in the detail
+  line ("down 89.9 GB over 7d0h, full in ~7d18h at this rate"). Three horizons,
+  deliberately separate (banshee-wql): the burst drop, the ten-minute projection,
+  and the week trend — the week trend caps at yellow, never touches severity, and
+  is trusted only once the rollups span at least half its window.
+
 ### Fixed
 
 - **A sustained disk yellow now opens an episode** (banshee-dok). The daemon opened

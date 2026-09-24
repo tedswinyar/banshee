@@ -1,6 +1,6 @@
 use super::*;
 use crate::census::{HelperRollup, MonitorTotal, OrphanCensus};
-use crate::sample::VolumeSample;
+use crate::sample::{Rollup, VolumeRollup, VolumeSample};
 use crate::sys::DATA_VOLUME;
 use uuid::Uuid;
 
@@ -168,7 +168,7 @@ fn cfg() -> PressureConfig {
 /// an empty history and the menu bar claims calm before it has looked.
 #[test]
 fn an_empty_history_is_checking() {
-    let p = evaluate(at(0), &[], &[], &cfg());
+    let p = evaluate(at(0), &[], &[], &[], &cfg());
     assert_eq!(p.level, Level::Checking);
     assert_eq!(p.glyph, "🫧");
     assert!(p.findings.is_empty(), "no findings without data");
@@ -180,14 +180,14 @@ fn an_empty_history_is_checking() {
 /// check and this reports Quiet off a single reading.
 #[test]
 fn a_single_sample_is_still_checking() {
-    let p = evaluate(at(15), &healthy(1, 15), &[], &cfg());
+    let p = evaluate(at(15), &healthy(1, 15), &[], &[], &cfg());
     assert_eq!(p.level, Level::Checking);
     assert!(p.findings.is_empty());
 }
 
 #[test]
 fn two_healthy_samples_are_enough_for_a_verdict() {
-    let p = evaluate(at(15), &healthy(2, 15), &[], &cfg());
+    let p = evaluate(at(15), &healthy(2, 15), &[], &[], &cfg());
     assert_eq!(p.level, Level::Quiet);
     assert_eq!(p.glyph, "😴");
     assert!(p.findings.is_empty());
@@ -197,7 +197,7 @@ fn two_healthy_samples_are_enough_for_a_verdict() {
 /// need one. A daemon started 20 seconds ago has samples but no census yet.
 #[test]
 fn samples_without_a_census_still_produce_a_verdict() {
-    let p = evaluate(at(60), &healthy(5, 60), &[], &cfg());
+    let p = evaluate(at(60), &healthy(5, 60), &[], &[], &cfg());
     assert_ne!(p.level, Level::Checking);
     assert!(p.reading(Dimension::Cpu).is_some());
     assert!(
@@ -215,7 +215,7 @@ fn the_window_is_trimmed_to_the_configured_length() {
         window_samples: 5,
         ..cfg()
     };
-    let p = evaluate(at(1500), &healthy(100, 1500), &[], &c);
+    let p = evaluate(at(1500), &healthy(100, 1500), &[], &[], &c);
     assert_eq!(p.sample_count, 5);
 }
 
@@ -223,7 +223,13 @@ fn the_window_is_trimmed_to_the_configured_length() {
 
 #[test]
 fn a_healthy_machine_reports_every_dimension_green() {
-    let p = evaluate(at(300), &healthy(21, 300), &[healthy_census(300)], &cfg());
+    let p = evaluate(
+        at(300),
+        &healthy(21, 300),
+        &[healthy_census(300)],
+        &[],
+        &cfg(),
+    );
     assert_eq!(p.level, Level::Quiet);
     for r in &p.dimensions {
         assert_eq!(
@@ -244,7 +250,7 @@ fn a_healthy_machine_reports_every_dimension_green() {
 /// of its idleness.
 #[test]
 fn cpu_is_banded_on_measured_utilization_not_load() {
-    let p = evaluate(at(300), &healthy(21, 300), &[], &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Green);
     assert!(
@@ -273,7 +279,7 @@ fn a_deep_run_queue_over_idle_cores_is_contention_not_saturation() {
         s.load1m = 28.0;
     }
     set_cpu(&mut idle, 0.20); // cores 20% busy: idle
-    let p = evaluate(at(300), &idle, &[], &cfg());
+    let p = evaluate(at(300), &idle, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(
         cpu.band,
@@ -308,7 +314,7 @@ fn a_deep_run_queue_over_idle_cores_is_contention_not_saturation() {
         s.load1m = 28.0;
     }
     set_cpu(&mut busy, 0.98);
-    let p = evaluate(at(300), &busy, &[], &cfg());
+    let p = evaluate(at(300), &busy, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Red, "98% busy IS saturation: {cpu:?}");
     assert!(cpu.detail.contains("98% busy"), "got {:?}", cpu.detail);
@@ -335,7 +341,7 @@ fn a_deep_run_queue_over_idle_cores_is_contention_not_saturation() {
 fn a_saturated_machine_reports_cpu_red() {
     let mut samples = healthy(21, 300);
     set_cpu(&mut samples, 0.98);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Red);
     assert!(p.level >= Level::Wailing, "sustained red: {:?}", p.level);
 }
@@ -357,7 +363,7 @@ fn memory_is_banded_on_available_bytes_falling() {
         s.pages_purgeable = 5_581;
         s.pages_external = 550_000; // ~9 GB of page cache
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let mem = p.reading(Dimension::Memory).unwrap();
     assert_eq!(
         mem.band,
@@ -374,7 +380,7 @@ fn memory_is_banded_on_available_bytes_falling() {
         s.pages_purgeable = 0;
         s.pages_external = 4_000; // 66 MB of cache left
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let mem = p.reading(Dimension::Memory).unwrap();
     assert_eq!(mem.band, Band::Red);
     assert!(mem.detail.contains("MB available"), "got {:?}", mem.detail);
@@ -393,7 +399,7 @@ fn kernel_pressure_is_banded_on_the_kernels_level_not_availability() {
     for s in &mut samples {
         s.memory_pressure_level = 2; // WARN, with ~6.5 GB available
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
 
     let kernel = p.reading(Dimension::KernelPressure).unwrap();
     assert_eq!(kernel.band, Band::Yellow, "WARN is yellow: {kernel:?}");
@@ -426,7 +432,7 @@ fn a_normal_kernel_level_does_not_follow_availability_down() {
         // …but the kernel (hypothetically) still calm.
         s.memory_pressure_level = 1;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Memory).unwrap().band, Band::Red);
     assert_eq!(
         p.reading(Dimension::KernelPressure).unwrap().band,
@@ -442,7 +448,7 @@ fn a_critical_kernel_level_is_red_with_the_kernels_own_words() {
     for s in &mut samples {
         s.memory_pressure_level = 4;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let kernel = p.reading(Dimension::KernelPressure).unwrap();
     assert_eq!(kernel.band, Band::Red);
     let f = p
@@ -468,7 +474,7 @@ fn an_unrecorded_kernel_level_produces_no_reading_not_a_green_one() {
     for s in &mut samples {
         s.memory_pressure_level = 0; // every row pre-dates schema v8
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert!(
         p.reading(Dimension::KernelPressure).is_none(),
         "no recorded level, no claim: {:?}",
@@ -490,7 +496,7 @@ fn a_heavy_thermal_level_is_red_with_the_kernels_words_and_no_action() {
     for s in &mut samples {
         s.thermal_pressure_level = Some(2);
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let t = p.reading(Dimension::Thermal).unwrap();
     assert_eq!(t.band, Band::Red);
     assert_eq!(t.detail, "kernel reports heavy");
@@ -520,7 +526,7 @@ fn a_moderate_thermal_level_is_yellow_without_the_throttling_claim() {
     for s in &mut samples {
         s.thermal_pressure_level = Some(1);
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let t = p.reading(Dimension::Thermal).unwrap();
     assert_eq!(t.band, Band::Yellow);
     assert_eq!(t.detail, "kernel reports moderate");
@@ -540,7 +546,7 @@ fn a_moderate_thermal_level_is_yellow_without_the_throttling_claim() {
         f.message
     );
 
-    let calm = evaluate(at(300), &healthy(21, 300), &[], &cfg());
+    let calm = evaluate(at(300), &healthy(21, 300), &[], &[], &cfg());
     assert_eq!(calm.reading(Dimension::Thermal).unwrap().band, Band::Green);
     assert_eq!(
         calm.reading(Dimension::Thermal).unwrap().detail,
@@ -558,7 +564,7 @@ fn an_unrecorded_thermal_level_produces_no_reading_not_a_nominal_one() {
     for s in &mut samples {
         s.thermal_pressure_level = None;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert!(
         p.reading(Dimension::Thermal).is_none(),
         "no recorded level, no claim: {:?}",
@@ -583,7 +589,7 @@ fn a_throttled_idle_machine_is_a_thermal_red_not_a_cpu_red() {
         s.thermal_pressure_level = Some(3);
         s.load1m = 2.0; // 0.25 per core on 8 cores
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Thermal).unwrap().band, Band::Red);
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Green);
     assert_eq!(
@@ -607,7 +613,7 @@ fn a_saturated_cool_machine_is_a_cpu_red_not_a_thermal_red() {
         s.thermal_pressure_level = Some(0);
     }
     set_cpu(&mut samples, 0.98); // cores genuinely pegged
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Red);
     assert_eq!(p.reading(Dimension::Thermal).unwrap().band, Band::Green);
     assert_eq!(p.source, Some(Source::Cpu));
@@ -625,7 +631,7 @@ fn swap_is_banded_on_absolute_bytes_not_a_percentage() {
         // A large total, so any percentage-based rule would look calm.
         s.swap_total_bytes = 64_000_000_000;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).unwrap();
 
     // 10.66 GB is past the 4 GB yellow line and short of the 12 GB red one.
@@ -647,7 +653,7 @@ fn swap_is_banded_on_absolute_bytes_not_a_percentage() {
     for s in &mut bigger {
         s.swap_total_bytes = 256_000_000_000;
     }
-    let p2 = evaluate(at(300), &bigger, &[], &cfg());
+    let p2 = evaluate(at(300), &bigger, &[], &[], &cfg());
     assert_eq!(
         p2.reading(Dimension::Swap).unwrap().band,
         Band::Yellow,
@@ -666,7 +672,7 @@ fn thrash_is_a_rate_derived_from_consecutive_samples() {
         s.swapins = 1_000 + i as u64 * 45_000;
         s.swapouts = 2_000 + i as u64 * 94_500;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let th = p.reading(Dimension::Thrash).unwrap();
     assert_eq!(th.band, Band::Red);
     assert!(
@@ -723,7 +729,7 @@ fn thrash_bands_on_the_window_peak_so_a_storm_in_a_trough_still_reports_red() {
     rates.extend(std::iter::repeat_n(20.0, 3));
     with_thrash_rates(&mut samples, &rates);
 
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let th = p.reading(Dimension::Thrash).unwrap();
     assert_eq!(
         th.band,
@@ -762,7 +768,7 @@ fn a_single_isolated_thrash_spike_does_not_pin_the_band() {
     rates[10] = 6394.0; // one interval, mid-window
     with_thrash_rates(&mut samples, &rates);
 
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let th = p.reading(Dimension::Thrash).unwrap();
     assert_eq!(
         th.band,
@@ -847,7 +853,7 @@ fn the_thrash_peak_window_is_load_bearing() {
 
     let mut narrow = cfg();
     narrow.thrash_peak_window_secs = 20;
-    let p = evaluate(at(300), &samples, &[], &narrow);
+    let p = evaluate(at(300), &samples, &[], &[], &narrow);
     let th = p.reading(Dimension::Thrash).unwrap();
     assert!(
         (th.value - 20.0).abs() < 1.0,
@@ -868,7 +874,7 @@ fn a_reboot_inside_the_window_does_not_manufacture_a_thrash_spike() {
         s.swapins = 5;
         s.swapouts = 7;
     }
-    let p = evaluate(at(90), &samples, &[], &cfg());
+    let p = evaluate(at(90), &samples, &[], &[], &cfg());
     if let Some(th) = p.reading(Dimension::Thrash) {
         assert!(th.value >= 0.0, "no negative rate: {}", th.value);
         assert!(th.value < 1000.0, "no manufactured spike: {}", th.value);
@@ -886,7 +892,7 @@ fn disk_projects_a_time_to_full_when_space_is_falling() {
     for (i, s) in samples.iter_mut().enumerate() {
         s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 100_000_000);
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
     assert_eq!(disk.band, Band::Yellow);
     assert!(
@@ -913,7 +919,7 @@ fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
     for (i, s) in falling.iter_mut().enumerate() {
         s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 250_000_000);
     }
-    let p = evaluate(at(300), &falling, &[], &cfg());
+    let p = evaluate(at(300), &falling, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
     assert_eq!(disk.band, Band::Red, "red on time alone: {}", disk.detail);
     assert!(
@@ -929,8 +935,127 @@ fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
     for s in flat.iter_mut() {
         s.volumes[0].avail_bytes = 40_000_000_000;
     }
-    let p = evaluate(at(300), &flat, &[], &cfg());
+    let p = evaluate(at(300), &flat, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Disk).unwrap().band, Band::Yellow);
+}
+
+/// `hours` rollup buckets for the data volume, hourly, ending at `end_t`.
+/// `avail_at` gives each bucket's average free bytes from its age in hours
+/// (0 = the newest bucket).
+fn week_rollups(end_t: i64, hours: usize, avail_at: impl Fn(usize) -> u64) -> Vec<Rollup> {
+    (0..hours)
+        .map(|i| {
+            let hours_ago = hours - 1 - i;
+            Rollup {
+                bucket_start: at(end_t - (hours_ago as i64 * 3600)),
+                sample_count: 240,
+                load1m_avg: 4.0,
+                load1m_max: 4.0,
+                swap_used_avg: 1_000_000_000,
+                swap_used_max: 1_000_000_000,
+                pages_free_min: 400_000,
+                pages_compressor_max: 10_000,
+                swapins_delta: None,
+                swapouts_delta: None,
+                stale_sessions_max: None,
+                orphans_max: None,
+                monitor_percent_max: None,
+                total_procs_max: None,
+                volumes: vec![VolumeRollup {
+                    mount_point: DATA_VOLUME.into(),
+                    total_bytes: 494_384_795_648,
+                    avail_min: avail_at(hours_ago),
+                    avail_avg: avail_at(hours_ago),
+                }],
+            }
+        })
+        .collect()
+}
+
+/// The third disk horizon (`banshee-nio`): a genuine slow drain — 90 GB over
+/// 7 days, ~150 KB/s — is structurally invisible to the ten-minute slope (it
+/// projects "full in 7.8 days", which no burst window can say), so the week
+/// tier forces yellow and the detail tells the week story. The two contrasts
+/// are the co-varying-fixture rule: the same samples with a flat week stay
+/// green, so it is the ROLLUPS that forced yellow; and the same drain rate
+/// with two days of coverage stays green, so a thin series is never trusted
+/// as a week of evidence.
+#[test]
+fn a_multi_day_drain_forces_yellow_with_the_week_story() {
+    // Bytes green and flat: 100 GB free across the whole window — no burst,
+    // no short projection, nothing the ten-minute window can see.
+    let samples = healthy(21, 300);
+    // 190 GB → 100 GB over the last 7 days: ~535 MB/hour, full in ~7.8 days.
+    let draining = |hours_ago: usize| 100_000_000_000 + (hours_ago as u64) * 535_000_000;
+    let p = evaluate(
+        at(300),
+        &samples,
+        &[],
+        &week_rollups(300, 169, draining),
+        &cfg(),
+    );
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow, "detail: {}", disk.detail);
+    assert!(
+        disk.detail.contains("at this rate"),
+        "the detail must tell the week story: {}",
+        disk.detail
+    );
+
+    let p = evaluate(
+        at(300),
+        &samples,
+        &[],
+        &week_rollups(300, 169, |_| 100_000_000_000),
+        &cfg(),
+    );
+    let flat = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(flat.band, Band::Green, "a flat week forces nothing");
+    assert!(
+        !flat.detail.contains("at this rate"),
+        "and says nothing about it: {}",
+        flat.detail
+    );
+
+    let p = evaluate(
+        at(300),
+        &samples,
+        &[],
+        &week_rollups(300, 49, draining),
+        &cfg(),
+    );
+    assert_eq!(
+        p.reading(Dimension::Disk).unwrap().band,
+        Band::Green,
+        "two days of rollups is not a week of evidence"
+    );
+}
+
+/// The week horizon caps at YELLOW and stays out of severity: full-in-two-weeks
+/// is a standing debt to schedule, not an emergency, and red remains owned by
+/// bytes and the ten-minute projection (`banshee-nio`; the separation of
+/// horizons is `banshee-wql`'s warning). Even a week trend steep enough that
+/// the burst projection would call it red — ~2 days to full — forces no more
+/// than yellow and leaves severity where the bytes put it.
+#[test]
+fn the_week_trend_caps_at_yellow_and_never_touches_severity() {
+    let samples = healthy(21, 300); // 100 GB flat: green by bytes
+    // ~1.9 GB/hour fitted over the week: full in ~2.2 days at 100 GB free.
+    let steep = |hours_ago: usize| 100_000_000_000 + (hours_ago as u64) * 1_900_000_000;
+    let p = evaluate(
+        at(300),
+        &samples,
+        &[],
+        &week_rollups(300, 169, steep),
+        &cfg(),
+    );
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow, "never red on the week horizon");
+    assert!(
+        disk.severity < 1.0,
+        "severity stays owned by bytes and the burst projection: {}",
+        disk.severity
+    );
 }
 
 /// The disk series reads the FULL slice the sampler hands over, not the
@@ -948,7 +1073,7 @@ fn a_long_disk_yellow_is_held_past_the_window_and_opens_an_episode() {
     for s in samples.iter_mut() {
         s.volumes[0].avail_bytes = 45_000_000_000; // mid-yellow, flat
     }
-    let a = assess(at(3000), &samples, &[], &[], &cfg());
+    let a = assess(at(3000), &samples, &[], &[], &[], &cfg());
     let disk = a.pressure.reading(Dimension::Disk).unwrap();
     assert_eq!(disk.band, Band::Yellow);
     assert!(
@@ -970,7 +1095,7 @@ fn the_disk_finding_defers_to_disk_tool() {
     for s in &mut samples {
         s.volumes[0].avail_bytes = 3_000_000_000;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let f = p
         .findings
         .iter()
@@ -988,7 +1113,7 @@ fn stale_sessions_and_orphans_come_from_the_census() {
         census(0, 7, 45, 49.2, 78_000),
         census(300, 7, 45, 49.2, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     assert_eq!(p.reading(Dimension::Agents).unwrap().value, 7.0);
     assert_eq!(p.reading(Dimension::Orphans).unwrap().band, Band::Red);
     assert_eq!(p.reading(Dimension::Agents).unwrap().band, Band::Red);
@@ -1003,7 +1128,7 @@ fn the_worklist_puts_stale_sessions_before_orphans() {
         census(0, 7, 45, 49.2, 78_000),
         census(300, 7, 45, 49.2, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     let actions = p.actions();
     let sessions = actions.iter().position(|a| *a == Action::ReapStaleSessions);
     let orphans = actions.iter().position(|a| *a == Action::ReapOrphans);
@@ -1029,7 +1154,7 @@ fn a_cpu_red_with_nothing_to_reap_offers_no_reap_button() {
         census(0, 0, 2, 49.2, 78_000),
         census(600, 0, 2, 49.2, 78_000),
     ];
-    let p = evaluate(at(600), &samples, &censuses, &cfg());
+    let p = evaluate(at(600), &samples, &censuses, &[], &cfg());
     let cpu = p
         .findings
         .iter()
@@ -1049,7 +1174,7 @@ fn a_cpu_red_with_nothing_to_reap_offers_no_reap_button() {
         census(0, 7, 2, 49.2, 78_000),
         census(600, 7, 2, 49.2, 78_000),
     ];
-    let p = evaluate(at(600), &samples, &censuses, &cfg());
+    let p = evaluate(at(600), &samples, &censuses, &[], &cfg());
     let cpu = p
         .findings
         .iter()
@@ -1066,7 +1191,7 @@ fn a_cpu_red_with_nothing_to_reap_offers_no_reap_button() {
 fn a_young_managed_agent_reading_is_skipped_entirely() {
     // 200% of one core, but the longest-lived process is only 60s old.
     let censuses = vec![census(0, 0, 2, 200.0, 60), census(300, 0, 2, 200.0, 60)];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     assert!(
         p.reading(Dimension::ManagedAgents).is_none(),
         "a 60s-old process must not be banded at all"
@@ -1081,7 +1206,7 @@ fn a_mature_managed_agent_group_bands_on_growth() {
         census(0, 0, 2, 70.0, 78_000),
         census(300, 0, 2, 70.0, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     let corp = p.reading(Dimension::ManagedAgents).unwrap();
     assert_eq!(corp.band, Band::Yellow, "70% is past the 60% line");
     assert!(corp.detail.contains("of one core"));
@@ -1093,7 +1218,7 @@ fn a_mature_managed_agent_group_bands_on_growth() {
 #[test]
 fn todays_managed_agent_baseline_is_not_a_standing_warning() {
     let censuses = vec![healthy_census(0), healthy_census(300)];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     assert_eq!(
         p.reading(Dimension::ManagedAgents).unwrap().band,
         Band::Green
@@ -1109,7 +1234,7 @@ fn the_managed_agent_finding_recommends_no_action() {
         census(0, 0, 2, 120.0, 78_000),
         census(300, 0, 2, 120.0, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     let f = p
         .findings
         .iter()
@@ -1135,7 +1260,7 @@ fn a_brief_spike_does_not_reach_wailing() {
         *u = 0.98;
     }
     with_cpu_utils(&mut samples, &utils);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Red);
     assert_eq!(
         p.level,
@@ -1155,7 +1280,7 @@ fn a_sustained_spike_reaches_wailing() {
         *u = 0.98;
     }
     with_cpu_utils(&mut samples, &utils);
-    let p = evaluate(at(600), &samples, &[], &cfg());
+    let p = evaluate(at(600), &samples, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Red);
     assert!(cpu.held_secs >= 120, "held {}s", cpu.held_secs);
@@ -1175,7 +1300,7 @@ fn held_secs_is_derived_from_timestamps_not_an_assumed_cadence() {
         *u = 0.98;
     }
     with_cpu_utils(&mut samples, &utils);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     // Four red utilization points spanning 180 seconds.
     assert_eq!(cpu.held_secs, 180, "must reflect the real 60s spacing");
@@ -1192,7 +1317,7 @@ fn a_recovering_dimension_reports_a_pending_band() {
     let mut utils = vec![0.98; 20];
     utils[19] = 0.20;
     with_cpu_utils(&mut samples, &utils);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Red, "not yet confirmed");
     assert_eq!(cpu.pending, Some(Band::Green));
@@ -1218,7 +1343,7 @@ fn the_cpu_finding_claims_saturation_only_at_red() {
     // Yellow (88% busy): the factual sentence only.
     let mut samples = healthy(21, 300);
     set_cpu(&mut samples, 0.88);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Yellow);
     let msg = cpu_message(&p);
     assert!(msg.contains("88% busy"), "{msg}");
@@ -1229,7 +1354,7 @@ fn the_cpu_finding_claims_saturation_only_at_red() {
 
     // Red (98% busy): the saturation sentence.
     set_cpu(&mut samples, 0.98);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Red);
     assert!(cpu_message(&p).contains("saturated"));
 
@@ -1238,7 +1363,7 @@ fn the_cpu_finding_claims_saturation_only_at_red() {
     let mut utils = vec![0.98; 20];
     utils[19] = 0.20;
     with_cpu_utils(&mut samples, &utils);
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Red, "hysteresis must hold red");
     assert!(
@@ -1270,7 +1395,7 @@ fn the_august_incident_shrieks_and_names_the_right_worklist() {
         census(300, 7, 45, 49.2, 78_000),
         census(600, 7, 45, 49.2, 78_000),
     ];
-    let p = evaluate(at(600), &samples, &censuses, &cfg());
+    let p = evaluate(at(600), &samples, &censuses, &[], &cfg());
 
     assert_eq!(p.level, Level::Shrieking);
     assert_eq!(p.glyph.chars().next().unwrap().to_string(), "💀");
@@ -1298,7 +1423,7 @@ fn a_pinned_swap_at_shrieking_recommends_a_reboot_last() {
         s.swap_used_bytes = 35_600_000_000;
     }
     set_cpu(&mut samples, 0.98); // two sustained reds (cpu + swap) reach Shrieking
-    let p = evaluate(at(600), &samples, &[], &cfg());
+    let p = evaluate(at(600), &samples, &[], &[], &cfg());
     assert_eq!(p.level, Level::Shrieking);
     let reboot = p
         .findings
@@ -1323,7 +1448,7 @@ fn a_long_uptime_alone_produces_no_finding() {
     for s in &mut samples {
         s.boot_time_secs = BOOT;
     }
-    let p = evaluate(at(boot_30d_ago), &samples, &[], &cfg());
+    let p = evaluate(at(boot_30d_ago), &samples, &[], &[], &cfg());
 
     let uptime = p.reading(Dimension::Uptime).unwrap();
     assert_eq!(uptime.band, Band::Red, "30 days is past the 21-day line");
@@ -1345,7 +1470,7 @@ fn a_long_uptime_with_swap_pressure_does_produce_a_finding() {
         s.boot_time_secs = BOOT;
         s.swap_used_bytes = 5_000_000_000; // yellow
     }
-    let p = evaluate(at(boot_30d_ago), &samples, &[], &cfg());
+    let p = evaluate(at(boot_30d_ago), &samples, &[], &[], &cfg());
     assert!(
         p.findings.iter().any(|f| f.dimension == Dimension::Uptime),
         "expected an uptime finding: {:?}",
@@ -1361,8 +1486,8 @@ fn a_long_uptime_with_swap_pressure_does_produce_a_finding() {
 fn evaluation_is_deterministic_for_the_same_history() {
     let samples = healthy(21, 300);
     let censuses = vec![healthy_census(0), healthy_census(300)];
-    let a = evaluate(at(300), &samples, &censuses, &cfg());
-    let b = evaluate(at(300), &samples, &censuses, &cfg());
+    let a = evaluate(at(300), &samples, &censuses, &[], &cfg());
+    let b = evaluate(at(300), &samples, &censuses, &[], &cfg());
     assert_eq!(a, b);
 }
 
@@ -1375,7 +1500,7 @@ fn thresholds_are_configuration() {
         cpu: band::BandSpec::rising(0.05, 0.1, 0.01, 1),
         ..cfg()
     };
-    let p = evaluate(at(300), &samples, &[], &strict);
+    let p = evaluate(at(300), &samples, &[], &[], &strict);
     assert_eq!(
         p.reading(Dimension::Cpu).unwrap().band,
         Band::Red,
@@ -1389,7 +1514,7 @@ fn thresholds_are_configuration() {
 fn the_verdict_carries_the_glyph_and_a_spoken_label() {
     let mut samples = healthy(41, 600);
     set_cpu(&mut samples, 0.98);
-    let p = evaluate(at(600), &samples, &[], &cfg());
+    let p = evaluate(at(600), &samples, &[], &[], &cfg());
     assert_eq!(p.glyph, "😱🔥");
     assert_eq!(p.accessibility_label, "Banshee: Wailing, CPU");
     assert_eq!(p.level_name, "Wailing");
@@ -1401,7 +1526,13 @@ fn the_verdict_carries_the_glyph_and_a_spoken_label() {
 
 #[test]
 fn the_wire_shape_is_camel_case_at_every_depth() {
-    let p = evaluate(at(300), &healthy(21, 300), &[healthy_census(300)], &cfg());
+    let p = evaluate(
+        at(300),
+        &healthy(21, 300),
+        &[healthy_census(300)],
+        &[],
+        &cfg(),
+    );
     let v = serde_json::to_value(&p).unwrap();
 
     for key in [
@@ -1453,7 +1584,7 @@ fn the_wire_shape_is_camel_case_at_every_depth() {
 /// A green machine's `source` is an explicit null, not a missing key.
 #[test]
 fn absent_values_serialize_as_explicit_null() {
-    let p = evaluate(at(300), &healthy(21, 300), &[], &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &[], &[], &cfg());
     let v = serde_json::to_value(&p).unwrap();
     assert!(v.get("source").is_some(), "key must be present");
     assert!(v["source"].is_null(), "and explicitly null when green");
@@ -1480,7 +1611,7 @@ fn the_verdict_round_trips_through_json() {
         s.swap_used_bytes = 35_600_000_000;
     }
     set_cpu(&mut samples, 0.98); // a red CPU dimension in the round trip too
-    let p = evaluate(at(600), &samples, &[healthy_census(600)], &cfg());
+    let p = evaluate(at(600), &samples, &[healthy_census(600)], &[], &cfg());
     let json = serde_json::to_string(&p).unwrap();
     let back: Pressure = serde_json::from_str(&json).unwrap();
 
@@ -1543,7 +1674,7 @@ fn a_real_evaluation_is_coherent() {
     let a = c.collect_at(now - chrono::Duration::seconds(15)).unwrap();
     let b = c.collect_at(now).unwrap();
 
-    let p = evaluate(now, &[a, b], &[], &cfg());
+    let p = evaluate(now, &[a, b], &[], &[], &cfg());
 
     assert_ne!(p.level, Level::Checking, "two samples is enough");
     assert!(!p.glyph.is_empty());
@@ -1609,7 +1740,13 @@ fn open_episode(d: Dimension, state: episode::EpisodeState, started: i64) -> epi
 /// flag says recovering — the two surfaces disagree, which is what ADR-0005 forbids.
 #[test]
 fn a_calm_verdict_with_a_recovering_dimension_is_decorated() {
-    let mut p = evaluate(at(600), &healthy(41, 600), &[healthy_census(600)], &cfg());
+    let mut p = evaluate(
+        at(600),
+        &healthy(41, 600),
+        &[healthy_census(600)],
+        &[],
+        &cfg(),
+    );
     assert_eq!(p.level, Level::Quiet, "precondition: calm");
     assert_eq!(p.glyph, "😴");
     p.attach_episodes(
@@ -1639,7 +1776,13 @@ fn a_calm_verdict_with_a_recovering_dimension_is_decorated() {
 /// the Wailing glyph grows a third emoji.
 #[test]
 fn the_decoration_is_only_for_a_calm_face_and_only_for_recovering() {
-    let mut calm = evaluate(at(600), &healthy(41, 600), &[healthy_census(600)], &cfg());
+    let mut calm = evaluate(
+        at(600),
+        &healthy(41, 600),
+        &[healthy_census(600)],
+        &[],
+        &cfg(),
+    );
     calm.attach_episodes(
         &[open_episode(
             Dimension::Disk,
@@ -1654,7 +1797,7 @@ fn the_decoration_is_only_for_a_calm_face_and_only_for_recovering() {
 
     let mut samples = healthy(41, 600);
     set_cpu(&mut samples, 0.98);
-    let mut loud = evaluate(at(600), &samples, &[healthy_census(600)], &cfg());
+    let mut loud = evaluate(at(600), &samples, &[healthy_census(600)], &[], &cfg());
     assert!(
         loud.level >= Level::Restless,
         "precondition: {:?}",
@@ -1680,7 +1823,13 @@ fn the_decoration_is_only_for_a_calm_face_and_only_for_recovering() {
 /// yields 😴🩹🩹.
 #[test]
 fn attaching_the_record_is_idempotent() {
-    let mut p = evaluate(at(600), &healthy(41, 600), &[healthy_census(600)], &cfg());
+    let mut p = evaluate(
+        at(600),
+        &healthy(41, 600),
+        &[healthy_census(600)],
+        &[],
+        &cfg(),
+    );
     let record = [open_episode(
         Dimension::Disk,
         episode::EpisodeState::Recovering,
@@ -1709,6 +1858,7 @@ fn assess_decorates_with_the_post_reconcile_record() {
         at(600),
         &healthy(41, 600),
         &[healthy_census(600)],
+        &[],
         std::slice::from_ref(&open),
         &cfg(),
     );
@@ -1993,7 +2143,7 @@ fn findings_name_who_from_the_newest_census() {
     older.app_groups = vec![app("OlderBrowser")];
     let mut newer = healthy_census(600);
     newer.app_groups = vec![app("NewerBrowser")];
-    let p = evaluate(at(600), &samples, &[older, newer], &cfg());
+    let p = evaluate(at(600), &samples, &[older, newer], &[], &cfg());
     let swap = p
         .findings
         .iter()
@@ -2017,7 +2167,7 @@ fn a_finding_without_a_census_names_nobody() {
     for s in &mut samples {
         s.swap_used_bytes = 20_000_000_000;
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let swap = p
         .findings
         .iter()
@@ -2041,7 +2191,7 @@ fn a_yellow_finding_names_who_too() {
         proc_count: 115,
         rss_bytes: 7_710_000_000,
     }];
-    let p = evaluate(at(300), &samples, &[c], &cfg());
+    let p = evaluate(at(300), &samples, &[c], &[], &cfg());
     let swap = p
         .findings
         .iter()
@@ -2612,7 +2762,7 @@ fn key_shape(v: &serde_json::Value) -> Vec<String> {
 fn the_checking_placeholder_is_what_the_model_says_about_no_data() {
     let now = at(0);
     let placeholder = Pressure::checking(now);
-    let from_model = evaluate(now, &[], &[], &cfg());
+    let from_model = evaluate(now, &[], &[], &[], &cfg());
 
     assert_eq!(placeholder.level, from_model.level);
     assert_eq!(placeholder.level_name, from_model.level_name);
@@ -2660,7 +2810,7 @@ fn every_finding_carries_its_actions_wording() {
         census(0, 7, 45, 49.2, 78_000),
         census(300, 7, 45, 49.2, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(21, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     assert!(
         !p.findings.is_empty(),
         "precondition: something must be wrong"
@@ -2794,7 +2944,7 @@ fn a_real_verdict_keeps_the_glyph_and_the_source_in_step() {
     let now = Utc::now();
     let a = c.collect_at(now - chrono::Duration::seconds(15)).unwrap();
     let b = c.collect_at(now).unwrap();
-    let p = evaluate(now, &[a, b], &[], &cfg());
+    let p = evaluate(now, &[a, b], &[], &[], &cfg());
 
     let carries_a_suffix = p.glyph != p.level.glyph();
     assert_eq!(
@@ -2854,7 +3004,7 @@ fn a_run_does_not_count_across_a_gap_in_the_observations() {
         samples.push(s);
     }
 
-    let p = evaluate(at(1089), &samples, &[], &cfg());
+    let p = evaluate(at(1089), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(swap.band, Band::Red, "precondition: the machine reads red");
 
@@ -2887,7 +3037,7 @@ fn an_uninterrupted_red_is_still_sustained() {
         s.swap_used_bytes = 20_000_000_000;
         samples.push(s);
     }
-    let p = evaluate(at(39 * 15), &samples, &[], &cfg());
+    let p = evaluate(at(39 * 15), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(swap.band, Band::Red);
     assert_eq!(swap.held_secs, 585, "39 intervals of 15s");
@@ -2910,7 +3060,7 @@ fn a_missed_tick_is_tolerated() {
         s.swap_used_bytes = 20_000_000_000;
         samples.push(s);
     }
-    let p = evaluate(at(90), &samples, &[], &cfg());
+    let p = evaluate(at(90), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(swap.held_secs, 90, "a 30s hiccup must not break the run");
     assert_eq!(swap.observation_gap_secs, None);
@@ -2939,7 +3089,7 @@ fn the_census_tiers_normal_spacing_is_not_a_gap() {
         census(0, 7, 45, 49.2, 78_000),
         census(300, 7, 45, 49.2, 78_000),
     ];
-    let p = evaluate(at(300), &healthy(20, 300), &censuses, &cfg());
+    let p = evaluate(at(300), &healthy(20, 300), &censuses, &[], &cfg());
 
     let agents = p.reading(Dimension::Agents).expect("agents reading");
     assert_eq!(
@@ -2958,7 +3108,7 @@ fn the_census_tiers_normal_spacing_is_not_a_gap() {
     let many: Vec<Census> = (0..5)
         .map(|i| census(i * 300, 7, 45, 49.2, 78_000))
         .collect();
-    let p = evaluate(at(1200), &healthy(40, 1200), &many, &cfg());
+    let p = evaluate(at(1200), &healthy(40, 1200), &many, &[], &cfg());
     let agents = p.reading(Dimension::Agents).expect("agents reading");
     assert_eq!(agents.held_secs, 1200);
     assert_eq!(agents.observation_gap_secs, None);
@@ -2979,7 +3129,7 @@ fn two_samples_far_apart_cannot_calibrate_and_fall_back_to_config() {
         s.swap_used_bytes = 20_000_000_000;
         samples.push(s);
     }
-    let p = evaluate(at(1029), &samples, &[], &cfg());
+    let p = evaluate(at(1029), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(swap.band, Band::Red);
     assert_eq!(swap.held_secs, 0, "one observation's worth of continuity");
@@ -3005,7 +3155,7 @@ fn a_slower_than_configured_cadence_self_calibrates() {
         s.swap_used_bytes = 20_000_000_000;
         samples.push(s);
     }
-    let p = evaluate(at(300), &samples, &[], &cfg());
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(
         swap.held_secs, 300,
@@ -3044,7 +3194,7 @@ fn the_cadence_estimate_is_robust_to_the_gap_it_is_looking_for() {
         s.swap_used_bytes = 20_000_000_000;
         samples.push(s);
     }
-    let p = evaluate(at(3030), &samples, &[], &cfg());
+    let p = evaluate(at(3030), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).expect("swap reading");
     assert_eq!(
         swap.observation_gap_secs,
@@ -3094,6 +3244,7 @@ fn a_sub_second_cadence_survives_the_occasional_one_second_interval() {
         samples[11].sampled_at,
         &samples,
         &config_censuses(),
+        &[],
         &config,
     );
     let swap = p.reading(Dimension::Swap).expect("swap reading");
@@ -3133,7 +3284,7 @@ fn the_trend_is_fitted_only_over_contiguous_observations() {
         samples.push(s);
     }
 
-    let p = evaluate(at(1089), &samples, &[], &cfg());
+    let p = evaluate(at(1089), &samples, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).expect("disk reading");
     // Flat across the observed run, so no meaningful decline and no projection.
     let slope = disk

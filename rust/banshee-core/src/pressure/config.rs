@@ -378,6 +378,24 @@ pub struct PressureConfig {
     /// a level rise is; the 2026-09-15 episode said it once at minute two and
     /// then went silent.
     pub disk_projection_notify_secs: Vec<u64>,
+    /// How much ROLLUP history the disk week-trend reads (`banshee-nio`). The
+    /// third disk horizon: the ten-minute slope can only ever fire during a
+    /// burst, so a genuine slow drain — 90 GB over 7 days is ~150 KB/s — was
+    /// structurally invisible until minutes from full. Rollups retain 30 days
+    /// with per-bucket volume aggregates, so the week tier already exists;
+    /// this is how far back the second projection looks.
+    pub disk_trend_window_secs: u64,
+    /// The week-trend forecast at which disk is forced at least YELLOW: full
+    /// within this long, at the fitted week rate. Never red and never severity —
+    /// a two-week horizon is a standing debt to schedule, not an emergency, and
+    /// red stays owned by bytes and the ten-minute projection.
+    pub disk_trend_alert_secs: f64,
+    /// The minimum time the rollup points must SPAN before the week trend is
+    /// trusted at all. A fresh database with a day of rollups can produce a
+    /// perfectly-fitted slope that reverses tomorrow (`banshee-wql`'s
+    /// complaint, at week scale); below this span the trend is `None`, never a
+    /// confident guess.
+    pub disk_trend_min_span_secs: u64,
     /// Load-per-core above which the CPU detail names SCHEDULING CONTENTION when
     /// measured utilization is still below its yellow line (`banshee-87l.19`). A
     /// run queue this deep over cores that are not busy is threads queueing for a
@@ -586,6 +604,12 @@ impl Default for PressureConfig {
             disk_projection_red_secs: 3600.0,
             disk_projection_yellow_secs: 7200.0,
             disk_projection_notify_secs: vec![3600, 1800, 600],
+            // The week tier (banshee-nio), per Ted's ruling: a projection over
+            // 7 days of rollups, alerting when it forecasts full within ~14
+            // days. Trusted only once the points span half the window.
+            disk_trend_window_secs: 7 * 86_400,
+            disk_trend_alert_secs: 14.0 * 86_400.0,
+            disk_trend_min_span_secs: 7 * 86_400 / 2,
             // perf-scan's "SATURATED" heuristic, repurposed as the run-queue
             // depth that triggers the contention framing. The 2026-09-09 incident
             // sat at 3.26× per core with the cores half idle.
@@ -922,6 +946,13 @@ mod tests {
             c.episode_repeat_secs, 3600,
             "the point-event cooldown, unchanged"
         );
+        // The three disk horizons must stay three (banshee-wql): the burst
+        // window is minutes, the projection window is the model window, and the
+        // week trend reads days — and the trend must not be trusted below half
+        // its own window.
+        assert_eq!(c.disk_trend_window_secs, 7 * 86_400);
+        assert_eq!(c.disk_trend_alert_secs, 14.0 * 86_400.0);
+        assert!(c.disk_trend_min_span_secs * 2 == c.disk_trend_window_secs);
         // The slow delay must be much longer than the fast one — a disk yellow
         // that opened as fast as a red would re-import the muting problem the
         // red-only policy existed to avoid — and inside Ted's 30–60 min ruling.

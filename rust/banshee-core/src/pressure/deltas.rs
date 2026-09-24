@@ -365,9 +365,15 @@ pub fn compute(
         // sampler evaluates over, so the level is the one it would have
         // published.
         let then_censuses = last_n_before(censuses, samples[i].sampled_at, 3);
-        let then = evaluate(samples[i].sampled_at, &samples[..=i], then_censuses, config);
+        let then = evaluate(
+            samples[i].sampled_at,
+            &samples[..=i],
+            then_censuses,
+            &[],
+            config,
+        );
         let now_censuses = last_n_before(censuses, now, 3);
-        let now_p = evaluate(now, samples, now_censuses, config);
+        let now_p = evaluate(now, samples, now_censuses, &[], config);
         VerdictDelta {
             detail: verdict_words(then.level, now_p.level),
             then_level: then.level,

@@ -1,0 +1,11 @@
+# The week trend is trusted only once the rollup points span half its window
+# (banshee-nio). Dropping the span guard lets a two-day series masquerade as a
+# week of evidence: a fresh database fits a confident slope that can reverse
+# tomorrow — banshee-wql's "wrong projection is worse than none", at week scale.
+file: rust/banshee-core/src/pressure/disk.rs
+test: a_multi_day_drain_forces_yellow_with_the_week_story
+---OLD---
+    if span < min_span_secs as i64 {
+        return None;
+    }
+---NEW---
