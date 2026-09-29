@@ -297,7 +297,7 @@ for _ in $(seq 1 20); do
 done
 [ "$agreed" = "1" ] || fail "the verdict never held still long enough to compare \
 across surfaces in 20 attempts — suspect a non-deterministic field, since \
-`evaluate` is a pure function of stored history (ADR-0005)"
+'evaluate' is a pure function of stored history (ADR-0005)"
 echo "e2e: the verdict is byte-identical across HTTP, CLI and MCP"
 
 # --- 4. Wire-format spot checks on the raw HTTP view -----------------------
