@@ -140,6 +140,15 @@ re-fires swallowed inside that hour are counted on the episode and rendered as
 "+N more" rather than sent. The same env var works for a foreground
 `./scripts/start.sh` too.
 
+While the disk is low the cheap tier samples faster (banshee-y1k): every 10 s at
+disk yellow, every 5 s at disk red, back to 15 s at green. The switch follows the
+hysteresis-replayed band of each verdict, so a single flapping reading cannot
+flap the cadence, and the low-disk cadences only ever speed the tier up — a
+`BANSHEE_SAMPLE_INTERVAL_MS` below them wins. Override them in milliseconds with
+`BANSHEE_DISK_YELLOW_INTERVAL_MS` and `BANSHEE_DISK_RED_INTERVAL_MS`; same
+non-fatal rule as the other cadences. The daemon logs `sample cadence changed`
+with the old and new period at each switch.
+
 The episode lifecycle's timings are overridable in seconds for dogfooding —
 `BANSHEE_EPISODE_UP_SECS` (default 120: how long a dimension must hold red before
 an episode opens), `BANSHEE_EPISODE_DOWN_SECS` (default 600: how long it must stay

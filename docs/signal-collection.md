@@ -22,7 +22,7 @@ run when you're worried. It is a battery and I/O bug every 15 seconds.
 
 | Tier | Cadence | Cost | Contents |
 |---|---|---|---|
-| **Cheap** | 15s | sub-millisecond syscalls | load, swap, memory pressure, `vm_stat`, boot time, `statfs`, process count |
+| **Cheap** | 15s (10s at disk yellow, 5s at disk red) | sub-millisecond syscalls | load, swap, memory pressure, `vm_stat`, boot time, `statfs`, process count |
 | **Census** | 5 min | one `ps` walk + `tmux` + selective `lsof` | agent sessions, orphans, app groups, monitoring agents |
 
 `lsof` runs **only** for sessions already flagged stale by the cheap `etime`

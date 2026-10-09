@@ -15,7 +15,8 @@ use std::time::Duration;
 
 use banshee_core::census::CensusCollector;
 use banshee_core::census::exec::CommandRunner;
-use banshee_core::pressure::config::PressureConfig;
+use banshee_core::pressure::band::Band;
+use banshee_core::pressure::config::{Dimension, PressureConfig};
 use banshee_core::pressure::episode::level_changed_materially;
 use banshee_core::pressure::headroom::Headroom;
 use banshee_core::pressure::{Assessment, Pressure, assess};
@@ -49,8 +50,27 @@ pub const SWEEP_EVERY: Duration = Duration::from_secs(ROLLUP_BUCKET_SECS as u64)
 /// (ADR-0007).
 pub const CENSUS_EVERY: Duration = Duration::from_secs(banshee_core::DEFAULT_CENSUS_INTERVAL_SECS);
 
+/// Cadence of the cheap tier while the disk is YELLOW (`banshee-y1k`). The
+/// literal lives in `banshee_core` beside the base cadence, with a compile-time
+/// assertion that it is no slower.
+pub const DISK_YELLOW_INTERVAL: Duration =
+    Duration::from_secs(banshee_core::DISK_YELLOW_SAMPLE_INTERVAL_SECS);
+
+/// Cadence of the cheap tier while the disk is RED (`banshee-y1k`).
+pub const DISK_RED_INTERVAL: Duration =
+    Duration::from_secs(banshee_core::DISK_RED_SAMPLE_INTERVAL_SECS);
+
 pub struct SamplerConfig {
+    /// The cheap tier's cadence while the disk is green — the BASE cadence. The
+    /// model is told this one (`PressureConfig::sample_interval_secs`), because it
+    /// is the slowest the tier ever ticks and so the right ceiling for "was that a
+    /// missed tick or a gap"; a faster tick is never mistaken for a gap.
     pub interval: Duration,
+    /// The cheap tier's cadence while the disk is yellow (`banshee-y1k`). Applied
+    /// only when it is FASTER than `interval` — see `cadence_for`.
+    pub disk_yellow_interval: Duration,
+    /// The cheap tier's cadence while the disk is red (`banshee-y1k`). Same rule.
+    pub disk_red_interval: Duration,
     pub census_every: Duration,
     pub sweep_every: Duration,
     pub retention: Retention,
@@ -61,6 +81,8 @@ impl Default for SamplerConfig {
     fn default() -> Self {
         Self {
             interval: DEFAULT_INTERVAL,
+            disk_yellow_interval: DISK_YELLOW_INTERVAL,
+            disk_red_interval: DISK_RED_INTERVAL,
             census_every: CENSUS_EVERY,
             sweep_every: SWEEP_EVERY,
             retention: Retention::default(),
@@ -69,11 +91,47 @@ impl Default for SamplerConfig {
     }
 }
 
+/// The cheap tier's cadence for the NEXT tick, given the disk band of the verdict
+/// just published (`banshee-y1k`).
+///
+/// Green (or no disk reading yet) is the base cadence. Yellow and red take the
+/// low-disk cadences — but never SLOWER than the base: the e2e harness runs a
+/// daemon at 120 ms on whatever machine it is on, and that machine's real disk
+/// may be red, so a 5-second "fast" cadence there would slow the harness forty
+/// fold and time it out. The low-disk cadences only ever speed the tier up.
+///
+/// This changes the whole cheap tier's cadence, not disk's alone, because a
+/// sample row is the whole reading (`volume_samples` hangs off `samples`) and the
+/// tier is uniformly microseconds per tick (ADR-0007). The model reads real
+/// timestamps for `held_secs` and gaps, so denser samples never read as a hole;
+/// what does shrink is the WALL-TIME span of the 40-sample window while the disk
+/// is low — 200 s at the red cadence instead of 600 s — which makes the "full in"
+/// projection react faster, which is the point, and the swap/thrash windows
+/// shorter for the duration, which is the cost.
+pub fn cadence_for(disk_band: Option<Band>, config: &SamplerConfig) -> Duration {
+    let fast = match disk_band {
+        Some(Band::Red) => config.disk_red_interval,
+        Some(Band::Yellow) => config.disk_yellow_interval,
+        Some(Band::Green) | None => return config.interval,
+    };
+    fast.min(config.interval)
+}
+
+/// The disk band of a published verdict, `None` when disk has no reading yet.
+fn disk_band(p: &Pressure) -> Option<Band> {
+    p.dimensions
+        .iter()
+        .find(|r| r.dimension == Dimension::Disk)
+        .map(|r| r.band)
+}
+
 impl SamplerConfig {
-    /// Defaults, with the three cadences overridable in MILLISECONDS by
-    /// `BANSHEE_SAMPLE_INTERVAL_MS`, `BANSHEE_CENSUS_INTERVAL_MS` and
-    /// `BANSHEE_SWEEP_INTERVAL_MS`, and the three episode timings (ADR-0009) in
-    /// SECONDS by `BANSHEE_EPISODE_UP_SECS`, `BANSHEE_EPISODE_DOWN_SECS` and
+    /// Defaults, with the cadences overridable in MILLISECONDS by
+    /// `BANSHEE_SAMPLE_INTERVAL_MS`, `BANSHEE_CENSUS_INTERVAL_MS`,
+    /// `BANSHEE_SWEEP_INTERVAL_MS`, and the two low-disk cadences
+    /// (`banshee-y1k`) by `BANSHEE_DISK_YELLOW_INTERVAL_MS` and
+    /// `BANSHEE_DISK_RED_INTERVAL_MS`; and the three episode timings (ADR-0009)
+    /// in SECONDS by `BANSHEE_EPISODE_UP_SECS`, `BANSHEE_EPISODE_DOWN_SECS` and
     /// `BANSHEE_EPISODE_REPEAT_SECS`.
     ///
     /// **This exists for `tests/e2e/run-e2e.sh`, and it is a seam rather than a
@@ -94,6 +152,11 @@ impl SamplerConfig {
         let census_every = env_millis("BANSHEE_CENSUS_INTERVAL_MS", base.census_every);
         let mut config = Self {
             interval,
+            disk_yellow_interval: env_millis(
+                "BANSHEE_DISK_YELLOW_INTERVAL_MS",
+                base.disk_yellow_interval,
+            ),
+            disk_red_interval: env_millis("BANSHEE_DISK_RED_INTERVAL_MS", base.disk_red_interval),
             census_every,
             sweep_every: env_millis("BANSHEE_SWEEP_INTERVAL_MS", base.sweep_every),
             ..base
@@ -236,12 +299,18 @@ pub async fn run<P, R>(
         ops,
     } = deps;
 
-    let mut tick = tokio::time::interval(config.interval);
+    // The cheap tier's cadence RIGHT NOW. Starts at the base and follows the disk
+    // band of each published verdict (`cadence_for`, `banshee-y1k`).
+    let mut cadence = config.interval;
+    let mut tick = tokio::time::interval(cadence);
     // Burst would fire the missed ticks back-to-back after a laptop wakes from
     // sleep, writing a clump of samples that all carry nearly the same instant.
     // Delay just resumes the cadence, and the gap in the series is the honest
     // record of a machine that was asleep.
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    ops.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .record_cadence(cadence);
 
     let mut sweep_tick = tokio::time::interval(config.sweep_every);
     sweep_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -257,6 +326,8 @@ pub async fn run<P, R>(
 
     tracing::info!(
         interval_secs = config.interval.as_secs(),
+        disk_yellow_secs = config.disk_yellow_interval.as_secs(),
+        disk_red_secs = config.disk_red_interval.as_secs(),
         census_secs = config.census_every.as_secs(),
         sweep_secs = config.sweep_every.as_secs(),
         "sampler started"
@@ -340,6 +411,33 @@ pub async fn run<P, R>(
                                 // slow webhook never delays the next sample.
                                 if let Some(sink) = &alert_sink {
                                     deliver_escalations(sink, &notifications);
+                                }
+                                // Low disk samples faster (`banshee-y1k`). Decided
+                                // from the verdict just published, so the cadence
+                                // follows the hysteresis-replayed band — not a raw
+                                // reading that could flap it every tick. Rebuilt
+                                // only on a change: `interval_at` from now keeps
+                                // the next tick one new period away rather than
+                                // firing immediately.
+                                let want = cadence_for(disk_band(&p), &config);
+                                if want != cadence {
+                                    tracing::info!(
+                                        from_ms = cadence.as_millis(),
+                                        to_ms = want.as_millis(),
+                                        disk = ?disk_band(&p),
+                                        "sample cadence changed"
+                                    );
+                                    cadence = want;
+                                    tick = tokio::time::interval_at(
+                                        tokio::time::Instant::now() + cadence,
+                                        cadence,
+                                    );
+                                    tick.set_missed_tick_behavior(
+                                        tokio::time::MissedTickBehavior::Delay,
+                                    );
+                                    ops.lock()
+                                        .unwrap_or_else(|e| e.into_inner())
+                                        .record_cadence(cadence);
                                 }
                                 *latest.lock().unwrap_or_else(|e| e.into_inner()) = Some(p);
                                 *latest_headroom
@@ -481,7 +579,7 @@ mod tests {
     use banshee_core::census::exec::CommandRunner;
     use banshee_core::sys::{SysReading, VolumeReading};
     use banshee_core::{CoreError, Result};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     struct FakeProbe {
         /// Shared with the test, because `Collector` owns the probe privately —
@@ -490,6 +588,9 @@ mod tests {
         reads: Arc<AtomicUsize>,
         /// Fail every read once this is set, to prove the loop survives it.
         fail: bool,
+        /// The data volume's free bytes, settable mid-run so a test can walk the
+        /// disk band and watch the cadence follow it (`banshee-y1k`).
+        disk_avail: Arc<AtomicU64>,
     }
 
     impl SysProbe for FakeProbe {
@@ -530,8 +631,11 @@ mod tests {
         fn volumes(&self, _: &[String]) -> Result<Vec<VolumeReading>> {
             Ok(vec![VolumeReading {
                 mount_point: "/System/Volumes/Data".into(),
-                total_bytes: 1_000_000,
-                avail_bytes: 500_000,
+                // Large enough that every avail a test sets fits inside it; the
+                // model bands on avail alone and the drop rule's fraction arm
+                // reads the total, so a small total would make it fire spuriously.
+                total_bytes: 1_000_000_000_000,
+                avail_bytes: self.disk_avail.load(Ordering::SeqCst),
             }])
         }
     }
@@ -561,6 +665,7 @@ mod tests {
         config: SamplerConfig,
         reads: Arc<AtomicUsize>,
         census_calls: Arc<AtomicUsize>,
+        disk_avail: Arc<AtomicU64>,
         latest: Arc<Mutex<Option<Pressure>>>,
         latest_headroom: Arc<Mutex<Option<Headroom>>>,
         ops: Arc<Mutex<crate::OpsHealth>>,
@@ -588,10 +693,13 @@ mod tests {
     fn fast(fail: bool) -> Rig {
         let reads = Arc::new(AtomicUsize::new(0));
         let census_calls = Arc::new(AtomicUsize::new(0));
+        // 500 KB free: deep red, as every loop test has always had it.
+        let disk_avail = Arc::new(AtomicU64::new(500_000));
         Rig {
             collector: Arc::new(Collector::with_defaults(FakeProbe {
                 reads: Arc::clone(&reads),
                 fail,
+                disk_avail: Arc::clone(&disk_avail),
             })),
             census: Arc::new(CensusCollector::new(
                 FakeCensusRunner {
@@ -602,6 +710,11 @@ mod tests {
             store: Arc::new(Mutex::new(SampleStore::open_in_memory().unwrap())),
             config: SamplerConfig {
                 interval: Duration::from_millis(10),
+                // Slower than the base on purpose: the low-disk cadences only
+                // ever speed the tier up, so with the fake's red disk every
+                // existing loop test keeps its 10 ms tick (`cadence_for`).
+                disk_yellow_interval: DISK_YELLOW_INTERVAL,
+                disk_red_interval: DISK_RED_INTERVAL,
                 census_every: Duration::from_millis(30),
                 sweep_every: Duration::from_millis(50),
                 retention: Retention::default(),
@@ -609,6 +722,7 @@ mod tests {
             },
             reads,
             census_calls,
+            disk_avail,
             latest: Arc::new(Mutex::new(None)),
             latest_headroom: Arc::new(Mutex::new(None)),
             ops: Arc::new(Mutex::new(crate::OpsHealth::default())),
@@ -780,6 +894,137 @@ mod tests {
             env_millis("BANSHEE_TEST_UNSET_CADENCE_MS", fallback),
             fallback
         );
+    }
+
+    // ---- low-disk cadence (banshee-y1k) ---------------------------------
+
+    /// Green is the base cadence; yellow and red take the low-disk cadences; and
+    /// a low-disk cadence SLOWER than the base is ignored — the e2e harness runs
+    /// at 120 ms on a machine whose real disk may well be red, and a 5 s "fast"
+    /// cadence there would time the harness out.
+    ///
+    /// Mutation-proof: drop the `.min(config.interval)` and the 120 ms case
+    /// returns 5 s; swap the Red/Yellow arms and the two fixtures cross.
+    #[test]
+    fn the_cadence_follows_the_disk_band_and_only_ever_speeds_up() {
+        let prod = SamplerConfig::default();
+        assert_eq!(
+            cadence_for(None, &prod),
+            DEFAULT_INTERVAL,
+            "no disk reading"
+        );
+        assert_eq!(cadence_for(Some(Band::Green), &prod), DEFAULT_INTERVAL);
+        assert_eq!(cadence_for(Some(Band::Yellow), &prod), DISK_YELLOW_INTERVAL);
+        assert_eq!(cadence_for(Some(Band::Red), &prod), DISK_RED_INTERVAL);
+        assert_eq!(DISK_RED_INTERVAL, Duration::from_secs(5));
+        assert_eq!(DISK_YELLOW_INTERVAL, Duration::from_secs(10));
+
+        // The harness shape: a sub-second base with the production low-disk
+        // cadences. Red must NOT slow it down.
+        let harness = SamplerConfig {
+            interval: Duration::from_millis(120),
+            ..SamplerConfig::default()
+        };
+        assert_eq!(
+            cadence_for(Some(Band::Red), &harness),
+            Duration::from_millis(120),
+            "a fast cadence slower than the base is ignored"
+        );
+        assert_eq!(
+            cadence_for(Some(Band::Yellow), &harness),
+            Duration::from_millis(120)
+        );
+    }
+
+    /// The two low-disk cadences are overridable like the others, through
+    /// `from_env`, and garbage falls back. Under `ENV_LOCK` with the other env
+    /// tests; the keys are restored afterwards.
+    ///
+    /// Mutation-proof: hardcode `base.disk_red_interval` in `from_env` and the
+    /// 7 ms override is lost.
+    #[test]
+    fn the_low_disk_cadences_are_overridable_from_the_environment() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let keys = [
+            "BANSHEE_DISK_YELLOW_INTERVAL_MS",
+            "BANSHEE_DISK_RED_INTERVAL_MS",
+        ];
+        let saved: Vec<_> = keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+        unsafe {
+            std::env::set_var("BANSHEE_DISK_YELLOW_INTERVAL_MS", "not a number");
+            std::env::set_var("BANSHEE_DISK_RED_INTERVAL_MS", "7");
+        }
+        let config = SamplerConfig::from_env();
+        unsafe {
+            for (k, v) in saved {
+                match v {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
+        assert_eq!(config.disk_red_interval, Duration::from_millis(7));
+        assert_eq!(
+            config.disk_yellow_interval, DISK_YELLOW_INTERVAL,
+            "garbage falls back to the default"
+        );
+    }
+
+    /// The loop itself switches: a red disk puts the tier on the red cadence, a
+    /// recovering one steps it back through yellow to the base. Asserted on the
+    /// cadence the loop RECORDS (`OpsHealth::active_sample_interval`), not on
+    /// sample spacing — under load a spacing assertion flakes, and the thing under
+    /// test is the decision, which is exact.
+    ///
+    /// The walk goes UP in free space (red → yellow → green) rather than down,
+    /// because any fall at test speed is a projected "full in milliseconds" that
+    /// forces the band red by time — the byte band would then not be what moved.
+    ///
+    /// Mutation-proof, verified: pin `cadence = config.interval` in the loop's
+    /// switch and this never leaves the base. What this test CANNOT see is the
+    /// `tick = interval_at(...)` rebuild itself — the decision is pinned here and
+    /// in `cadence_for`'s test, the spacing in the samples table is the manual
+    /// acceptance on a real Mac (`banshee-y1k`).
+    #[tokio::test]
+    async fn the_loop_samples_faster_while_the_disk_is_low_and_recovers() {
+        let mut rig = fast(false);
+        rig.config.interval = Duration::from_millis(40);
+        rig.config.disk_yellow_interval = Duration::from_millis(20);
+        rig.config.disk_red_interval = Duration::from_millis(10);
+        // Start RED: 1 GB free against a 60/30 GB yellow/red line.
+        rig.disk_avail.store(1_000_000_000, Ordering::SeqCst);
+        let ops = Arc::clone(&rig.ops);
+        let disk_avail = Arc::clone(&rig.disk_avail);
+        let (tx, rx) = watch::channel(false);
+        let handle = tokio::spawn(run(rig.deps(), rig.config, rx));
+
+        let active = || {
+            ops.lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .active_sample_interval
+        };
+        assert!(
+            settle(|| active() == Some(Duration::from_millis(10))).await,
+            "red disk → red cadence, got {:?}",
+            active()
+        );
+        // Recover into yellow (45 GB free, rising: no projection, no drop).
+        disk_avail.store(45_000_000_000, Ordering::SeqCst);
+        assert!(
+            settle(|| active() == Some(Duration::from_millis(20))).await,
+            "yellow disk → yellow cadence, got {:?}",
+            active()
+        );
+        // And all the way back to green (200 GB free clears the 5 GB margin).
+        disk_avail.store(200_000_000_000, Ordering::SeqCst);
+        assert!(
+            settle(|| active() == Some(Duration::from_millis(40))).await,
+            "green disk → base cadence, got {:?}",
+            active()
+        );
+
+        tx.send(true).unwrap();
+        handle.await.unwrap();
     }
 
     #[tokio::test]

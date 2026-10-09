@@ -103,12 +103,22 @@ pub struct OpsHealth {
     /// Consecutive sweep failures since the last success. Sustained non-zero
     /// means the row count is no longer bounded — the DB is growing unswept.
     pub consecutive_sweep_failures: u64,
+    /// The cheap tier's cadence RIGHT NOW (`banshee-y1k`): the configured interval
+    /// while disk is green, the faster low-disk cadence while it is yellow or red.
+    /// `None` until the loop has ticked once. Not on the wire (yet) — it exists so
+    /// the sampler's cadence switch is observable from a test and from the log
+    /// without inferring it from sample spacing under load.
+    pub active_sample_interval: Option<std::time::Duration>,
 }
 
 impl OpsHealth {
     pub fn record_eval_ok(&mut self, now: DateTime<Utc>) {
         self.last_evaluated_at = Some(now);
         self.consecutive_eval_failures = 0;
+    }
+
+    pub fn record_cadence(&mut self, interval: std::time::Duration) {
+        self.active_sample_interval = Some(interval);
     }
 
     pub fn record_eval_failure(&mut self) {

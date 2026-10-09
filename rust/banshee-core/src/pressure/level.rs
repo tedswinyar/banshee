@@ -219,10 +219,21 @@ pub fn decide(
 
 /// Which source is winning.
 ///
-/// Worst band first, then furthest past its own threshold, then the declaration
-/// order in `ALL_DIMENSIONS`. The final tie-break is what makes this
-/// deterministic: two evaluations of identical data must name the same source, or
-/// the menu bar suffix flickers between equals.
+/// Worst band first; then a dimension that `takes_precedence` (disk, the
+/// non-recoverable one — `banshee-y1k`) over one that does not; then furthest
+/// past its own threshold; then the declaration order in `ALL_DIMENSIONS`. The
+/// final tie-break is what makes this deterministic: two evaluations of
+/// identical data must name the same source, or the menu bar suffix flickers
+/// between equals.
+///
+/// Precedence sits BETWEEN band and severity on purpose. Below band, so a yellow
+/// disk never displaces a red thrash — the band is the judgement about how bad,
+/// and a worse band is a worse problem. Above severity, because severities are
+/// not comparable across dimensions in consequence: a thrash storm at 6.77 is
+/// recoverable, a disk at 4.34 is 14 GB from the whole machine failing. This is
+/// an explicit ordering, not an inflated disk severity — severity also drives
+/// `decide`'s catastrophic ceiling and the headroom decision, and neither should
+/// move because the menu bar needs a tie broken.
 fn dominant_source(scoring: &[&Contribution]) -> Option<Source> {
     let worst = scoring
         .iter()
@@ -230,6 +241,11 @@ fn dominant_source(scoring: &[&Contribution]) -> Option<Source> {
         .max_by(|a, b| {
             a.band
                 .cmp(&b.band)
+                .then_with(|| {
+                    a.dimension
+                        .takes_precedence()
+                        .cmp(&b.dimension.takes_precedence())
+                })
                 .then_with(|| {
                     a.severity
                         .partial_cmp(&b.severity)
@@ -634,8 +650,10 @@ mod tests {
     /// result depends on iteration order.
     #[test]
     fn an_exact_tie_is_broken_deterministically_by_declaration_order() {
+        // Two dimensions WITHOUT precedence, so declaration order is the only
+        // thing left to decide it. (Disk would win on precedence, not order.)
         let a = c(Dimension::Cpu, Band::Red, 600, 2.0);
-        let b = c(Dimension::Disk, Band::Red, 600, 2.0);
+        let b = c(Dimension::Swap, Band::Red, 600, 2.0);
 
         // Same inputs, both orders — the answer must not move.
         let one = decide(&[a, b], GRACE, CATASTROPHIC, true);
@@ -644,8 +662,87 @@ mod tests {
         assert_eq!(
             one.source,
             Some(Source::Cpu),
-            "Cpu is declared before Disk in ALL_DIMENSIONS"
+            "Cpu is declared before Swap in ALL_DIMENSIONS"
         );
+    }
+
+    // ---- disk precedence (banshee-y1k) ------------------------------------
+
+    /// The 2026-09-27 incident, reconstructed: disk red at 14.4 GB free
+    /// (severity 4.34), swap thrash red at 6.77, swap red at 3.52. The glyph read
+    /// 💀🧠 and the disk emergency was only a finding. Disk must own the source
+    /// even though it is the LEAST severe of the three reds — that is what makes
+    /// this a pin on precedence and not on severity.
+    ///
+    /// Mutation-proof, verified: delete the `takes_precedence` term from
+    /// `dominant_source` and this names Memory (thrash is furthest past its line).
+    #[test]
+    fn a_red_disk_owns_the_glyph_over_a_more_severe_red_thrash() {
+        let v = decide(
+            &[
+                c(Dimension::Disk, Band::Red, 600, 4.34),
+                c(Dimension::Thrash, Band::Red, 600, 6.77),
+                c(Dimension::Swap, Band::Red, 600, 3.52),
+            ],
+            GRACE,
+            CATASTROPHIC,
+            true,
+        );
+        assert_eq!(v.source, Some(Source::Disk), "disk owns the source");
+        assert_eq!(v.glyph(), "💀💽", "and the menu bar shows the disk face");
+        // Precedence touches the SOURCE only: three sustained reds are still the
+        // top bell, exactly as before.
+        assert_eq!(v.level, Level::Shrieking);
+    }
+
+    /// At yellow, disk wins against other yellows whatever their severity —
+    /// swap at 0.90 (nearly red) still yields to disk at 0.10 (barely yellow).
+    /// Mutation-proof: compare severity before precedence and this names Memory.
+    #[test]
+    fn a_yellow_disk_wins_ties_against_a_more_severe_yellow() {
+        let v = decide(
+            &[
+                c(Dimension::Swap, Band::Yellow, 600, 0.90),
+                c(Dimension::Disk, Band::Yellow, 600, 0.10),
+            ],
+            GRACE,
+            CATASTROPHIC,
+            true,
+        );
+        assert_eq!(v.level, Level::Restless, "two yellows");
+        assert_eq!(v.source, Some(Source::Disk));
+    }
+
+    /// Precedence does NOT beat a worse band: a yellow disk under a red thrash is
+    /// still a memory story. This is the fixture that separates "disk ranks above
+    /// the others within a band" from "disk always wins" — with it, moving the
+    /// precedence term ahead of the band comparison fails here.
+    #[test]
+    fn a_yellow_disk_does_not_displace_a_red_elsewhere() {
+        let v = decide(
+            &[
+                c(Dimension::Thrash, Band::Red, 600, 1.20),
+                c(Dimension::Disk, Band::Yellow, 600, 0.95),
+            ],
+            GRACE,
+            CATASTROPHIC,
+            true,
+        );
+        assert_eq!(v.source, Some(Source::Memory), "the worse band still wins");
+    }
+
+    /// Only disk carries precedence. If the flag were ever widened by accident,
+    /// the first casualty would be this rule's whole point — one dimension that
+    /// outranks the rest because it alone cannot recover on its own.
+    #[test]
+    fn only_disk_takes_precedence() {
+        for d in ALL_DIMENSIONS.iter().copied() {
+            assert_eq!(
+                d.takes_precedence(),
+                d == Dimension::Disk,
+                "{d:?} precedence flag"
+            );
+        }
     }
 
     /// Green dimensions never become the dominant source, however many there are.

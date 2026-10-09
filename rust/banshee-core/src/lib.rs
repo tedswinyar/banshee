@@ -126,6 +126,27 @@ pub const DEFAULT_SAMPLE_INTERVAL_SECS: u64 = 15;
 /// spawns subprocesses and the cheap tier deliberately does not (ADR-0007).
 pub const DEFAULT_CENSUS_INTERVAL_SECS: u64 = 300;
 
+/// Cadence of the cheap tier while the disk is YELLOW, in seconds (`banshee-y1k`).
+///
+/// A volume that is emptying is the one signal whose value is stale the moment it
+/// is read: measured 2026-09-22, ~7 GB/hour (43.8 → 9.2 GB in five hours), and at
+/// 2026-09-27 04:10Z the sampler was starved to a 53-second gap by the same load
+/// that was eating the disk — exactly when the reading mattered most. Sampling
+/// faster while the disk is already in trouble costs microseconds (every cheap-tier
+/// signal is a syscall, ADR-0007) and makes the menu bar's figure track `df` instead
+/// of lagging it by a quarter of a minute. The sampler returns to
+/// `DEFAULT_SAMPLE_INTERVAL_SECS` the moment disk is green again.
+pub const DISK_YELLOW_SAMPLE_INTERVAL_SECS: u64 = 10;
+
+/// Cadence of the cheap tier while the disk is RED, in seconds (`banshee-y1k`).
+pub const DISK_RED_SAMPLE_INTERVAL_SECS: u64 = 5;
+
+/// The low-disk cadences only ever SPEED the tier up. A "fast" cadence slower than
+/// the base one would make a disk emergency the thing that thins the series — the
+/// opposite of the point — so the ordering is a build-time fact, not a runtime check.
+const _: () = assert!(DISK_RED_SAMPLE_INTERVAL_SECS <= DISK_YELLOW_SAMPLE_INTERVAL_SECS);
+const _: () = assert!(DISK_YELLOW_SAMPLE_INTERVAL_SECS <= DEFAULT_SAMPLE_INTERVAL_SECS);
+
 /// The census tier must stay MUCH slower than the cheap tier. The gap detector
 /// relies on the two being distinguishable: an ordinary census interval must never
 /// look like a gap in the sample series, and a hole the size of a census must never

@@ -4,6 +4,32 @@ All notable changes to Banshee. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/) as described in `VERSIONING.md`.
 
+## [Unreleased]
+
+### Fixed
+
+- **Low disk owns the menu bar glyph** (banshee-y1k). The dominant source was
+  chosen by band, then by raw severity across dimensions — and severities are not
+  comparable across dimensions in consequence, so a swap-thrash spike (common,
+  recoverable, often caused by the same agent load) outranked a disk emergency.
+  Observed 2026-09-27: disk red at 14.4 GB free read 💀🧠 and the disk emergency was
+  only a finding; again 2026-10-09, "full in 34 min" behind the memory glyph. Disk
+  now takes precedence WITHIN a band: a red disk beats any other red, a yellow disk
+  beats any other yellow, and a worse band elsewhere still wins. The rule touches
+  only the source; level and severity (which drive the catastrophic ceiling and the
+  headroom decision) are unchanged.
+
+- **The daemon samples faster while the disk is low** (banshee-y1k). The cheap
+  tier ticks every 10 s while disk is yellow and every 5 s while it is red, back to
+  15 s when it is green — decided from the hysteresis-replayed band of each verdict,
+  never from a raw reading. The whole tier speeds up, not disk alone (a sample row is
+  the whole reading), so during a low-disk period the 40-sample window spans less
+  wall time: the "full in" projection reacts faster, the swap/thrash windows are
+  shorter for the duration. The low-disk cadences only ever speed the tier up (a
+  120 ms test harness on a red-disk machine stays at 120 ms) and are overridable
+  with `BANSHEE_DISK_YELLOW_INTERVAL_MS` / `BANSHEE_DISK_RED_INTERVAL_MS`. The
+  collector also reads `statfs` before the rest of the tick.
+
 ## [0.1.8] — 2026-09-24
 
 The daemon half of the disk-alerting work: 0.1.7 taught the app to name a filling

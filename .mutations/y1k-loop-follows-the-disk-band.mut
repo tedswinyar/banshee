@@ -1,0 +1,9 @@
+# banshee-y1k: the sampler loop must actually ADOPT the cadence the disk band calls
+# for, red → yellow → green and back. Pinning the base cadence here leaves the decision
+# computed and never applied; the loop test watches the recorded cadence move.
+file: rust/banshee-api/src/sampler.rs
+test: the_loop_samples_faster_while_the_disk_is_low_and_recovers
+---OLD---
+                                    cadence = want;
+---NEW---
+                                    cadence = config.interval;

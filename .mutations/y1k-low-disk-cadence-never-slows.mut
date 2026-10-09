@@ -1,0 +1,9 @@
+# banshee-y1k: the low-disk cadences only ever SPEED the cheap tier up. The e2e harness
+# runs a daemon at 120 ms on whatever machine it is on; if that machine's disk is red, a
+# 5 s "fast" cadence would slow the harness forty-fold and time it out.
+file: rust/banshee-api/src/sampler.rs
+test: the_cadence_follows_the_disk_band_and_only_ever_speeds_up
+---OLD---
+    fast.min(config.interval)
+---NEW---
+    fast

@@ -272,6 +272,30 @@ impl Dimension {
             Dimension::Uptime | Dimension::Memory | Dimension::KernelFree | Dimension::Compressor
         )
     }
+
+    /// Whether this dimension OUTRANKS the others in its band when the menu bar
+    /// names a source (`banshee-y1k`).
+    ///
+    /// Severities are comparable across dimensions in UNITS (band-widths past the
+    /// line) but not in CONSEQUENCE. A thrash spike is common, recoverable and
+    /// often caused by the very agent load that is also eating the disk; disk is
+    /// non-recoverable by itself — it only gets worse until someone deletes
+    /// something, and at zero bytes builds, databases and agents fail at once,
+    /// swap included (the swapfiles live on the same volume). So within a band,
+    /// disk owns the glyph regardless of the other dimensions' severity: a red
+    /// disk beats any other red, a yellow disk beats any other yellow. It does
+    /// NOT beat a worse band — a yellow disk under a red thrash is still a memory
+    /// story — and the rule touches only the source, never the level or the
+    /// severity, which still drive `decide`'s ceiling and headroom.
+    ///
+    /// Observed 2026-09-27 ~04:10Z: disk red at 14.4 GB free (severity 4.34),
+    /// thrash red at 6.77. The glyph read 💀🧠; the disk emergency was only
+    /// visible as a finding. Same shape as `banshee-3sn` ("full in 22 min in
+    /// silence behind the memory glyph"), which fixed severity and banners but
+    /// not dominance.
+    pub fn takes_precedence(self) -> bool {
+        matches!(self, Dimension::Disk)
+    }
 }
 
 /// Thresholds, hysteresis and timing for the whole model.

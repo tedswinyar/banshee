@@ -44,8 +44,13 @@ impl<P: SysProbe> Collector<P> {
     /// Both are microseconds, so the skew is far below the 15s cadence and below
     /// the resolution of anything the pressure model asks.
     pub fn collect_at(&self, at: DateTime<Utc>) -> Result<Sample> {
-        let reading = self.probe.read()?;
+        // Volumes FIRST (`banshee-y1k`): the disk reading is the one whose value is
+        // stale the moment it is read on an emptying volume, so if a starved tick
+        // gets only part of its syscalls in before the next preemption, the statfs
+        // is the part that has already happened. Microseconds either way on a calm
+        // machine; the order costs nothing and is the honest priority.
         let volumes = self.probe.volumes(&self.mount_points)?;
+        let reading = self.probe.read()?;
         Ok(Sample::from_reading(at, &reading, &volumes))
     }
 

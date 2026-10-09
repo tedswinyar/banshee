@@ -1,0 +1,13 @@
+# banshee-y1k: within a band, disk outranks every other dimension when the menu bar
+# names a source, whatever their severities. The 2026-09-27 fixture (disk red 4.34,
+# thrash red 6.77, swap red 3.52) must name disk; without the precedence term the
+# severity comparison names memory and the disk emergency hides behind 💀🧠 again.
+file: rust/banshee-core/src/pressure/level.rs
+test: a_red_disk_owns_the_glyph_over_a_more_severe_red_thrash
+---OLD---
+                .then_with(|| {
+                    a.dimension
+                        .takes_precedence()
+                        .cmp(&b.dimension.takes_precedence())
+                })
+---NEW---
