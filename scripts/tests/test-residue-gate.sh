@@ -178,6 +178,41 @@ run --no-denylist
 t "a non-SBOM file under sbom/ gets no waiver (the class is narrow)" test "$RC" -eq 1
 git -C "$REPO" rm -q --cached sbom/notes.md
 
+# --- 6c. The committed copy is gated too (banshee-9sd) ------------------------------------
+# A push ships HEAD. The retired mirror once gated the working tree and committed the index,
+# so a hand repair that was never committed "passed" and the residue shipped anyway. Here:
+# commit a dirty file, repair it on disk WITHOUT committing — the gate must still refuse,
+# naming the committed copy; commit the repair and it passes.
+add "docs/relocated.md" "the runner lives at 10.0.20.30 on the LAN"
+git -C "$REPO" commit -q -m "a commit that carries residue in a file"
+printf '%s\n' "the runner lives at <build-host> on the LAN" > "$REPO/docs/relocated.md"
+run --no-denylist
+t "a committed residue survives an uncommitted hand repair: still refused" test "$RC" -eq 1
+t "…and the finding names the COMMITTED copy" bash -c "printf '%s' \"\$1\" | grep -q '^docs/relocated.md (HEAD):1: private residue'" _ "$ERR"
+t "…while the working-tree copy itself is not blamed" bash -c "! printf '%s' \"\$1\" | grep -q '^docs/relocated.md:1:'" _ "$ERR"
+t "…and the summary says both copies were gated" bash -c "printf '%s' \"\$1\" | grep -q '1 differ from HEAD (both copies gated)'" _ "$OUT"
+git -C "$REPO" add docs/relocated.md; git -C "$REPO" commit -q -m "repair committed"
+run --no-denylist
+t "once the repair is committed the tree passes" test "$RC" -eq 0
+t "…and nothing differs from HEAD any more" bash -c "! printf '%s' \"\$1\" | grep -q 'differ from HEAD'" _ "$OUT"
+# The reverse direction was never in doubt but is cheap to pin: clean HEAD, dirty disk.
+printf '%s\n' "back to 10.0.20.30" > "$REPO/docs/relocated.md"
+run --no-denylist
+t "a dirty working-tree copy over a clean HEAD is still refused (the old behaviour kept)" test "$RC" -eq 1
+git -C "$REPO" checkout -q -- docs/relocated.md
+git -C "$REPO" rm -q docs/relocated.md; git -C "$REPO" commit -q -m "drop the fixture"
+
+# --- 6d. A root that is not a repository is an ERROR, never clean (banshee-9sd) -------------
+# The mirror's worst bug: a /tmp checkout whose .git had been reaped (directory present,
+# contents gone) was treated as live, every git call failed, and the run reported success.
+HUSK="$WORK/husk"; mkdir -p "$HUSK/.git"
+HUSK_OUT="$(python3 "$GATE" --root "$HUSK" --no-denylist 2>"$WORK/husk.err")"; HUSK_RC=$?
+t "a husk (.git present, contents gone) is exit 2" test "$HUSK_RC" -eq 2
+t "…with a one-line reason naming git" grep -q '^residue-gate: ERROR: git ls-files failed' "$WORK/husk.err"
+t "…and no 'clean' verdict anywhere" bash -c "! printf '%s' \"\$1\" | grep -q clean" _ "$HUSK_OUT"
+NOTREPO="$WORK/notrepo"; mkdir -p "$NOTREPO"
+t "a plain directory is exit 2 too" bash -c "python3 \"$GATE\" --root \"$NOTREPO\" --no-denylist >/dev/null 2>&1; [ \$? -eq 2 ]"
+
 # ---------------------------------------------------------------------------
 # 7. THE REAL TREE. This is the gate. private/residue-denylist.txt is read when the
 #    notebook is present (the maintainer's machine); a fresh clone or the CI runner

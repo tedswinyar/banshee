@@ -1,0 +1,13 @@
+# banshee-9sd: a root that is not a repository — a reaped .git, a plain directory —
+# must be exit 2, never an empty file list that reads as "clean". Swallowing the git
+# failure reproduces the mirror's husk bug: every git call fails and the run reports
+# success.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+    except (subprocess.CalledProcessError, OSError) as e:
+        detail = getattr(e, "stderr", b"") or b""
+---NEW---
+    except (subprocess.CalledProcessError, OSError) as e:
+        return b""
+        detail = getattr(e, "stderr", b"") or b""

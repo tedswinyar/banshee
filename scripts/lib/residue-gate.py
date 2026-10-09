@@ -40,7 +40,18 @@ every one of these gaps, so each is now explicit):
     address, a denylisted term outside an address. The first end-to-end release
     (v0.1.5, 2026-09-20) committed these files with 311 author addresses and turned
     verify red on main; license text must not be edited to remove them;
-  * an unreadable tracked or explicitly named file is an ERROR (exit 2), never "clean".
+  * an unreadable tracked or explicitly named file is an ERROR (exit 2), never "clean";
+  * the COMMITTED blob as well as the working-tree file (banshee-9sd). A push ships
+    HEAD, not the working tree, so a gate that reads only the files on disk passes a
+    checkout where the residue was repaired by hand but never committed — and the
+    pre-push hook then waves through exactly the bytes it was asked to stop. The
+    retired public mirror had this bug in 2026-09-14 (gated the working tree, committed
+    the index); the one-repo design inherited its shape. When HEAD's copy of a tracked
+    file differs from the working tree, BOTH are scanned and a finding in the committed
+    copy is reported as `path (HEAD):line:`;
+  * a root that is not a git repository — or any git failure — is an ERROR (exit 2),
+    never an empty file list that reads as "clean" (the mirror's other 2026-09 bug: a
+    reaped /tmp checkout whose .git had been emptied was treated as live).
 
 Bead IDs are NOT gated: the tracker is private but `banshee-abc` is a harmless token,
 and stripping IDs by shape once rewrote crate names (see the gotcha list on scrubbing).
@@ -131,19 +142,59 @@ def repo_root_of_this_file():
     return os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 
+def git(root, *args, stdin=None):
+    """Run git in `root`; a failure (not a repository, a reaped .git, a bad ref) is a
+    GateError, so it is reported as exit 2 and never as an empty, clean-looking result."""
+    try:
+        return subprocess.run(
+            ["git", "-C", root, *args], check=True, capture_output=True, input=stdin
+        ).stdout
+    except (subprocess.CalledProcessError, OSError) as e:
+        detail = getattr(e, "stderr", b"") or b""
+        detail = detail.decode("utf-8", "replace").strip() or str(e)
+        raise GateError("git %s failed in %s: %s" % (args[0], root, detail))
+
+
 def tracked_files(root):
-    out = subprocess.run(
-        ["git", "-C", root, "ls-files", "-z"], check=True, capture_output=True
-    ).stdout
+    out = git(root, "ls-files", "-z")
     return [p.decode("utf-8", "surrogateescape") for p in out.split(b"\0") if p]
+
+
+def head_blobs(root, paths):
+    """{path: bytes} for every `path` that exists in HEAD, in ONE git call.
+
+    `cat-file --batch` answers each `HEAD:<path>` request with `<sha> blob <size>\n`,
+    the bytes, and a newline — or `<request> missing` when HEAD has no such path (a
+    staged-but-uncommitted file, or a repository with no commits yet). Paths are fed on
+    stdin, so a file name with a space or a quote needs no escaping."""
+    if not paths:
+        return {}
+    requests = b"".join(
+        b"HEAD:" + p.encode("utf-8", "surrogateescape") + b"\n" for p in paths
+    )
+    out = git(root, "cat-file", "--batch", stdin=requests)
+    blobs = {}
+    pos = 0
+    for path in paths:
+        nl = out.index(b"\n", pos)
+        header = out[pos:nl]
+        pos = nl + 1
+        if header.endswith(b" missing"):
+            continue
+        parts = header.split(b" ")
+        if len(parts) != 3 or parts[1] != b"blob":
+            raise GateError("unexpected cat-file header for %s: %r" % (path, header))
+        size = int(parts[2])
+        blobs[path] = out[pos : pos + size]
+        pos += size + 1  # the trailing newline after the blob
+    return blobs
 
 
 def commit_messages(root):
     """[(sha, message)] for every commit reachable from HEAD, newest first."""
-    out = subprocess.run(
-        ["git", "-C", root, "log", "--format=%H%x00%B%x00", "HEAD"],
-        check=True, capture_output=True,
-    ).stdout.decode("utf-8", "surrogateescape")
+    out = git(root, "log", "--format=%H%x00%B%x00", "HEAD").decode(
+        "utf-8", "surrogateescape"
+    )
     parts = out.split("\0")
     pairs = []
     for i in range(0, len(parts) - 1, 2):
@@ -254,13 +305,26 @@ def main(argv):
                 denylist_source = "none (%s absent — generic checks only)" % DEFAULT_DENYLIST
 
         prose = [(pat, re.compile(pat, re.IGNORECASE)) for pat in FORBIDDEN_PROSE]
+        committed = head_blobs(root, files)
         total = 0
+        n_head = 0
         for path in files:
             found = path_findings(path, prose, denylist)
-            found += content_findings(path, read_bytes(root, path), prose, denylist)
+            on_disk = read_bytes(root, path)
+            found += content_findings(path, on_disk, prose, denylist)
             for line, reason in found:
                 print("%s:%d: %s" % (path, line, reason), file=sys.stderr)
             total += len(found)
+            # The committed copy, when it differs from the working tree: a push ships
+            # HEAD, and a hand repair that was never committed repairs nothing
+            # (banshee-9sd). Scanned separately so the finding names which copy.
+            in_head = committed.get(path)
+            if in_head is not None and in_head != on_disk:
+                n_head += 1
+                found = content_findings(path, in_head, prose, denylist)
+                for line, reason in found:
+                    print("%s (HEAD):%d: %s" % (path, line, reason), file=sys.stderr)
+                total += len(found)
 
         n_msgs = 0
         if args.messages:
@@ -276,7 +340,8 @@ def main(argv):
 
     verdict = "clean" if total == 0 else "%d finding(s)" % total
     msgs = (", %d commit message(s)" % n_msgs) if args.messages else ""
-    print("residue-gate: %d file(s)%s, denylist: %s — %s" % (len(files), msgs, denylist_source, verdict))
+    head = (", %d differ from HEAD (both copies gated)" % n_head) if n_head else ""
+    print("residue-gate: %d file(s)%s%s, denylist: %s — %s" % (len(files), head, msgs, denylist_source, verdict))
     return 1 if total else 0
 
 

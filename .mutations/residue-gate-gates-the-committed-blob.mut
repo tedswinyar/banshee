@@ -1,0 +1,10 @@
+# banshee-9sd: a push ships HEAD, not the working tree. Skipping the committed copy
+# lets a hand repair that was never committed "pass" the gate while the residue ships
+# anyway — the retired mirror's 2026-09-14 bug, inherited in shape by the one-repo
+# design. The relocated.md fixture (dirty commit, clean disk) catches it.
+file: scripts/lib/residue-gate.py
+test: test-residue-gate
+---OLD---
+            if in_head is not None and in_head != on_disk:
+---NEW---
+            if False:

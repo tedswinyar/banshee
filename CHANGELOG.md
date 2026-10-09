@@ -30,6 +30,14 @@ All notable changes to Banshee. The format follows
   with `BANSHEE_DISK_YELLOW_INTERVAL_MS` / `BANSHEE_DISK_RED_INTERVAL_MS`. The
   collector also reads `statfs` before the rest of the tick.
 
+- **The residue gate reads the committed copy as well as the working tree**
+  (banshee-9sd). A push ships HEAD; the gate read only the files on disk, so a
+  residue repaired by hand but never committed passed verify and would have shipped
+  — the shape of the retired mirror's 2026-09-14 bug. When a tracked file differs
+  from HEAD both copies are gated and a committed finding is reported as
+  `path (HEAD):line`. A root that is not a repository (a reaped `.git`) is now exit
+  2 with a reason, never an empty, clean-looking run.
+
 ## [0.1.8] — 2026-09-24
 
 The daemon half of the disk-alerting work: 0.1.7 taught the app to name a filling
