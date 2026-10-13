@@ -6,6 +6,8 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+## [0.1.9] — 2026-10-12
+
 ### Added
 
 - **Runaway processes: a census class, a sprawl dimension and a reap**
