@@ -2,9 +2,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.3",
   "version": 1,
-  "serialNumber": "urn:uuid:75dfb49d-06cc-4d05-bca6-dd52f17bc6dc",
+  "serialNumber": "urn:uuid:24f94b23-e3c2-44b3-9a6c-3617064b4d28",
   "metadata": {
-    "timestamp": "2026-09-24T13:41:04.128916000Z",
+    "timestamp": "2026-10-13T04:50:19.146768000Z",
     "tools": [
       {
         "vendor": "CycloneDX",
@@ -14,30 +14,30 @@
     ],
     "component": {
       "type": "application",
-      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.8",
+      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.9",
       "name": "banshee-api",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "scope": "required",
       "licenses": [
         {
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/banshee-api@0.1.8?download_url=file://.",
+      "purl": "pkg:cargo/banshee-api@0.1.9?download_url=file://.",
       "components": [
         {
           "type": "library",
-          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.8 bin-target-0",
+          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.9 bin-target-0",
           "name": "banshee_api",
-          "version": "0.1.8",
-          "purl": "pkg:cargo/banshee-api@0.1.8?download_url=file://.#src/lib.rs"
+          "version": "0.1.9",
+          "purl": "pkg:cargo/banshee-api@0.1.9?download_url=file://.#src/lib.rs"
         },
         {
           "type": "application",
-          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.8 bin-target-1",
+          "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.9 bin-target-1",
           "name": "banshee-api",
-          "version": "0.1.8",
-          "purl": "pkg:cargo/banshee-api@0.1.8?download_url=file://.#src/main.rs"
+          "version": "0.1.9",
+          "purl": "pkg:cargo/banshee-api@0.1.9?download_url=file://.#src/main.rs"
         }
       ]
     },
@@ -51,16 +51,16 @@
   "components": [
     {
       "type": "library",
-      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
+      "bom-ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.9",
       "name": "banshee-core",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "scope": "required",
       "licenses": [
         {
           "expression": "MIT"
         }
       ],
-      "purl": "pkg:cargo/banshee-core@0.1.8?download_url=file://../banshee-core"
+      "purl": "pkg:cargo/banshee-core@0.1.9?download_url=file://../banshee-core"
     },
     {
       "type": "library",
@@ -5098,10 +5098,10 @@
   ],
   "dependencies": [
     {
-      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.8",
+      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-api#0.1.9",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#axum@0.8.9",
-        "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
+        "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.9",
         "registry+https://github.com/rust-lang/crates.io-index#chrono@0.4.45",
         "registry+https://github.com/rust-lang/crates.io-index#constant_time_eq@0.4.2",
         "registry+https://github.com/rust-lang/crates.io-index#dirs@6.0.0",
@@ -5117,7 +5117,7 @@
       ]
     },
     {
-      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.8",
+      "ref": "path+file:///Users/builder/actions-runner-banshee/_work/banshee/banshee/rust/banshee-core#0.1.9",
       "dependsOn": [
         "registry+https://github.com/rust-lang/crates.io-index#chrono@0.4.45",
         "registry+https://github.com/rust-lang/crates.io-index#dirs@6.0.0",
