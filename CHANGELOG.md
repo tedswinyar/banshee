@@ -6,6 +6,30 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A burst drop at comfortable headroom no longer colours the disk band or
+  takes the glyph** (banshee-f77). The burst-drop floor (banshee-636) forced disk
+  Yellow "whatever the absolute level", and disk precedence (banshee-y1k) then
+  handed it the menu-bar glyph within the band. Measured 2026-10-13 ~11:40 PT:
+  free fell 91.0 → 78.8 GB in an hour (two agents' worktrees and venvs plus 3 GB
+  of swapfile growth), the level read Restless with the disk face and "Disk
+  headroom 78.4 GB free, full in 1.6 days, down 12.7 GB in the last 1.0 hours",
+  while compressor was red and swap and kernel pressure were the real story. Ted's
+  ruling: 78 GB free is plenty and must not surface as the disk being the issue.
+  Both SHORT disk horizons — the burst drop and the ten-minute projection floor —
+  are now gated on absolute headroom: they move the band only at or below
+  `disk_time_axis_floor_bytes`, which defaults to the disk byte yellow line (60 GB,
+  read from the band spec so the two cannot drift apart). Above it the bytes own
+  the band, so precedence has nothing to hand over; the drop is still SAID in the
+  detail ("down 12.2 GB in the last 1.0 hours") so the information is kept. The
+  "full in …" clause is never rendered above the floor and, anywhere, only inside
+  `disk_projection_horizon_secs` (48 h, banshee-wql's research cap) — a 1.6-day
+  forecast off a ten-minute slope has nothing behind it. The 2026-09-15 shape
+  (~37 GB in 50 minutes from ~45 GB, below the floor) still goes Yellow then Red
+  exactly as before, and the week-scale trend (banshee-nio) is a separate horizon
+  and is not gated.
+
 ## [0.1.9] — 2026-10-12
 
 ### Added

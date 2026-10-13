@@ -32,6 +32,17 @@
 // flipped the least-squares slope's sign while the volume was still emptying.
 // A median of pairwise slopes ignores a minority of artifact intervals the same
 // way `Series::max_interval`'s median ignores a minority of outlier gaps.
+//
+// The two SHORT horizons — the projection floor and the burst-drop floor — are
+// gated on absolute headroom (`banshee-f77`): they may move the band only at or
+// below `disk_time_axis_floor_bytes` (default: the byte yellow line). Measured
+// 2026-10-13 ~11:40 PT: free fell 91.0 → 78.8 GB in an hour, the drop floor
+// forced Yellow, disk took the menu-bar glyph by precedence, and the detail
+// said "full in 1.6 days" — on a volume with 78 GB in hand, while memory was
+// the real story. Above the floor the rules still SPEAK (the drop note stays in
+// the detail) but the bytes own the band, and the projection is put into words
+// only inside `disk_projection_horizon_secs` (banshee-wql's 48 h). The week
+// trend (`trend_floor`, `banshee-nio`) is its own horizon and is not gated.
 
 use chrono::{DateTime, Duration, Utc};
 
@@ -270,7 +281,8 @@ fn drop_within(points: &[(DateTime<Utc>, f64)], i: usize, window_secs: u64) -> f
 /// The band floor a BURST DROP forces (`banshee-636`): free space falling by
 /// `drop_bytes` — or `drop_fraction` of the volume TOTAL, whichever is the
 /// smaller trigger — inside the rolling window is at least Yellow, whatever
-/// the absolute level. The fraction is of the TOTAL, never of current free
+/// the absolute level (below the headroom gate, `gate_on_headroom` —
+/// `banshee-f77`). The fraction is of the TOTAL, never of current free
 /// (Ted's explicit rule): a free-relative trigger goes hypersensitive exactly
 /// when free space is already small, and there the byte bands own the alert.
 /// Direction-only — no forecast, so none of `banshee-wql`'s confidence
@@ -297,6 +309,51 @@ pub(super) fn drop_floor(
         }
     };
     confirmed_floor(points.len(), floor_at, confirm)
+}
+
+/// The headroom gate on a TIME-axis floor (`banshee-f77`): the projection and
+/// burst-drop floors may move the band only at or below `floor_bytes`. Above it
+/// the floor is discarded — hold and all — and the bytes own the band, so a
+/// 12 GB hour on a volume with 78 GB in hand (2026-10-13) cannot colour the
+/// glyph. The gate reads the NEWEST free reading, not each sample's: a floor
+/// is a judgement about now, and the confirm machine has already done its work
+/// on the shape. Pass-through at the floor exactly (`<=`), so the line the
+/// bytes turn yellow at is also the line the time axis wakes at — one line,
+/// not two that must be kept in step.
+pub(super) fn gate_on_headroom(
+    floor: (Band, usize),
+    free_bytes: f64,
+    floor_bytes: f64,
+) -> (Band, usize) {
+    if free_bytes > floor_bytes {
+        (Band::Green, 0)
+    } else {
+        floor
+    }
+}
+
+/// The short projection's clause of the disk detail line — ", full in 1.9
+/// hours" — or `None` when it must not be said (`banshee-f77`): never while
+/// free is above `floor_bytes`, where the bytes own the story, and never
+/// beyond `horizon_secs` (`banshee-wql`'s 48 h cap: "full in 1.6 days" off a
+/// ten-minute slope is a forecast with nothing behind it). The projection the
+/// words are built from is `projected_full_secs`, the same number severity and
+/// the floor act on, so the clause and the band cannot disagree about whether
+/// the volume is emptying — only about whether it is worth saying.
+pub(super) fn projection_note(
+    free_bytes: f64,
+    slope: Option<f64>,
+    floor_bytes: f64,
+    horizon_secs: f64,
+) -> Option<String> {
+    if free_bytes > floor_bytes {
+        return None;
+    }
+    let secs = projected_full_secs(free_bytes, slope)?;
+    if secs > horizon_secs {
+        return None;
+    }
+    Some(format!(", full in {}", super::fmt_duration(secs)))
 }
 
 /// The burst clause of the disk detail line — "down 12.4 GB in the last 1h0m".
@@ -560,5 +617,78 @@ mod tests {
         points.push((at(20 * 15), 200e9));
         let (band, _) = forced_floor(&points, RED_SECS, YELLOW_SECS, 2);
         assert_eq!(band, Band::Red, "one good tick does not lift the floor");
+    }
+
+    // ---- the headroom gate (banshee-f77) ------------------------------------
+
+    const FLOOR: f64 = 60e9;
+    const HORIZON: f64 = 48.0 * 3600.0;
+
+    /// Above the floor a time-axis floor is discarded, hold and all; at or
+    /// below it, it passes through untouched. 78.8 GB is the 2026-10-13
+    /// reading; 45 GB is the 2026-09-15 band. Mutation-proof: flip `>` to `>=`
+    /// and the at-the-line case loses its floor; drop the gate (return `floor`)
+    /// and 78.8 GB keeps Yellow.
+    #[test]
+    fn the_headroom_gate_discards_a_floor_above_the_line_and_keeps_it_below() {
+        assert_eq!(
+            gate_on_headroom((Band::Yellow, 47), 78.8e9, FLOOR),
+            (Band::Green, 0)
+        );
+        assert_eq!(
+            gate_on_headroom((Band::Red, 9), 78.8e9, FLOOR),
+            (Band::Green, 0)
+        );
+        assert_eq!(
+            gate_on_headroom((Band::Yellow, 47), 45e9, FLOOR),
+            (Band::Yellow, 47)
+        );
+        assert_eq!(
+            gate_on_headroom((Band::Red, 9), 45e9, FLOOR),
+            (Band::Red, 9)
+        );
+        assert_eq!(
+            gate_on_headroom((Band::Yellow, 3), FLOOR, FLOOR),
+            (Band::Yellow, 3),
+            "at the line exactly the time axis is awake"
+        );
+    }
+
+    /// The "full in" clause is said only below the floor and inside the
+    /// horizon. 78.4 GB at a 1.6-day slope (today) says nothing; 45 GB at 1.9
+    /// hours (the existing yellow case) speaks; 45 GB at 3 days is beyond the
+    /// cap and is silent even though it is below the floor; the cap is
+    /// inclusive. Mutation-proof: delete the floor check and today's reading
+    /// says "full in 1.6 days"; delete the horizon check and 3 days is spoken.
+    #[test]
+    fn the_projection_is_put_into_words_only_below_the_floor_and_inside_the_horizon() {
+        let slope_for = |free: f64, secs: f64| Some(-free / secs);
+        let day = 86_400.0;
+        assert_eq!(
+            projection_note(78.4e9, slope_for(78.4e9, 1.6 * day), FLOOR, HORIZON),
+            None
+        );
+        assert_eq!(
+            projection_note(78.4e9, slope_for(78.4e9, 1800.0), FLOOR, HORIZON),
+            None
+        );
+        assert_eq!(
+            projection_note(45e9, slope_for(45e9, 1.9 * 3600.0), FLOOR, HORIZON).as_deref(),
+            Some(", full in 1.9 hours")
+        );
+        assert_eq!(
+            projection_note(45e9, slope_for(45e9, 3.0 * day), FLOOR, HORIZON),
+            None
+        );
+        assert_eq!(
+            projection_note(45e9, slope_for(45e9, HORIZON), FLOOR, HORIZON).as_deref(),
+            Some(", full in 2.0 days"),
+            "the cap is inclusive"
+        );
+        // The same guards as `projected_full_secs`: flat, filling or broken says nothing.
+        assert_eq!(projection_note(45e9, None, FLOOR, HORIZON), None);
+        assert_eq!(projection_note(45e9, Some(0.0), FLOOR, HORIZON), None);
+        assert_eq!(projection_note(45e9, Some(5e6), FLOOR, HORIZON), None);
+        assert_eq!(projection_note(f64::NAN, Some(-5e6), FLOOR, HORIZON), None);
     }
 }

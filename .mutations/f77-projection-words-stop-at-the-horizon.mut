@@ -1,0 +1,13 @@
+# banshee-f77 / banshee-wql: the "full in …" clause is put into words only inside
+# disk_projection_horizon_secs (48 h). Dropping the cap says "full in 3.0 days" off
+# ten minutes of slope — the 2026-09-05 forecast that reversed within the hour.
+file: rust/banshee-core/src/pressure/disk.rs
+test: a_projection_beyond_the_horizon_is_not_put_into_words_even_below_the_floor
+---OLD---
+    let secs = projected_full_secs(free_bytes, slope)?;
+    if secs > horizon_secs {
+        return None;
+    }
+---NEW---
+    let secs = projected_full_secs(free_bytes, slope)?;
+    let _ = horizon_secs;

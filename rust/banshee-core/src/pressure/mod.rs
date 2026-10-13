@@ -528,7 +528,9 @@ pub fn evaluate(
         // Disk is judged on TIME as well as bytes (`banshee-3sn`): its slope is
         // the flicker-proof median estimator, its severity folds in the
         // projected time-to-full, and a near projection forces the band floor
-        // regardless of bytes. Everything downstream — `decide`'s catastrophic
+        // regardless of bytes — below the headroom gate (`banshee-f77`): at or
+        // under `disk_time_axis_floor_bytes`, where the short horizons have
+        // ever mattered. Everything downstream — `decide`'s catastrophic
         // ceiling, `dominant_source`, the glyph, headroom's reason line —
         // follows from the severity and band with no disk-specific rules.
         let mut disk_note: Option<String> = None;
@@ -548,11 +550,19 @@ pub fn evaluate(
                 outcome.value,
                 projection,
             );
-            let (forced, forced_held) = disk::forced_floor(
-                tail,
-                config.disk_projection_red_secs,
-                config.disk_projection_yellow_secs,
-                spec.confirm_samples,
+            // Gated on headroom (`banshee-f77`): above the floor the bytes own
+            // the band, however steep the ten-minute slope reads. Measured
+            // 2026-10-13, 78.8 GB free: a projection off a burst of agent
+            // worktrees must not colour a volume with that much in hand.
+            let (forced, forced_held) = disk::gate_on_headroom(
+                disk::forced_floor(
+                    tail,
+                    config.disk_projection_red_secs,
+                    config.disk_projection_yellow_secs,
+                    spec.confirm_samples,
+                ),
+                outcome.value,
+                config.disk_time_axis_floor_bytes,
             );
             let (mut band, mut held) = if forced > outcome.band {
                 (forced, forced_held)
@@ -574,7 +584,11 @@ pub fn evaluate(
             // whatever the absolute level — the shape that actually precedes
             // trouble here. Measured 2026-09-22: 43.8 → 9.2 GB in five hours
             // produced only short projection blips; this rule fires early in
-            // that slide, with room still in hand to act.
+            // that slide, with room still in hand to act. The rule is judged
+            // UNGATED so the detail can still say what fell (`drop_note`
+            // below); only its effect on the BAND is gated on headroom
+            // (`banshee-f77`) — 91.0 → 78.8 GB in the hour of 2026-10-13 fired
+            // it, took the glyph, and was not the story.
             let total = newest_volume.map(|v| v.total_bytes as f64).unwrap_or(0.0);
             let (drop_band, drop_held) = disk::drop_floor(
                 &series.points,
@@ -584,11 +598,16 @@ pub fn evaluate(
                 config.disk_drop_fraction,
                 spec.confirm_samples,
             );
-            if drop_band > band {
-                band = drop_band;
-                held = drop_held;
-            } else if drop_band == band && drop_held > held {
-                held = drop_held;
+            let (drop_floor_band, drop_floor_held) = disk::gate_on_headroom(
+                (drop_band, drop_held),
+                outcome.value,
+                config.disk_time_axis_floor_bytes,
+            );
+            if drop_floor_band > band {
+                band = drop_floor_band;
+                held = drop_floor_held;
+            } else if drop_floor_band == band && drop_floor_held > held {
+                held = drop_floor_held;
             }
 
             let mount = newest_volume.map(|v| v.mount_point.clone());
@@ -611,7 +630,9 @@ pub fn evaluate(
             }
             // The detail carries every horizon that is speaking, burst first,
             // so the finding, the episode message and the app banner all say
-            // why the band is what it is (ADR-0005).
+            // why the band is what it is (ADR-0005). The burst note reads the
+            // UNGATED rule: above the headroom floor the drop is information,
+            // not a band (`banshee-f77`), and information is kept.
             let mut notes = String::new();
             if drop_band == Band::Yellow
                 && let Some(n) = disk::drop_note(&series.points, config.disk_drop_window_secs)
@@ -1137,13 +1158,17 @@ fn detail_for(
         Dimension::Disk => {
             let mut s = format!("{} free", fmt_bytes(value));
             // The projection is the sentinel's whole contribution on disk: a
-            // number, not a treemap (ADR-0003).
-            if let Some(t) = rising
-                && t < 0.0
-                && value > 0.0
-            {
-                let secs = value / -t;
-                s.push_str(&format!(", full in {}", fmt_duration(secs)));
+            // number, not a treemap (ADR-0003) — put into words only below the
+            // headroom floor and inside the horizon (`banshee-f77`): "full in
+            // 1.6 days" at 78.4 GB free (2026-10-13) was a forecast with
+            // nothing behind it, on a volume that was not the problem.
+            if let Some(n) = disk::projection_note(
+                value,
+                trend,
+                config.disk_time_axis_floor_bytes,
+                config.disk_projection_horizon_secs,
+            ) {
+                s.push_str(&n);
             }
             s
         }

@@ -427,7 +427,8 @@ pub struct PressureConfig {
     /// The rolling window of the disk burst-drop rule (`banshee-636`): free
     /// space falling by `disk_drop_bytes` — or `disk_drop_fraction` of the
     /// volume TOTAL — within this window forces at least yellow, whatever the
-    /// absolute level. Measured 2026-09-22: the data volume lost 79% of its
+    /// absolute level below `disk_time_axis_floor_bytes` (`banshee-f77`).
+    /// Measured 2026-09-22: the data volume lost 79% of its
     /// remaining headroom in five hours and produced only short projection
     /// blips; a drop rule fires early in that slide, while there is still room
     /// to act. Direction-only — no forecast, so none of `banshee-wql`'s
@@ -442,6 +443,38 @@ pub struct PressureConfig {
     /// exactly when the byte bands already own the alert. The rule fires on
     /// whichever of the two triggers is smaller for the volume.
     pub disk_drop_fraction: f64,
+    /// The free-bytes line at or BELOW which the disk TIME-axis floors — the
+    /// short projection (`disk::forced_floor`) and the burst drop
+    /// (`disk::drop_floor`) — may move the band at all (`banshee-f77`). Above
+    /// it the bytes alone own the band, and with it the glyph; the rules still
+    /// speak in the detail ("down 12.7 GB in the last 1.0 hours"), so the
+    /// information is kept, but a comfortable volume is not the story.
+    ///
+    /// Measured 2026-10-13 ~11:40 PT: free fell 91.0 → 78.8 GB in an hour (two
+    /// agents' worktrees and venvs plus 3 GB of swapfile growth), the drop rule
+    /// forced Yellow, `Dimension::takes_precedence` handed disk the menu-bar
+    /// glyph at Restless, and the detail read "full in 1.6 days" — while the
+    /// real story was memory (compressor red, swap and kernel pressure). Ted's
+    /// ruling: 78 GB free is plenty and must not surface as the disk being the
+    /// issue.
+    ///
+    /// Default: the disk byte YELLOW line, read from the `disk` spec so the two
+    /// cannot drift apart. Both floors exist for the 2026-09-15 "full in 22
+    /// min" shape, which cannot occur above that line at any burst measured so
+    /// far — 37 GB in 50 minutes starting from 60 GB would still leave hours
+    /// above the red line, and the byte bands take over long before. The
+    /// week-scale `disk::trend_floor` (`banshee-nio`) is a different horizon
+    /// and is NOT gated by this line.
+    pub disk_time_axis_floor_bytes: f64,
+    /// The longest short-window projection the disk detail puts into WORDS
+    /// (`banshee-f77`, applying the 48 h horizon cap from `banshee-wql`'s
+    /// research). "Full in 1.6 days" off a ten-minute slope is a forecast with
+    /// no confidence behind it — `banshee-wql`: a 1.5-day projection reversed
+    /// within the hour on 2026-09-05 — so beyond this horizon the clause is
+    /// omitted and the bytes stand alone. Only the words are capped: the number
+    /// still feeds severity and the floors, and the week-trend note
+    /// (`banshee-nio`) has its own horizon (`disk_trend_alert_secs`).
+    pub disk_projection_horizon_secs: f64,
     /// The minimum time the rollup points must SPAN before the week trend is
     /// trusted at all. A fresh database with a day of rollups can produce a
     /// perfectly-fitted slope that reverses tomorrow (`banshee-wql`'s
@@ -541,6 +574,9 @@ pub struct PressureConfig {
 
 impl Default for PressureConfig {
     fn default() -> Self {
+        // Bound once so `disk_time_axis_floor_bytes` can read the yellow line
+        // instead of carrying a second copy of the number (`banshee-f77`).
+        let disk = BandSpec::falling(60e9, 30e9, 5e9, 2);
         Self {
             // MEASURED utilization, a fraction 0.0..=1.0 (`banshee-87l.19`). 85%
             // busy sustained is yellow — the machine is working hard but keeping
@@ -619,7 +655,7 @@ impl Default for PressureConfig {
             // by the time disk went red, the swap that memory pressure would
             // reach for was already impossible. Ted: anything under 30 GB can be
             // eaten quickly; he is already alarmed at 25.
-            disk: BandSpec::falling(60e9, 30e9, 5e9, 2),
+            disk,
 
             // perf-scan flags >7 days. Advisory only.
             uptime: BandSpec::rising(7.0, 21.0, 1.0, 1),
@@ -677,6 +713,13 @@ impl Default for PressureConfig {
             disk_drop_window_secs: 3600,
             disk_drop_bytes: 10e9,
             disk_drop_fraction: 0.02,
+            // The headroom gate on both short horizons (banshee-f77): the byte
+            // yellow line itself. 2026-10-13, 78.8 GB free after a 12.2 GB hour,
+            // must stay green and off the glyph.
+            disk_time_axis_floor_bytes: disk.yellow,
+            // banshee-wql's research cap on how far ahead a ten-minute slope may
+            // be put into words.
+            disk_projection_horizon_secs: 48.0 * 3600.0,
             // perf-scan's "SATURATED" heuristic, repurposed as the run-queue
             // depth that triggers the contention framing. The 2026-09-09 incident
             // sat at 3.26× per core with the cores half idle.
@@ -963,6 +1006,30 @@ mod tests {
         assert_eq!(c.orphans.raw_band(45.0), Band::Red);
         // 2026-07-16: 1.1 GB free on the data volume.
         assert_eq!(c.disk.raw_band(1.1e9), Band::Red);
+    }
+
+    /// `banshee-f77`: the time-axis floor IS the disk byte yellow line, so the
+    /// two cannot drift apart silently — retuning either is a decision that
+    /// should break this and be argued for. Today's reading (78.4 GB free,
+    /// 2026-10-13) sits above it; the 2026-09-15 descent (≤ 45 GB) sat below.
+    /// The horizon cap is `banshee-wql`'s 48 h.
+    #[test]
+    fn the_disk_time_axis_floor_is_the_disk_yellow_line() {
+        let c = PressureConfig::default();
+        assert_eq!(c.disk_time_axis_floor_bytes, c.disk.yellow);
+        assert_eq!(
+            c.disk_time_axis_floor_bytes, 60e9,
+            "Ted's line, from the bead"
+        );
+        assert!(
+            78.4e9 > c.disk_time_axis_floor_bytes,
+            "2026-10-13 is above the floor"
+        );
+        assert!(
+            45e9 <= c.disk_time_axis_floor_bytes,
+            "2026-09-15 was below it"
+        );
+        assert_eq!(c.disk_projection_horizon_secs, 48.0 * 3600.0);
     }
 
     /// …and would NOT be firing on a currently-healthy machine. A monitor that is

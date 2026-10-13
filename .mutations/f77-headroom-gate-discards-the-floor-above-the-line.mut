@@ -1,0 +1,15 @@
+# banshee-f77: the short disk horizons (burst drop, ten-minute projection) move the
+# band only at or below disk_time_axis_floor_bytes. Removing the gate is the
+# 2026-10-13 bug: a 12.2 GB hour on a volume with 78.8 GB in hand forces Yellow,
+# disk precedence takes the glyph, and memory — the real story — is hidden.
+file: rust/banshee-core/src/pressure/disk.rs
+test: todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted
+---OLD---
+    if free_bytes > floor_bytes {
+        (Band::Green, 0)
+    } else {
+        floor
+    }
+---NEW---
+    let _ = (free_bytes, floor_bytes);
+    floor

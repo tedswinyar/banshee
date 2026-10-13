@@ -71,6 +71,22 @@ test — never for every PID.
   ceiling distinct from the volume's own "full in X". Swapfiles live on the
   data volume, so when the pool rivals free space the DISK finding says "N of
   the volume is swap": the memory→swap→disk→jetsam spiral, named once.
+- **Disk free bytes** on the data volume, from `statfs`. Yellow `≤ 60 GB`, red
+  `≤ 30 GB`, and three TIME horizons beside the bytes: a ten-minute Theil–Sen
+  slope whose time-to-full forces Yellow at 2 h and Red at 1 h (banshee-3sn), a
+  rolling-hour **burst drop** of ≥ 10 GB or ≥ 2% of the volume that forces Yellow
+  (banshee-636), and a seven-day rollup trend that forces Yellow when it forecasts
+  full within 14 days (banshee-nio). **The two short horizons are gated on absolute
+  headroom** (banshee-f77): they may move the band only at or below
+  `disk_time_axis_floor_bytes`, which defaults to the byte yellow line itself, read
+  from the band spec. Measured 2026-10-13: free fell 91.0 → 78.8 GB in an hour of
+  agent worktrees and swapfile growth, the drop floor forced Yellow, disk
+  precedence took the menu-bar glyph, and the detail read "full in 1.6 days" —
+  on a volume with 78 GB in hand, while memory was the real story. Above the floor
+  the bytes own the band (and so the glyph), the drop is still said in the detail
+  ("down 12.2 GB in the last 1.0 hours"), and the "full in …" clause is withheld;
+  anywhere, it is put into words only inside `disk_projection_horizon_secs` (48 h,
+  banshee-wql's research cap). The week trend is its own horizon and is not gated.
 - **Compressed GB** = `compressor_pages × page_size ÷ 1073741824`.
 - **Uptime days** = `(now − boottime) ÷ 86400`. Material only alongside high swap:
   long uptime plus pinned swap means fragmented, unreclaimable memory, and

@@ -163,6 +163,17 @@ fn cfg() -> PressureConfig {
     PressureConfig::default()
 }
 
+/// The defaults with the disk headroom gate (`banshee-f77`) switched OFF: the
+/// time-axis floors move the band at any level, as they did before the gate.
+/// For pins on the floors' own MECHANICS, which are unchanged; the gate's pins
+/// use `cfg()` and contrast against this.
+fn no_floor() -> PressureConfig {
+    PressureConfig {
+        disk_time_axis_floor_bytes: f64::INFINITY,
+        ..PressureConfig::default()
+    }
+}
+
 // ---- data sufficiency ---------------------------------------------------
 
 /// No samples is Checking, NOT Quiet. Mutation-proof: return a Quiet verdict for
@@ -1097,7 +1108,9 @@ fn dropping_samples(from_gb: f64, to_gb: f64, total_bytes: u64) -> Vec<Sample> {
 }
 
 /// The burst horizon (`banshee-636`): a dramatic drop forces yellow whatever
-/// the absolute level. 400 → 388 GB is deep green by bytes and flat across the
+/// the absolute level — with the headroom gate off (`no_floor`; under the
+/// default gate the band is owned by bytes above 60 GB, `banshee-f77`, pinned
+/// separately below). 400 → 388 GB is deep green by bytes and flat across the
 /// slope window by the time it is judged — before this rule, that shape said
 /// nothing at all. The 5 GB contrast is the co-varying-fixture rule: same
 /// timing, same flatness, under both triggers — so it is the drop's SIZE the
@@ -1109,7 +1122,7 @@ fn a_dramatic_drop_forces_yellow_whatever_the_level() {
         &dropping_samples(400.0, 388.0, 494_384_795_648),
         &[],
         &[],
-        &cfg(),
+        &no_floor(),
     );
     let disk = p.reading(Dimension::Disk).unwrap();
     assert_eq!(disk.band, Band::Yellow, "detail: {}", disk.detail);
@@ -1124,7 +1137,7 @@ fn a_dramatic_drop_forces_yellow_whatever_the_level() {
         &dropping_samples(400.0, 395.0, 494_384_795_648),
         &[],
         &[],
-        &cfg(),
+        &no_floor(),
     );
     let disk = p.reading(Dimension::Disk).unwrap();
     assert_eq!(disk.band, Band::Green, "5 GB is under both triggers");
@@ -1138,7 +1151,9 @@ fn a_dramatic_drop_forces_yellow_whatever_the_level() {
 /// 65 GB free is 6% of FREE (a free-relative rule fires) but 0.8% of the
 /// 494 GB volume (this rule must not); 3 GB on a 100 GB volume is under the
 /// flat 10 GB trigger (a bytes-only rule stays silent) but 3% of the TOTAL
-/// (the fraction trigger must fire).
+/// (the fraction trigger must fire). Both fixtures sit above the default
+/// headroom floor, so the gate is off here (`no_floor`): this pins the trigger
+/// arithmetic, not the gate (`banshee-f77`).
 #[test]
 fn the_drop_trigger_is_judged_against_the_volume_total() {
     let p = evaluate(
@@ -1146,7 +1161,7 @@ fn the_drop_trigger_is_judged_against_the_volume_total() {
         &dropping_samples(65.0, 61.0, 494_384_795_648),
         &[],
         &[],
-        &cfg(),
+        &no_floor(),
     );
     assert_eq!(
         p.reading(Dimension::Disk).unwrap().band,
@@ -1159,13 +1174,163 @@ fn the_drop_trigger_is_judged_against_the_volume_total() {
         &dropping_samples(90.0, 87.0, 100_000_000_000),
         &[],
         &[],
-        &cfg(),
+        &no_floor(),
     );
     assert_eq!(
         p.reading(Dimension::Disk).unwrap().band,
         Band::Yellow,
         "2% of a small volume fires below the flat 10 GB trigger"
     );
+}
+
+/// The hour of 2026-10-13 ~11:40 PT, replayed at the daemon's 15 s cadence
+/// (`banshee-f77`): free fell 91.0 → 78.8 GB in 3600 s on a 460 GB volume —
+/// two agents' worktrees plus swapfile growth — while memory was the real
+/// story (swap yellow and kernel WARN here stand in for compressor/swap/kernel;
+/// two yellows is Restless, the level that names a source). The drop rule
+/// fires (12.2 GB ≥ min(10 GB, 2% of 460 GB)), and before the headroom gate it
+/// forced Yellow, `takes_precedence` handed disk the glyph, and the detail said
+/// "full in 1.6 days". Ted's ruling: 78 GB free is plenty. The band must stay
+/// Green, the source must be memory, the glyph must not be the disk face — and
+/// the drop must still be SAID in the detail, while "full in" is not. The
+/// `no_floor` contrast is the co-varying-fixture rule: the same hour with the
+/// gate off goes Yellow and speaks the projection, so it is the gate that held
+/// the band, not the fixture. Mutation-proof: drop `gate_on_headroom` from the
+/// drop arm of `evaluate` and this reads Yellow with a disk source.
+#[test]
+fn todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted() {
+    let n = 241; // one hour at 15 s
+    let mut samples = healthy(n, 3600);
+    for (i, s) in samples.iter_mut().enumerate() {
+        let avail = 91.0e9 - 12.2e9 * (i as f64 / (n - 1) as f64);
+        s.volumes[0].avail_bytes = avail as u64;
+        s.volumes[0].total_bytes = 460_000_000_000;
+        s.swap_used_bytes = 6_000_000_000; // swap yellow: the memory story
+        s.memory_pressure_level = 2; // the kernel says WARN: yellow
+    }
+    let p = evaluate(at(3600), &samples, &[], &[], &cfg());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(
+        disk.band,
+        Band::Green,
+        "78 GB free is plenty: {}",
+        disk.detail
+    );
+    assert!(
+        disk.detail.contains("down 12.2 GB in the last 1.0 hours"),
+        "the drop is still said: {}",
+        disk.detail
+    );
+    assert!(
+        !disk.detail.contains("full in"),
+        "no forecast above the floor: {}",
+        disk.detail
+    );
+    assert!(
+        disk.trend_per_sec.is_some_and(|t| t < 0.0),
+        "the slope itself is still measured: {:?}",
+        disk.trend_per_sec
+    );
+    assert_eq!(p.reading(Dimension::Swap).unwrap().band, Band::Yellow);
+    assert_eq!(
+        p.reading(Dimension::KernelPressure).unwrap().band,
+        Band::Yellow
+    );
+    assert_eq!(
+        p.level,
+        Level::Restless,
+        "two yellows, as on the screenshot"
+    );
+    assert_eq!(p.source, Some(Source::Memory), "memory is the story");
+    assert!(
+        !p.glyph.contains("💽"),
+        "and the menu bar is not the disk face: {}",
+        p.glyph
+    );
+    assert!(
+        p.findings.iter().all(|f| f.dimension != Dimension::Disk),
+        "a green disk is not a finding"
+    );
+
+    // The gate is what held it: the same hour with the floor off is the
+    // pre-f77 behaviour — Yellow by burst, disk owns the yellow glyph, and the
+    // projection is spoken.
+    let p = evaluate(at(3600), &samples, &[], &[], &no_floor());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow, "{}", disk.detail);
+    assert!(disk.detail.contains("full in"), "{}", disk.detail);
+    assert_eq!(p.source, Some(Source::Disk), "the pre-f77 glyph owner");
+}
+
+/// A projection beyond the horizon is not put into words even BELOW the floor
+/// (`banshee-f77`, applying `banshee-wql`'s 48 h cap): 45 GB — yellow by
+/// bytes — draining at ~174 KB/s is "full in 3.0 days", a forecast off ten
+/// minutes of slope with nothing behind it. The band and the slope are
+/// untouched; only the clause is withheld. Contrast: the same fixture with the
+/// horizon lifted speaks it, and `disk_projects_a_time_to_full_when_space_is_falling`
+/// (1.9 hours, inside the cap) still speaks. Mutation-proof: drop the horizon
+/// check in `projection_note` and this says "full in 3.0 days".
+#[test]
+fn a_projection_beyond_the_horizon_is_not_put_into_words_even_below_the_floor() {
+    let mut samples = healthy(21, 300);
+    for (i, s) in samples.iter_mut().enumerate() {
+        // 45 GB over 3 days is 173,611 B/s: 2,604,167 per 15 s tick.
+        s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 2_604_167);
+    }
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Yellow, "yellow by bytes, below the floor");
+    assert!(
+        disk.trend_per_sec.is_some_and(|t| t < 0.0),
+        "the slope is still measured: {:?}",
+        disk.trend_per_sec
+    );
+    assert!(
+        !disk.detail.contains("full in"),
+        "3 days is beyond the 48 h horizon: {}",
+        disk.detail
+    );
+
+    let unbounded = PressureConfig {
+        disk_projection_horizon_secs: f64::INFINITY,
+        ..PressureConfig::default()
+    };
+    let p = evaluate(at(300), &samples, &[], &[], &unbounded);
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert!(
+        disk.detail.contains("full in 3.0 days"),
+        "it is the horizon that withheld it: {}",
+        disk.detail
+    );
+}
+
+/// The PROJECTION floor is gated the same way as the drop (`banshee-f77`): a
+/// volume with 85 GB in hand emptying at 1 GB/min — "full in 1.4 hours", which
+/// `forced_floor` alone calls Yellow — stays Green and says nothing about
+/// filling until the bytes cross the floor, where
+/// `a_fast_emptying_disk_is_red_though_its_bytes_say_yellow` takes over. The
+/// `no_floor` contrast shows the floor itself still works. Mutation-proof: drop
+/// `gate_on_headroom` from the forced arm of `evaluate` and this reads Yellow.
+#[test]
+fn a_fast_projection_above_the_floor_moves_nothing_until_the_bytes_do() {
+    let mut samples = healthy(21, 300);
+    for (i, s) in samples.iter_mut().enumerate() {
+        s.volumes[0].avail_bytes = 90_000_000_000 - (i as u64 * 250_000_000);
+    }
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Green, "{}", disk.detail);
+    assert!(!disk.detail.contains("full in"), "{}", disk.detail);
+    assert_eq!(p.source, None, "nothing is the story");
+
+    let p = evaluate(at(300), &samples, &[], &[], &no_floor());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(
+        disk.band,
+        Band::Yellow,
+        "the floor still works when ungated"
+    );
+    assert!(disk.detail.contains("full in"), "{}", disk.detail);
 }
 
 /// The third disk horizon (`banshee-nio`): a genuine slow drain — 90 GB over
