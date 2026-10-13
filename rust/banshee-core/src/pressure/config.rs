@@ -79,6 +79,9 @@ pub enum Dimension {
     Agents,
     /// Agent helper processes orphaned at `ppid == 1`.
     Orphans,
+    /// Unsupervised processes burning a core: orphaned, or no terminal and no
+    /// children, at a sustained rate over a real lifetime (`banshee-87l.5`).
+    Runaways,
     /// Managed monitoring/security agents, as a share of one core.
     ManagedAgents,
     /// Free bytes on the data volume. Falling is worse.
@@ -89,7 +92,7 @@ pub enum Dimension {
 
 /// Every dimension, in a stable order. Used for deterministic tie-breaking, so
 /// two evaluations of identical data always name the same dominant source.
-pub const ALL_DIMENSIONS: [Dimension; 14] = [
+pub const ALL_DIMENSIONS: [Dimension; 15] = [
     Dimension::Cpu,
     Dimension::Thermal,
     Dimension::Memory,
@@ -101,6 +104,7 @@ pub const ALL_DIMENSIONS: [Dimension; 14] = [
     Dimension::Jetsam,
     Dimension::Agents,
     Dimension::Orphans,
+    Dimension::Runaways,
     Dimension::ManagedAgents,
     Dimension::Disk,
     Dimension::Uptime,
@@ -182,6 +186,7 @@ impl Dimension {
             Dimension::Jetsam => "jetsam",
             Dimension::Agents => "agents",
             Dimension::Orphans => "orphans",
+            Dimension::Runaways => "runaways",
             Dimension::ManagedAgents => "managedAgents",
             Dimension::Disk => "disk",
             Dimension::Uptime => "uptime",
@@ -201,6 +206,7 @@ impl Dimension {
             Dimension::Jetsam => "Memory kills",
             Dimension::Agents => "Stale agent sessions",
             Dimension::Orphans => "Orphaned helpers",
+            Dimension::Runaways => "Runaway processes",
             Dimension::ManagedAgents => "Managed agents",
             Dimension::Disk => "Disk headroom",
             Dimension::Uptime => "Uptime",
@@ -225,7 +231,7 @@ impl Dimension {
             | Dimension::Compressor
             | Dimension::Jetsam
             | Dimension::Uptime => Source::Memory,
-            Dimension::Agents | Dimension::Orphans => Source::Sprawl,
+            Dimension::Agents | Dimension::Orphans | Dimension::Runaways => Source::Sprawl,
             Dimension::ManagedAgents => Source::ManagedAgents,
             Dimension::Disk => Source::Disk,
         }
@@ -242,7 +248,9 @@ impl Dimension {
             // rendering hint, and the detail string carries the words.
             Dimension::KernelPressure | Dimension::Thermal => Unit::Count,
             // Jetsam is a count of kills in the window; agents/orphans are counts.
-            Dimension::Agents | Dimension::Orphans | Dimension::Jetsam => Unit::Count,
+            Dimension::Agents | Dimension::Orphans | Dimension::Runaways | Dimension::Jetsam => {
+                Unit::Count
+            }
             // KernelFree is the kernel's reclaimability percentage; managed agents is a
             // share of one core.
             Dimension::ManagedAgents | Dimension::KernelFree => Unit::Percent,
@@ -313,6 +321,8 @@ pub struct PressureConfig {
     pub thrash: BandSpec,
     pub agents: BandSpec,
     pub orphans: BandSpec,
+    /// Unsupervised processes burning a core (`banshee-87l.5`).
+    pub runaways: BandSpec,
     pub managed_agents: BandSpec,
     pub disk: BandSpec,
     pub uptime: BandSpec,
@@ -588,6 +598,14 @@ impl Default for PressureConfig {
             // machine measured 2.
             orphans: BandSpec::rising(10.0, 40.0, 5.0, 1),
 
+            // Runaways are a count where ONE is already a problem: a single
+            // orphaned build-tool burned a core for 33 hours (2026-10-11). One
+            // is yellow, two is red; no margin, since the count is integral and
+            // the process is either there or gone. One census confirms it
+            // because the rule itself already demands a 30-minute life and a
+            // sustained rate.
+            runaways: BandSpec::rising(1.0, 2.0, 0.0, 1),
+
             // Managed agents as a share of ONE core, deduplicated. Measured 49.2%
             // (2026-08-31) against roughly 32% inferred for 2026-08-04, so the
             // thresholds sit above today's normal in order to catch GROWTH rather
@@ -699,9 +717,10 @@ impl PressureConfig {
     /// stop.
     pub fn max_interval_secs(&self, d: Dimension) -> u64 {
         let cadence = match d {
-            Dimension::Agents | Dimension::Orphans | Dimension::ManagedAgents => {
-                self.census_interval_secs
-            }
+            Dimension::Agents
+            | Dimension::Orphans
+            | Dimension::Runaways
+            | Dimension::ManagedAgents => self.census_interval_secs,
             _ => self.sample_interval_secs,
         };
         // Round up, and never return 0 — a zero ceiling would treat every interval
@@ -738,6 +757,7 @@ impl PressureConfig {
             Dimension::Thrash => &self.thrash,
             Dimension::Agents => &self.agents,
             Dimension::Orphans => &self.orphans,
+            Dimension::Runaways => &self.runaways,
             Dimension::ManagedAgents => &self.managed_agents,
             Dimension::Disk => &self.disk,
             Dimension::Uptime => &self.uptime,
@@ -773,7 +793,7 @@ mod tests {
     /// stops being evaluated. Mutation-proof: delete an entry and this fails.
     #[test]
     fn all_dimensions_covers_every_variant() {
-        assert_eq!(ALL_DIMENSIONS.len(), 14);
+        assert_eq!(ALL_DIMENSIONS.len(), 15);
         for d in [
             Dimension::Cpu,
             Dimension::Thermal,
@@ -786,6 +806,7 @@ mod tests {
             Dimension::Jetsam,
             Dimension::Agents,
             Dimension::Orphans,
+            Dimension::Runaways,
             Dimension::ManagedAgents,
             Dimension::Disk,
             Dimension::Uptime,

@@ -88,6 +88,10 @@ pub struct CensusSummary {
     pub total_procs: u32,
     pub consumers: Vec<ConsumerSize>,
     pub orphan_count: u32,
+    /// Unsupervised processes burning a core at the time (`banshee-87l.5`).
+    /// Absent on episodes recorded before the field existed; absence IS zero.
+    #[serde(default)]
+    pub runaway_count: u32,
     /// The deduplicated managed-agent figure (`Census::monitor_total`), never a
     /// sum of per-group percentages.
     pub monitor_percent_of_one_core: f64,
@@ -157,6 +161,7 @@ pub fn summarise(census: &Census) -> CensusSummary {
         total_procs: census.total_procs,
         consumers,
         orphan_count: census.orphans.orphan_count,
+        runaway_count: census.runaways.len() as u32,
         monitor_percent_of_one_core: census.monitor_total.percent_of_one_core,
     }
 }
@@ -557,6 +562,7 @@ fn dimension_words(d: Dimension, then: f64, now: f64) -> String {
         Dimension::Thrash => "peak thrash",
         Dimension::Agents => "stale sessions",
         Dimension::Orphans => "orphaned helpers",
+        Dimension::Runaways => "runaway processes",
         Dimension::ManagedAgents => "managed agents",
         Dimension::Disk => "free disk",
         Dimension::Uptime => "uptime",
@@ -589,7 +595,7 @@ fn dimension_words(d: Dimension, then: f64, now: f64) -> String {
             kernel_level_name(now)
         ),
         Dimension::Thrash => format!("{noun} {then:.0} → {now:.0} swap ops/sec ({delta:+.0})"),
-        Dimension::Agents | Dimension::Orphans | Dimension::Jetsam => {
+        Dimension::Agents | Dimension::Orphans | Dimension::Runaways | Dimension::Jetsam => {
             format!("{noun} {then:.0} → {now:.0} ({delta:+.0})")
         }
         Dimension::ManagedAgents => {

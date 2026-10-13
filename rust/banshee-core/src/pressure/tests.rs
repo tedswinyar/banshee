@@ -151,6 +151,7 @@ fn census(t: i64, stale: u32, orphans: u32, managed_agents: f64, life: u64) -> C
         // The census looked and found no genuine pressure kills — Some(0), a green
         // Jetsam reading. None would mean a pre-v15 census that never looked.
         pressure_kills: Some(0),
+        runaways: Vec::new(),
     }
 }
 
@@ -239,8 +240,110 @@ fn a_healthy_machine_reports_every_dimension_green() {
             r.dimension
         );
     }
-    // All fourteen, since both tiers have data.
-    assert_eq!(p.dimensions.len(), 14, "{:?}", p.dimensions);
+    // All fifteen, since both tiers have data.
+    assert_eq!(p.dimensions.len(), 15, "{:?}", p.dimensions);
+}
+
+/// One unsupervised process burning a core is a finding in its own right
+/// (`banshee-87l.5`): the Runaways dimension goes yellow on a count of one, the
+/// finding names the process the way a person would look for it (script label,
+/// pid, rate, age, parentage, directory), the who-line names it by rate, and
+/// the action is the runaway reap. Mutation-proof: drop the census-aware message
+/// and the pid vanishes; wire the action to ReapOrphans and the label changes.
+#[test]
+fn a_single_runaway_is_a_yellow_sprawl_finding_that_names_the_process() {
+    let mut c = healthy_census(300);
+    c.runaways.push(crate::census::Runaway {
+        pid: 11275,
+        program: "build-tool".into(),
+        comm: "ruby".into(),
+        recent_percent_of_one_core: 92.4,
+        cumulative_percent_of_one_core: 88.0,
+        age_secs: 33 * 3600,
+        rss_bytes: 1_572_864,
+        orphaned: true,
+        has_tty: false,
+        child_count: 0,
+        cwd: Some("/Users/example/Code/ws/src/Pkg".into()),
+    });
+    let p = evaluate(at(300), &healthy(21, 300), &[c], &[], &cfg());
+
+    let r = p.reading(Dimension::Runaways).expect("a runaways reading");
+    assert_eq!(r.band, Band::Yellow, "{r:?}");
+    assert_eq!(r.value, 1.0);
+    assert_eq!(r.detail, "1 runaway");
+    // One yellow is Stirring: a worklist item, not a menu-bar alarm.
+    assert_eq!(p.level, Level::Stirring, "{p:?}");
+
+    let f = p
+        .findings
+        .iter()
+        .find(|f| f.dimension == Dimension::Runaways)
+        .expect("a runaways finding");
+    assert_eq!(f.action, Action::ReapRunaways);
+    assert_eq!(f.action_label, "Reap runaway processes");
+    assert_eq!(
+        f.message,
+        "1 unsupervised process burning a core: build-tool (pid 11275) at 92% of one \
+         core for 1.4 days, orphaned, no children, in /Users/example/Code/ws/src/Pkg."
+    );
+    assert_eq!(
+        f.who_line.as_deref(),
+        Some("who: build-tool ×1 at 92% of one core")
+    );
+}
+
+/// Two runaways are red; none is green and produces no finding.
+#[test]
+fn runaways_band_on_the_count() {
+    let mut two = healthy_census(300);
+    for pid in [1, 2] {
+        two.runaways.push(crate::census::Runaway {
+            pid,
+            program: "spin".into(),
+            comm: "spin".into(),
+            recent_percent_of_one_core: 60.0,
+            cumulative_percent_of_one_core: 60.0,
+            age_secs: 7200,
+            rss_bytes: 0,
+            orphaned: false,
+            has_tty: false,
+            child_count: 0,
+            cwd: None,
+        });
+    }
+    let p = evaluate(at(300), &healthy(21, 300), &[two], &[], &cfg());
+    assert_eq!(p.reading(Dimension::Runaways).unwrap().band, Band::Red);
+    let f = p
+        .findings
+        .iter()
+        .find(|f| f.dimension == Dimension::Runaways)
+        .unwrap();
+    assert!(
+        f.message
+            .starts_with("2 unsupervised processes burning a core: spin (pid 1)"),
+        "{}",
+        f.message
+    );
+    assert!(
+        f.message.contains("no terminal, no children"),
+        "{}",
+        f.message
+    );
+
+    let p = evaluate(
+        at(300),
+        &healthy(21, 300),
+        &[healthy_census(300)],
+        &[],
+        &cfg(),
+    );
+    assert_eq!(p.reading(Dimension::Runaways).unwrap().band, Band::Green);
+    assert!(
+        !p.findings
+            .iter()
+            .any(|f| f.dimension == Dimension::Runaways)
+    );
 }
 
 /// CPU bands on MEASURED utilization from the tick counters, never on load (`banshee-87l.19`).

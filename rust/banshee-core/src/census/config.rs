@@ -23,7 +23,7 @@ use crate::{CoreError, Result};
 /// Default staleness threshold in days, matching `perf-scan`'s `TMUX_STALE_DAYS`.
 pub const DEFAULT_STALE_DAYS: u64 = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CensusConfig {
     /// Agent CLI program names, matched EXACTLY against `comm`'s basename —
     /// `pgrep -x` semantics.
@@ -46,7 +46,36 @@ pub struct CensusConfig {
     pub orphan_patterns: Vec<String>,
     /// A session or pane idle at least this many days is stale.
     pub stale_days: u64,
+    /// Interpreter program names (matched exactly against `comm`'s basename).
+    /// A process whose program is one of these is LABELLED by the script it
+    /// runs — the first non-flag argument after argv[0] — so a dead
+    /// `build-tool` reads as `build-tool`, not `ruby` (`banshee-87l.5`).
+    pub interpreters: Vec<String>,
+    /// Path prefixes of the operating system's own daemons. A process whose
+    /// `comm` starts with one of these is never a runaway candidate: Spotlight,
+    /// media analysis and the like burn a core legitimately and are not ours to
+    /// reap.
+    pub runaway_system_prefixes: Vec<String>,
+    /// A runaway must have burned at least this percent of one core over the
+    /// LAST census interval (the recent-rate lens, `banshee-aen`).
+    pub runaway_min_recent_percent: f64,
+    /// ...AND at least this percent of one core over its whole lifetime, so a
+    /// process that just started working is not a runaway.
+    pub runaway_min_cumulative_percent: f64,
+    /// ...AND be at least this old. A lifetime ratio over a short life is a
+    /// startup burst, not a rate (the same floor `managed_agents_min_life_secs`
+    /// applies, and the 109-second log shipper that read 14.6% is the evidence).
+    pub runaway_min_life_secs: u64,
 }
+
+/// Defaults for the runaway class (`banshee-87l.5`). The evidence case: a
+/// `build-tool` Ruby launcher orphaned to launchd when its agent session
+/// exited, 92% of one core for 33 hours, no children, no open files, 1.6 MB RSS
+/// — invisible to the orphan dimension (no pattern match, nothing to size) and
+/// named only as `ruby` on the CPU who-line.
+pub const DEFAULT_RUNAWAY_MIN_RECENT_PERCENT: f64 = 50.0;
+pub const DEFAULT_RUNAWAY_MIN_CUMULATIVE_PERCENT: f64 = 50.0;
+pub const DEFAULT_RUNAWAY_MIN_LIFE_SECS: u64 = 1800;
 
 impl Default for CensusConfig {
     fn default() -> Self {
@@ -110,6 +139,32 @@ impl Default for CensusConfig {
                 "treesitter",
             ]),
             stale_days: DEFAULT_STALE_DAYS,
+            interpreters: strs(&[
+                "ruby",
+                "python",
+                "python3",
+                "python3.11",
+                "python3.12",
+                "python3.13",
+                "python3.14",
+                "node",
+                "bun",
+                "deno",
+                "perl",
+                "bash",
+                "sh",
+                "zsh",
+            ]),
+            runaway_system_prefixes: strs(&[
+                "/System/",
+                "/usr/libexec/",
+                "/usr/sbin/",
+                "/sbin/",
+                "/Library/Apple/",
+            ]),
+            runaway_min_recent_percent: DEFAULT_RUNAWAY_MIN_RECENT_PERCENT,
+            runaway_min_cumulative_percent: DEFAULT_RUNAWAY_MIN_CUMULATIVE_PERCENT,
+            runaway_min_life_secs: DEFAULT_RUNAWAY_MIN_LIFE_SECS,
         }
     }
 }
@@ -133,6 +188,13 @@ pub struct CensusOverlay {
     pub orphan_patterns: Option<Vec<String>>,
     pub orphan_patterns_add: Option<Vec<String>>,
     pub stale_days: Option<u64>,
+    pub interpreters: Option<Vec<String>>,
+    pub interpreters_add: Option<Vec<String>>,
+    pub runaway_system_prefixes: Option<Vec<String>>,
+    pub runaway_system_prefixes_add: Option<Vec<String>>,
+    pub runaway_min_recent_percent: Option<f64>,
+    pub runaway_min_cumulative_percent: Option<f64>,
+    pub runaway_min_life_secs: Option<u64>,
 }
 
 impl CensusConfig {
@@ -224,6 +286,21 @@ impl CensusConfig {
         if let Some(d) = o.stale_days {
             self.stale_days = d;
         }
+        apply(&mut self.interpreters, o.interpreters, o.interpreters_add);
+        apply(
+            &mut self.runaway_system_prefixes,
+            o.runaway_system_prefixes,
+            o.runaway_system_prefixes_add,
+        );
+        if let Some(p) = o.runaway_min_recent_percent {
+            self.runaway_min_recent_percent = p;
+        }
+        if let Some(p) = o.runaway_min_cumulative_percent {
+            self.runaway_min_cumulative_percent = p;
+        }
+        if let Some(s) = o.runaway_min_life_secs {
+            self.runaway_min_life_secs = s;
+        }
         self
     }
 
@@ -232,6 +309,21 @@ impl CensusConfig {
     /// Exact program match, `pgrep -x` semantics.
     pub fn is_agent_cli(&self, program: &str) -> bool {
         self.agent_clis.iter().any(|c| c == program)
+    }
+
+    /// Exact program match: is this process an interpreter whose real identity
+    /// is the script it runs?
+    pub fn is_interpreter(&self, program: &str) -> bool {
+        self.interpreters.iter().any(|i| i == program)
+    }
+
+    /// Does the executable live where the operating system keeps its own
+    /// daemons? Prefix match on `comm` as the kernel reported it (a full path
+    /// for bundled and system binaries; a bare name never matches).
+    pub fn is_system_executable(&self, comm: &str) -> bool {
+        self.runaway_system_prefixes
+            .iter()
+            .any(|p| comm.starts_with(p.as_str()))
     }
 
     /// Case-insensitive substring match against the command line.
@@ -413,6 +505,58 @@ mod tests {
     fn stale_days_is_configurable() {
         let o: CensusOverlay = toml::from_str("stale_days = 7").unwrap();
         assert_eq!(CensusConfig::default().with_overlay(o).stale_days, 7);
+    }
+
+    /// The runaway thresholds are configuration, not constants: a machine whose
+    /// legitimate daemons idle at 60% needs a higher bar, and a machine that
+    /// wants to catch a half-core leak needs a lower one.
+    #[test]
+    fn runaway_thresholds_are_configurable_and_default_to_the_evidence_values() {
+        let d = CensusConfig::default();
+        assert_eq!(d.runaway_min_recent_percent, 50.0);
+        assert_eq!(d.runaway_min_cumulative_percent, 50.0);
+        assert_eq!(d.runaway_min_life_secs, 1800);
+
+        let o: CensusOverlay = toml::from_str(
+            "runaway_min_recent_percent = 80
+             runaway_min_cumulative_percent = 30.5
+             runaway_min_life_secs = 60
+             interpreters_add = [\"lua\"]
+             runaway_system_prefixes = [\"/opt/corp/\"]",
+        )
+        .unwrap();
+        let c = CensusConfig::default().with_overlay(o);
+        assert_eq!(c.runaway_min_recent_percent, 80.0);
+        assert_eq!(c.runaway_min_cumulative_percent, 30.5);
+        assert_eq!(c.runaway_min_life_secs, 60);
+        assert!(c.is_interpreter("lua"), "_add extends the default list");
+        assert!(c.is_interpreter("ruby"), "the defaults survive an _add");
+        assert!(c.is_system_executable("/opt/corp/agentd"));
+        assert!(
+            !c.is_system_executable("/System/Library/x"),
+            "a plain (non-_add) key REPLACES the default list"
+        );
+    }
+
+    /// `is_interpreter` is exact on the program basename, like `is_agent_cli`:
+    /// `ruby` is an interpreter, `ruby-lsp` is a program in its own right.
+    #[test]
+    fn interpreter_matching_is_exact_and_system_prefixes_are_prefixes() {
+        let c = CensusConfig::default();
+        assert!(c.is_interpreter("ruby"));
+        assert!(c.is_interpreter("python3.13"));
+        assert!(!c.is_interpreter("ruby-lsp"));
+        assert!(!c.is_interpreter("Ruby"));
+        assert!(c.is_system_executable(
+            "/System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd"
+        ));
+        assert!(c.is_system_executable("/usr/libexec/trustd"));
+        assert!(!c.is_system_executable("/usr/local/bin/thing"));
+        assert!(
+            !c.is_system_executable("ruby"),
+            "a bare comm has no prefix to match"
+        );
+        assert!(!c.is_system_executable("/Users/example/.cache/build-tools/ruby"));
     }
 
     /// A typo'd key must be a loud error, not a silent no-op. Somebody who

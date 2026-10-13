@@ -97,14 +97,18 @@ export BANSHEE_SWEEP_INTERVAL_MS=600000
 # An IMPOSSIBLE census overlay, so the action routes (section 8) are provable
 # no-ops on whatever machine runs this. `stale_days` beyond any real uptime
 # means no session is ever a reap candidate; an orphan pattern nothing matches
-# means no orphan is ever a kill target. So `execute` genuinely cannot touch a
-# real process here — the harness exercises the ROUTING and the wire shape, not
-# a live kill. (The rails themselves are pinned in banshee-core's unit tests,
-# which is the right place: they must not depend on the host having, or not
-# having, a reapable session.)
+# means no orphan is ever a kill target; a lifetime-CPU bar no process can clear
+# means no runaway is ever a candidate (the first run of this harness after the
+# runaway class landed found a REAL orphaned build launcher on the host —
+# correctly — which is exactly why the overlay must make it impossible). So
+# `execute` genuinely cannot touch a real process here — the harness exercises
+# the ROUTING and the wire shape, not a live kill. (The rails themselves are
+# pinned in banshee-core's unit tests, which is the right place: they must not
+# depend on the host having, or not having, something reapable.)
 cat >"$WORK/census.local.toml" <<'TOML'
 stale_days = 100000
 orphan_patterns = ["zzzz-banshee-e2e-nonexistent-pattern-zzzz"]
+runaway_min_cumulative_percent = 1000000
 TOML
 export BANSHEE_CENSUS_OVERLAY="$WORK/census.local.toml"
 
@@ -523,7 +527,7 @@ echo "e2e: the key is refused over TCP and accepted over the socket (ADR-0008 Ph
 # tools are always present too (the destructive execute tools are gated and are
 # checked separately in section 9, with the gate deliberately OFF here).
 EXPECTED_TOOLS="$( { printf '%s\n' "${PARITY_TABLE[@]}" | cut -d'|' -f3
-  printf 'reap_stale_sessions_preview\nreap_orphans_preview\n'; } | sort)"
+  printf 'reap_stale_sessions_preview\nreap_orphans_preview\nreap_runaways_preview\n'; } | sort)"
 unset BANSHEE_MCP_ENABLE_ACTIONS
 MCP_TOOLS="$(mcp_tool_names)"
 [ "$MCP_TOOLS" = "$EXPECTED_TOOLS" ] || fail "MCP tool set drifted from the parity table:
@@ -613,6 +617,7 @@ echo "e2e: error-shape contract holds through CLI and MCP"
 ACTION_PREVIEWS=(
   "/actions/reap-stale-sessions/preview|reap-stale-sessions|reap_stale_sessions_preview"
   "/actions/reap-orphans/preview|reap-orphans|reap_orphans_preview"
+  "/actions/reap-runaways/preview|reap-runaways|reap_runaways_preview"
 )
 
 for row in "${ACTION_PREVIEWS[@]}"; do
@@ -640,7 +645,8 @@ echo "e2e: action previews agree across HTTP, CLI and MCP (and are no-ops here)"
 # Execute works on HTTP and CLI and stays a no-op. `--execute` is the flag that
 # turns the CLI preview into a kill; with the overlay it kills nothing.
 for pair in "reap-stale-sessions|/actions/reap-stale-sessions/execute" \
-            "reap-orphans|/actions/reap-orphans/execute"; do
+            "reap-orphans|/actions/reap-orphans/execute" \
+            "reap-runaways|/actions/reap-runaways/execute"; do
   IFS='|' read -r cli route <<<"$pair"
   http_post "$route" | jq -e '.executed == true and .candidates == []' >/dev/null \
     || fail "$route execute must run and be a no-op here: $(http_post "$route")"
@@ -667,7 +673,8 @@ GET_STATUS="$(http_status /actions/reap-orphans/execute)"
 
 # Auth: every action route is keyed.
 for route in /actions/reap-stale-sessions/preview /actions/reap-stale-sessions/execute \
-             /actions/reap-orphans/preview /actions/reap-orphans/execute; do
+             /actions/reap-orphans/preview /actions/reap-orphans/execute \
+             /actions/reap-runaways/preview /actions/reap-runaways/execute; do
   status="$(scurl -s -o /dev/null -w '%{http_code}' -X POST "$SOCK$route")"
   [ "$status" = "401" ] || fail "unauthenticated POST $route returned $status, want 401"
 done
@@ -689,6 +696,8 @@ printf '%s\n' "$GATED_ON" | grep -qx 'reap_stale_sessions_execute' \
   || fail "execute tools must be PRESENT with the gate on; got: $(echo "$GATED_ON" | tr '\n' ' ')"
 printf '%s\n' "$GATED_ON" | grep -qx 'reap_orphans_execute' \
   || fail "reap_orphans_execute must be present with the gate on"
+printf '%s\n' "$GATED_ON" | grep -qx 'reap_runaways_execute' \
+  || fail "reap_runaways_execute must be present with the gate on"
 
 # And calling execute while gated off is refused by NAME, not silently run — the
 # gate holds on the CALL too, defending against a client naming an unlisted tool.

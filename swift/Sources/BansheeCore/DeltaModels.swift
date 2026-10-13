@@ -58,18 +58,38 @@ public struct CensusSummary: Codable, Equatable, Sendable {
     public let totalProcs: Int
     public let consumers: [ConsumerSize]
     public let orphanCount: Int
+    /// Unsupervised processes burning a core at the time (`banshee-87l.5`).
+    /// Absent on episodes recorded before the field existed; absence is zero.
+    public let runawayCount: Int
     /// The deduplicated managed-agent figure, never a sum of per-group percentages.
     public let monitorPercentOfOneCore: Double
 
     public init(
         takenAt: Date, totalProcs: Int, consumers: [ConsumerSize],
-        orphanCount: Int, monitorPercentOfOneCore: Double
+        orphanCount: Int, runawayCount: Int = 0, monitorPercentOfOneCore: Double
     ) {
         self.takenAt = takenAt
         self.totalProcs = totalProcs
         self.consumers = consumers
         self.orphanCount = orphanCount
+        self.runawayCount = runawayCount
         self.monitorPercentOfOneCore = monitorPercentOfOneCore
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case takenAt, totalProcs, consumers, orphanCount, runawayCount, monitorPercentOfOneCore
+    }
+
+    // Hand-written so a summary stored before `runawayCount` existed decodes
+    // (the key is absent on that wire; `#[serde(default)]` on the Rust side).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        takenAt = try c.decode(Date.self, forKey: .takenAt)
+        totalProcs = try c.decode(Int.self, forKey: .totalProcs)
+        consumers = try c.decode([ConsumerSize].self, forKey: .consumers)
+        orphanCount = try c.decode(Int.self, forKey: .orphanCount)
+        runawayCount = try c.decodeIfPresent(Int.self, forKey: .runawayCount) ?? 0
+        monitorPercentOfOneCore = try c.decode(Double.self, forKey: .monitorPercentOfOneCore)
     }
 }
 

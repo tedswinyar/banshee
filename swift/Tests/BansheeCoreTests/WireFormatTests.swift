@@ -211,7 +211,7 @@ final class WireFormatTests: XCTestCase {
             )
         }
         for raw in [
-            "reapStaleSessions", "reapOrphans", "relaunchApps", "reboot",
+            "reapStaleSessions", "reapOrphans", "reapRunaways", "relaunchApps", "reboot",
             "openDiskTool", "none",
         ] {
             XCTAssertNoThrow(

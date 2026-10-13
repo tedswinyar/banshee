@@ -22,7 +22,9 @@
 // CLI, no MCP tool — operator maintenance, not an agent surface; the carve-out
 // is asserted in e2e).
 
-use banshee_core::actions::{OrphanReapReport, SessionReapReport, SessionVerdict};
+use banshee_core::actions::{
+    OrphanReapReport, RunawayReapReport, SessionReapReport, SessionVerdict,
+};
 use banshee_core::census::Census;
 use banshee_core::pressure::band::Band;
 use banshee_core::pressure::deltas::Deltas;
@@ -151,6 +153,18 @@ enum Command {
     ReapOrphans {
         /// Actually terminate the orphans (SIGTERM, grace period, then SIGKILL
         /// survivors). Without this the command only previews.
+        #[arg(long)]
+        execute: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Reap runaway processes: leaves burning a core that nothing supervises
+    /// (dry-run unless --execute). Only ORPHANED runaways are killed; a hot,
+    /// headless process with a live parent is listed as spared for you to look
+    /// at. Targets are recomputed at execute time, never taken from the preview.
+    ReapRunaways {
+        /// Actually terminate the orphaned runaways (SIGTERM, grace period, then
+        /// SIGKILL survivors still reporting the same executable).
         #[arg(long)]
         execute: bool,
         #[arg(long)]
@@ -887,6 +901,27 @@ fn print_census(c: &Census) {
             fmt_bytes(p.rss_bytes)
         );
     }
+    // Runaways (`banshee-87l.5`): the list is empty on a healthy machine and on
+    // the first census after a start (no previous cycle to difference).
+    println!("  runaway procs    {}", c.runaways.len());
+    for r in &c.runaways {
+        println!(
+            "     pid {:<7} {:<24} {:>4.0}% of one core  {:>9}  {}{}",
+            r.pid,
+            r.program,
+            r.recent_percent_of_one_core,
+            fmt_secs(r.age_secs),
+            if r.orphaned {
+                "orphaned"
+            } else {
+                "no tty, no children"
+            },
+            r.cwd
+                .as_deref()
+                .map(|d| format!("  {d}"))
+                .unwrap_or_default()
+        );
+    }
     if c.tmux_available {
         println!("  tmux sessions    {}", c.tmux_sessions.len());
         for t in &c.tmux_sessions {
@@ -1090,6 +1125,39 @@ fn print_orphan_reap(r: &OrphanReapReport) {
     }
 }
 
+fn print_runaway_reap(r: &RunawayReapReport) {
+    let verb = if r.executed { "reaped" } else { "would reap" };
+    let reap = r
+        .candidates
+        .iter()
+        .filter(|c| c.verdict == SessionVerdict::Reap)
+        .count();
+    println!(
+        "reap runaways ({verb}): {reap} of {} candidate(s)  [SIGTERM, {}s grace, then SIGKILL; orphaned only]",
+        r.candidates.len(),
+        r.term_wait_secs
+    );
+    for c in &r.candidates {
+        let tag = c.outcome.as_deref().unwrap_or(match c.verdict {
+            SessionVerdict::Reap => "reap",
+            SessionVerdict::Spare => "spare",
+        });
+        println!(
+            "  {:<11} pid {:<7} {:<24} {:>4.0}% of one core  {:>9}  {}",
+            tag,
+            c.pid,
+            c.program,
+            c.cumulative_percent_of_one_core,
+            fmt_secs(c.age_secs),
+            c.reason
+        );
+        println!("              {}", c.args);
+    }
+    if r.candidates.is_empty() {
+        println!("  No runaway processes.");
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let client = Client::new(cli.api_url);
@@ -1251,6 +1319,19 @@ fn main() {
                 emit_json(&body);
             } else {
                 print_orphan_reap(&body.decode::<OrphanReapReport>("a reap report"));
+            }
+        }
+        Command::ReapRunaways { execute, json } => {
+            let path = if execute {
+                "/actions/reap-runaways/execute"
+            } else {
+                "/actions/reap-runaways/preview"
+            };
+            let body = client.post(path);
+            if json {
+                emit_json(&body);
+            } else {
+                print_runaway_reap(&body.decode::<RunawayReapReport>("a reap report"));
             }
         }
         Command::Backup { json } => {

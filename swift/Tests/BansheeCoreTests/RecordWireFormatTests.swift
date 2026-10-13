@@ -282,7 +282,7 @@ final class RecordWireFormatTests: XCTestCase {
             [
                 "id", "takenAt", "totalProcs", "agentSessions", "ideHelpers",
                 "orphans", "tmuxSessions", "appGroups", "monitorAgents",
-                "monitorTotal", "tmuxAvailable", "cpuConsumers", "pressureKills",
+                "monitorTotal", "tmuxAvailable", "cpuConsumers", "pressureKills", "runaways",
             ],
             "encode(to:) key set drifted — a Census field was added without a matching encode line"
         )
@@ -290,6 +290,59 @@ final class RecordWireFormatTests: XCTestCase {
         XCTAssertEqual(obj["id"] as? String, "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f")
         // Present-as-null, never absent: the fixture's 0 decodes and re-encodes.
         XCTAssertEqual(c.pressureKills, 0)
+    }
+
+    /// The runaway decodes at full depth (`banshee-87l.5`): labelled by its script
+    /// with the kernel's comm beside it, orphaned, childless, located. Cross-language
+    /// pin: the SAME fixture bytes the Rust suite asserts on.
+    func testDecodesTheRunawayAtFullDepth() throws {
+        let c = try Wire.decoder().decode(
+            Census.self, from: WireFormatTests.fixture("census-full.json")
+        )
+        XCTAssertEqual(c.runaways.count, 1)
+        let r = try XCTUnwrap(c.runaways.first)
+        XCTAssertEqual(r.pid, 11275)
+        XCTAssertEqual(r.program, "build-tool")
+        XCTAssertEqual(r.comm, "ruby")
+        XCTAssertTrue(r.orphaned)
+        XCTAssertFalse(r.hasTty)
+        XCTAssertEqual(r.childCount, 0)
+        XCTAssertEqual(r.recentPercentOfOneCore, 92.4, accuracy: 1e-9)
+        XCTAssertEqual(r.cwd, "/Users/example/Code/example-ws/src/ExamplePackage")
+    }
+
+    /// A census from a daemon older than `runaways` has NO such key — it must
+    /// decode to an empty list, not fail the whole census (Sparkle skew).
+    func testACensusWithoutRunawaysDecodesToAnEmptyList() throws {
+        var obj = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: WireFormatTests.fixture("census-full.json")) as? [String: Any]
+        )
+        obj.removeValue(forKey: "runaways")
+        let data = try JSONSerialization.data(withJSONObject: obj)
+        let c = try Wire.decoder().decode(Census.self, from: data)
+        XCTAssertTrue(c.runaways.isEmpty)
+    }
+
+    /// Guards the hand-written encoder: every field round-trips, and a null `cwd`
+    /// is PRESENT as null.
+    func testEncodeCoversEveryRunawayField() throws {
+        let r = Runaway(
+            pid: 7, program: "serve.py", comm: "python3", recentPercentOfOneCore: 61.5,
+            cumulativePercentOfOneCore: 58.0, ageSecs: 7200, rssBytes: 4096,
+            orphaned: false, hasTty: false, childCount: 0, cwd: nil
+        )
+        let data = try Wire.encoder().encode(r)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(
+            Set(obj.keys),
+            [
+                "pid", "program", "comm", "recentPercentOfOneCore", "cumulativePercentOfOneCore",
+                "ageSecs", "rssBytes", "orphaned", "hasTty", "childCount", "cwd",
+            ]
+        )
+        XCTAssertTrue(obj["cwd"] is NSNull)
+        XCTAssertEqual(try Wire.decoder().decode(Runaway.self, from: data), r)
     }
 
     /// The recent-rate CPU consumers decode, keep their RANK ORDER, and cover a
@@ -470,7 +523,7 @@ final class RecordWireFormatTests: XCTestCase {
         let census = try XCTUnwrap(obj["censusAtPeak"] as? [String: Any])
         XCTAssertEqual(
             Set(census.keys),
-            ["takenAt", "totalProcs", "consumers", "orphanCount", "monitorPercentOfOneCore"])
+            ["takenAt", "totalProcs", "consumers", "orphanCount", "runawayCount", "monitorPercentOfOneCore"])
         let consumer = try XCTUnwrap((census["consumers"] as? [[String: Any]])?.first)
         XCTAssertEqual(Set(consumer.keys), ["name", "kind", "count", "rssBytes"])
     }

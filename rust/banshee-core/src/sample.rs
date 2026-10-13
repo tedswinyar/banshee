@@ -641,6 +641,7 @@ mod tests {
             tmux_available: true,
             cpu_consumers: Vec::new(),
             pressure_kills: None,
+            runaways: Vec::new(),
         };
         let s = CensusScalars::from(&c);
         assert_eq!(s.stale_sessions, 1, "stale sessions, not all sessions");

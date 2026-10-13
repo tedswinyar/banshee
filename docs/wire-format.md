@@ -146,8 +146,10 @@ from a caller (PIDs recycle — `banshee_core::actions`).
 | `POST /actions/reap-stale-sessions/execute` | `banshee reap-stale-sessions --execute` | `reap_stale_sessions_execute` † | `SessionReapReport` |
 | `POST /actions/reap-orphans/preview` | `banshee reap-orphans` | `reap_orphans_preview` | `OrphanReapReport` |
 | `POST /actions/reap-orphans/execute` | `banshee reap-orphans --execute` | `reap_orphans_execute` † | `OrphanReapReport` |
+| `POST /actions/reap-runaways/preview` | `banshee reap-runaways` | `reap_runaways_preview` | `RunawayReapReport` |
+| `POST /actions/reap-runaways/execute` | `banshee reap-runaways --execute` | `reap_runaways_execute` † | `RunawayReapReport` |
 
-**† The two destructive `execute` MCP tools are ABSENT from `tools/list` unless
+**† The three destructive `execute` MCP tools are ABSENT from `tools/list` unless
 `BANSHEE_MCP_ENABLE_ACTIONS=1`** — absent, not present-and-refusing, so an agent
 cannot choose (or be prompt-injected into choosing) a kill it was never offered.
 The read-only `preview` tools are always present. The gate also holds on the
@@ -162,8 +164,14 @@ impossible census overlay so no real process is ever touched.
 [SessionCandidate]}`; a `SessionCandidate` is `{session, paneCommand, idleDays,
 cwd, verdict (reap|spare), reason, outcome}`. `OrphanReapReport` is `{action,
 executed, termWaitSecs, candidates: [OrphanCandidate]}`; an `OrphanCandidate` is
-`{pid, program, args, rssBytes, ageSecs, outcome}`. `idleDays`, `cwd` and every
-`outcome` are nullable and present-as-null; `outcome` is null on a preview.
+`{pid, program, args, rssBytes, ageSecs, outcome}`. `RunawayReapReport` is
+`{action, executed, termWaitSecs, candidates: [RunawayCandidate]}`; a
+`RunawayCandidate` is `{pid, program, comm, args, cumulativePercentOfOneCore,
+ageSecs, rssBytes, orphaned, hasTty, childCount, verdict (reap|spare), reason,
+outcome}` — `reap` only when `orphaned`; a headless childless process with a live
+parent is `spare` with the parent pid in `reason`. `idleDays`, `cwd` and every
+`outcome` are nullable and present-as-null; `outcome` is null on a preview and on
+a spared row.
 **There is deliberately no timestamp** — a report describes the call that
 produced it, and a timestamp would make the payload impossible to compare across
 surfaces.
@@ -349,7 +357,7 @@ ADR).
 
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
-| `dimension`, `key` | enum/string | no | `cpu`, `memory`, `swap`, `kernelPressure`, `thrash`, `agents`, `orphans`, `managedAgents`, `disk`, `uptime` |
+| `dimension`, `key` | enum/string | no | `cpu`, `thermal`, `memory`, `swap`, `kernelPressure`, `thrash`, `kernelFree`, `compressor`, `jetsam`, `agents`, `orphans`, `runaways`, `managedAgents`, `disk`, `uptime` |
 | `label` | string | no | composed in core, so every surface says the same words |
 | `band` | enum | no | `green` \| `yellow` \| `red`, **after hysteresis** |
 | `value` | number | no | the newest reading, in `unit` |
@@ -456,7 +464,13 @@ decoded by both unit suites. What binds:
   and **0 means a pre-v8 row never recorded it**, which a consumer must treat as
   "unknown", never as "normal". It feeds the `kernelPressure` dimension.
 - **`Census`** is the 5-minute reading: `agentSessions`, `ideHelpers`, `orphans`,
-  `tmuxSessions`, `appGroups`, `monitorAgents`, and `monitorTotal`.
+  `tmuxSessions`, `appGroups`, `monitorAgents`, `monitorTotal`, `cpuConsumers`,
+  `pressureKills` and `runaways`. **`runaways`** (schema v16, `banshee-87l.5`) lists
+  the unsupervised processes burning a core — `{pid, program, comm,
+  recentPercentOfOneCore, cumulativePercentOfOneCore, ageSecs, rssBytes, orphaned,
+  hasTty, childCount, cwd}`, ranked by recent rate, `cwd` nullable; `program` is
+  the SCRIPT for an interpreter (`build-tool`, not `ruby`). A pre-v16 daemon
+  omits the key; clients decode it as an empty list.
   **`tmuxAvailable: false` is not "zero sessions"** — it means the census could not
   look, and a UI that conflates them reports a clean machine. And **never sum the
   per-agent `percentOfOneCore` values**: each divides by the longest-lived process

@@ -85,6 +85,8 @@ public protocol APIClientProtocol: Sendable {
     func reapStaleSessionsExecute() async throws -> SessionReapReport
     func reapOrphansPreview() async throws -> OrphanReapReport
     func reapOrphansExecute() async throws -> OrphanReapReport
+    func reapRunawaysPreview() async throws -> RunawayReapReport
+    func reapRunawaysExecute() async throws -> RunawayReapReport
 }
 
 // Default-argument conveniences. Protocols cannot carry default arguments, so
@@ -445,6 +447,14 @@ public struct APIClient: APIClientProtocol {
 
     public func reapOrphansExecute() async throws -> OrphanReapReport {
         try await send("POST", "/actions/reap-orphans/execute", bodyData: nil)
+    }
+
+    public func reapRunawaysPreview() async throws -> RunawayReapReport {
+        try await send("POST", "/actions/reap-runaways/preview", bodyData: nil)
+    }
+
+    public func reapRunawaysExecute() async throws -> RunawayReapReport {
+        try await send("POST", "/actions/reap-runaways/execute", bodyData: nil)
     }
 
     /// The shared `/samples` + `/rollups` parameter set. Only the parameters the

@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::census::{
     AgentSession, AppGroup, Census, CpuConsumer, HelperRollup, MonitorAgent, MonitorTotal,
-    OrphanCensus, ProgramCount, TmuxSessionInfo,
+    OrphanCensus, ProgramCount, Runaway, TmuxSessionInfo,
 };
 use crate::pressure::episode::AlertEpisode;
 use crate::sample::{
@@ -603,6 +603,33 @@ impl SampleStore {
                 ])?;
             }
         }
+        {
+            // Ranked like the CPU consumers, for the same reason: the finding
+            // names the top of this list and must not re-sort a rounded float.
+            let mut st = tx.prepare(
+                "INSERT INTO census_runaways (census_id, rank, pid, program, comm,
+                    recent_percent, cumulative_percent, age_secs, rss_bytes, orphaned,
+                    has_tty, child_count, cwd)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            )?;
+            for (rank, r) in c.runaways.iter().enumerate() {
+                st.execute(params![
+                    id,
+                    rank as i64,
+                    r.pid,
+                    r.program,
+                    r.comm,
+                    r.recent_percent_of_one_core,
+                    r.cumulative_percent_of_one_core,
+                    clamp_i64(r.age_secs),
+                    clamp_i64(r.rss_bytes),
+                    r.orphaned as i64,
+                    r.has_tty as i64,
+                    r.child_count,
+                    r.cwd,
+                ])?;
+            }
+        }
         tx.commit()?;
         Ok(())
     }
@@ -871,6 +898,30 @@ impl SampleStore {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+        let runaways = self
+            .conn
+            .prepare(
+                "SELECT pid, program, comm, recent_percent, cumulative_percent, age_secs,
+                        rss_bytes, orphaned, has_tty, child_count, cwd
+                 FROM census_runaways WHERE census_id = ?1 ORDER BY rank ASC",
+            )?
+            .query_map(params![cid], |r| {
+                Ok(Runaway {
+                    pid: r.get(0)?,
+                    program: r.get(1)?,
+                    comm: r.get(2)?,
+                    recent_percent_of_one_core: r.get(3)?,
+                    cumulative_percent_of_one_core: r.get(4)?,
+                    age_secs: r.get(5)?,
+                    rss_bytes: r.get(6)?,
+                    orphaned: r.get::<_, i64>(7)? != 0,
+                    has_tty: r.get::<_, i64>(8)? != 0,
+                    child_count: r.get(9)?,
+                    cwd: r.get(10)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
         Ok(Some(Census {
             id: uuid,
             taken_at,
@@ -894,6 +945,7 @@ impl SampleStore {
             tmux_available,
             cpu_consumers,
             pressure_kills,
+            runaways,
         }))
     }
 
@@ -1920,6 +1972,7 @@ mod tests {
                 },
             ],
             pressure_kills: Some(2),
+            runaways: Vec::new(),
         }
     }
 

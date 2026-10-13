@@ -531,8 +531,10 @@ fn read_and_preview_tools() -> Value {
             "name": "census",
             "description": "What is actually RUNNING, from the 5-minute census: agent \
                 CLI sessions (with which are stale and their working directories), \
-                orphaned helper processes whose parents are gone, tmux sessions, the \
-                biggest app process groups, and centrally-managed monitoring agents. \
+                orphaned helper processes whose parents are gone, runaway processes \
+                (leaves burning a core that nothing supervises, with pid, rate, age \
+                and working directory), tmux sessions, the biggest app process groups, \
+                and centrally-managed monitoring agents. \
                 This is the tool that answers \"what should I close?\". \
                 \n\nRead `monitorTotal.percentOfOneCore` for the managed-agent cost; \
                 NEVER sum the per-agent `percentOfOneCore` values, because each \
@@ -616,6 +618,19 @@ fn read_and_preview_tools() -> Value {
                 many orphans exist and what they are, not to hand a PID list to \
                 anything.",
             "inputSchema": { "type": "object", "properties": {}, "required": [] }
+        },
+        {
+            "name": "reap_runaways_preview",
+            "description": "DRY RUN. List the runaway processes: leaves (no children) \
+                that have burned at least half a core over a lifetime of 30+ minutes \
+                and that nothing supervises — orphaned to launchd, or headless. Each \
+                row carries a verdict: `reap` ONLY when orphaned; a hot headless \
+                process with a live parent is `spare` with the parent pid in `reason`, \
+                for a human to look at. Kills nothing. \
+                \n\nThe evidence case was a build-tool launcher orphaned when its \
+                agent session exited, 92% of one core for 33 hours. Candidates are \
+                recomputed at execute time; do not hand this list to anything.",
+            "inputSchema": { "type": "object", "properties": {}, "required": [] }
         }
     ])
 }
@@ -643,6 +658,15 @@ fn execute_tools() -> Value {
                 ones that both survived AND still match as the same orphaned program \
                 (a recycled PID fails that test and is spared). Takes no arguments — \
                 you cannot supply a PID list, by design.",
+            "inputSchema": { "type": "object", "properties": {}, "required": [] }
+        },
+        {
+            "name": "reap_runaways_execute",
+            "description": "DESTRUCTIVE. Terminate the ORPHANED runaway processes: \
+                SIGTERM the freshly-recomputed `reap` rows, wait a grace period, then \
+                SIGKILL only the ones that survived AND still report the same \
+                executable. Spared rows (live parent) are never touched. Takes no \
+                arguments — you cannot supply a PID list, by design.",
             "inputSchema": { "type": "object", "properties": {}, "required": [] }
         }
     ])
@@ -678,6 +702,7 @@ fn handle_tool_call(api: &Api, name: &str, args: &Value) -> Result<String, Strin
         "health" => api.health(),
         "reap_stale_sessions_preview" => api.post("/actions/reap-stale-sessions/preview"),
         "reap_orphans_preview" => api.post("/actions/reap-orphans/preview"),
+        "reap_runaways_preview" => api.post("/actions/reap-runaways/preview"),
         // The execute tools are absent from tools/list when the gate is off, so
         // a well-behaved client never reaches these. The guard is defence in
         // depth against a client that calls a tool it was never offered — the
@@ -686,9 +711,12 @@ fn handle_tool_call(api: &Api, name: &str, args: &Value) -> Result<String, Strin
             api.post("/actions/reap-stale-sessions/execute")
         }
         "reap_orphans_execute" if actions_enabled() => api.post("/actions/reap-orphans/execute"),
-        "reap_stale_sessions_execute" | "reap_orphans_execute" => Err(format!(
-            "{name} is disabled; set {ACTIONS_ENV}=1 to enable the destructive action tools"
-        )),
+        "reap_runaways_execute" if actions_enabled() => api.post("/actions/reap-runaways/execute"),
+        "reap_stale_sessions_execute" | "reap_orphans_execute" | "reap_runaways_execute" => {
+            Err(format!(
+                "{name} is disabled; set {ACTIONS_ENV}=1 to enable the destructive action tools"
+            ))
+        }
         other => Err(format!("unknown tool: {other}")),
     }
 }
@@ -794,7 +822,7 @@ mod tests {
 
     #[test]
     fn the_tool_set_matches_the_parity_table() {
-        // Actions DISABLED: nine reads plus the two read-only previews. The
+        // Actions DISABLED: nine reads plus the three read-only previews. The
         // destructive execute tools must NOT appear.
         let tools = tool_definitions(false);
         let mut sorted = names_of(&tools);
@@ -809,6 +837,7 @@ mod tests {
                 "health",
                 "pressure",
                 "reap_orphans_preview",
+                "reap_runaways_preview",
                 "reap_stale_sessions_preview",
                 "rollups",
                 "samples",
@@ -845,11 +874,12 @@ mod tests {
         let enabled = names_of(&tool_definitions(true));
         assert!(enabled.contains(&"reap_stale_sessions_execute".to_string()));
         assert!(enabled.contains(&"reap_orphans_execute".to_string()));
+        assert!(enabled.contains(&"reap_runaways_execute".to_string()));
         // Enabling ADDS to the read+preview set, never removes.
         for n in &disabled {
             assert!(enabled.contains(n), "enabling dropped {n}");
         }
-        assert_eq!(enabled.len(), disabled.len() + 2);
+        assert_eq!(enabled.len(), disabled.len() + 3);
     }
 
     /// Calling an execute tool while the gate is off is refused with the reason,

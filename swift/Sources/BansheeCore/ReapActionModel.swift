@@ -17,6 +17,7 @@ import Observation
 public enum ReapKind: String, Identifiable, Sendable {
     case staleSessions
     case orphans
+    case runaways
 
     public var id: String { rawValue }
 
@@ -25,6 +26,7 @@ public enum ReapKind: String, Identifiable, Sendable {
         switch self {
         case .staleSessions: return .reapStaleSessions
         case .orphans: return .reapOrphans
+        case .runaways: return .reapRunaways
         }
     }
 
@@ -32,6 +34,7 @@ public enum ReapKind: String, Identifiable, Sendable {
         switch action {
         case .reapStaleSessions: self = .staleSessions
         case .reapOrphans: self = .orphans
+        case .reapRunaways: self = .runaways
         default: return nil
         }
     }
@@ -42,6 +45,7 @@ public enum ReapKind: String, Identifiable, Sendable {
 public enum ReapReport: Equatable, Sendable {
     case sessions(SessionReapReport)
     case orphans(OrphanReapReport)
+    case runaways(RunawayReapReport)
 }
 
 @MainActor
@@ -107,6 +111,7 @@ public final class ReapActionModel {
         switch report {
         case .sessions(let r): return !r.toReap.isEmpty
         case .orphans(let r): return !r.candidates.isEmpty
+        case .runaways(let r): return !r.toReap.isEmpty
         case nil: return false
         }
     }
@@ -115,6 +120,7 @@ public final class ReapActionModel {
         switch kind {
         case .staleSessions: return .sessions(try await client.reapStaleSessionsPreview())
         case .orphans: return .orphans(try await client.reapOrphansPreview())
+        case .runaways: return .runaways(try await client.reapRunawaysPreview())
         }
     }
 
@@ -122,6 +128,7 @@ public final class ReapActionModel {
         switch kind {
         case .staleSessions: return .sessions(try await client.reapStaleSessionsExecute())
         case .orphans: return .orphans(try await client.reapOrphansExecute())
+        case .runaways: return .runaways(try await client.reapRunawaysExecute())
         }
     }
 }

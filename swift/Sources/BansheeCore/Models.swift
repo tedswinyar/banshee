@@ -124,6 +124,7 @@ public enum ReadingUnit: String, Codable, Sendable {
 public enum Action: String, Codable, Sendable {
     case reapStaleSessions
     case reapOrphans
+    case reapRunaways
     case relaunchApps
     case reboot
     case openDiskTool

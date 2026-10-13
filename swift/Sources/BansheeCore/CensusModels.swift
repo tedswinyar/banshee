@@ -251,6 +251,75 @@ public struct CpuConsumer: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// A process burning a core that nothing supervises (`banshee-87l.5`): a leaf
+/// (no children) at a sustained rate over a real lifetime, either orphaned to
+/// launchd or headless. Labelled by its SCRIPT for interpreters (`build-tool`,
+/// not `ruby`). `cwd` is nullable: lsof ran for every flagged runaway, but may
+/// have found nothing.
+public struct Runaway: Codable, Identifiable, Equatable, Sendable {
+    public var id: Int { pid }
+
+    public let pid: Int
+    public let program: String
+    /// The kernel's `comm` basename, beside the label.
+    public let comm: String
+    /// Percent of one core over the last census interval.
+    public let recentPercentOfOneCore: Double
+    /// Percent of one core over the whole lifetime.
+    public let cumulativePercentOfOneCore: Double
+    public let ageSecs: UInt64
+    public let rssBytes: UInt64
+    /// Parent is launchd: whatever launched it is gone.
+    public let orphaned: Bool
+    public let hasTty: Bool
+    public let childCount: Int
+    public let cwd: String?
+
+    public init(
+        pid: Int, program: String, comm: String, recentPercentOfOneCore: Double,
+        cumulativePercentOfOneCore: Double, ageSecs: UInt64, rssBytes: UInt64,
+        orphaned: Bool, hasTty: Bool, childCount: Int, cwd: String?
+    ) {
+        self.pid = pid
+        self.program = program
+        self.comm = comm
+        self.recentPercentOfOneCore = recentPercentOfOneCore
+        self.cumulativePercentOfOneCore = cumulativePercentOfOneCore
+        self.ageSecs = ageSecs
+        self.rssBytes = rssBytes
+        self.orphaned = orphaned
+        self.hasTty = hasTty
+        self.childCount = childCount
+        self.cwd = cwd
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case pid, program, comm, recentPercentOfOneCore, cumulativePercentOfOneCore
+        case ageSecs, rssBytes, orphaned, hasTty, childCount, cwd
+    }
+
+    // Hand-written for present-as-null on `cwd`; pinned by
+    // `testEncodeCoversEveryRunawayField`.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(pid, forKey: .pid)
+        try c.encode(program, forKey: .program)
+        try c.encode(comm, forKey: .comm)
+        try c.encode(recentPercentOfOneCore, forKey: .recentPercentOfOneCore)
+        try c.encode(cumulativePercentOfOneCore, forKey: .cumulativePercentOfOneCore)
+        try c.encode(ageSecs, forKey: .ageSecs)
+        try c.encode(rssBytes, forKey: .rssBytes)
+        try c.encode(orphaned, forKey: .orphaned)
+        try c.encode(hasTty, forKey: .hasTty)
+        try c.encode(childCount, forKey: .childCount)
+        if let cwd {
+            try c.encode(cwd, forKey: .cwd)
+        } else {
+            try c.encodeNil(forKey: .cwd)
+        }
+    }
+}
+
 /// One census cycle.
 public struct Census: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
@@ -276,6 +345,10 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     /// reaping (`banshee-2dq`). What the Jetsam dimension bands on. `nil` on a
     /// pre-v15 census that never recorded it — never coerced to 0.
     public let pressureKills: UInt64?
+    /// Unsupervised processes burning a core, ranked by recent rate
+    /// (`banshee-87l.5`). Empty on the first census after a start and on a
+    /// pre-v16 census; absent on an older daemon, which decodes as empty.
+    public let runaways: [Runaway]
 
     public init(
         id: UUID, takenAt: Date, totalProcs: Int,
@@ -283,7 +356,8 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         orphans: OrphanCensus, tmuxSessions: [TmuxSessionInfo],
         appGroups: [AppGroup], monitorAgents: [MonitorAgent],
         monitorTotal: MonitorTotal, tmuxAvailable: Bool,
-        cpuConsumers: [CpuConsumer], pressureKills: UInt64?
+        cpuConsumers: [CpuConsumer], pressureKills: UInt64?,
+        runaways: [Runaway] = []
     ) {
         self.id = id
         self.takenAt = takenAt
@@ -298,6 +372,7 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         self.tmuxAvailable = tmuxAvailable
         self.cpuConsumers = cpuConsumers
         self.pressureKills = pressureKills
+        self.runaways = runaways
     }
 
     /// Sessions worth reaping — presentation, not a re-derivation: the flags
@@ -315,7 +390,32 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case id, takenAt, totalProcs, agentSessions, ideHelpers, orphans
         case tmuxSessions, appGroups, monitorAgents, monitorTotal, tmuxAvailable
-        case cpuConsumers, pressureKills
+        case cpuConsumers, pressureKills, runaways
+    }
+
+    // Hand-written so a daemon older than `runaways` still decodes (the key is
+    // absent, not null, on its wire — `#[serde(default)]` on the Rust side).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let raw = try c.decode(String.self, forKey: .id)
+        guard let uuid = UUID(uuidString: raw) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .id, in: c, debugDescription: "not a UUID: \(raw)")
+        }
+        id = uuid
+        takenAt = try c.decode(Date.self, forKey: .takenAt)
+        totalProcs = try c.decode(Int.self, forKey: .totalProcs)
+        agentSessions = try c.decode([AgentSession].self, forKey: .agentSessions)
+        ideHelpers = try c.decode(HelperRollup.self, forKey: .ideHelpers)
+        orphans = try c.decode(OrphanCensus.self, forKey: .orphans)
+        tmuxSessions = try c.decode([TmuxSessionInfo].self, forKey: .tmuxSessions)
+        appGroups = try c.decode([AppGroup].self, forKey: .appGroups)
+        monitorAgents = try c.decode([MonitorAgent].self, forKey: .monitorAgents)
+        monitorTotal = try c.decode(MonitorTotal.self, forKey: .monitorTotal)
+        tmuxAvailable = try c.decode(Bool.self, forKey: .tmuxAvailable)
+        cpuConsumers = try c.decode([CpuConsumer].self, forKey: .cpuConsumers)
+        pressureKills = try c.decodeIfPresent(UInt64.self, forKey: .pressureKills)
+        runaways = try c.decodeIfPresent([Runaway].self, forKey: .runaways) ?? []
     }
 
     // Hand-written for the UUID's lowercase-out rule; hard-coded field list,
@@ -339,5 +439,6 @@ public struct Census: Codable, Identifiable, Equatable, Sendable {
         } else {
             try c.encodeNil(forKey: .pressureKills)
         }
+        try c.encode(runaways, forKey: .runaways)
     }
 }

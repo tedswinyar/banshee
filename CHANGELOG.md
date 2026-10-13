@@ -6,6 +6,25 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Runaway processes: a census class, a sprawl dimension and a reap**
+  (banshee-87l.5, schema v16). A `build-tool` Ruby launcher orphaned to launchd
+  when its agent session exited spun at 92% of one core for 33 hours
+  (2026-10-11) and nothing saw it: the orphan dimension needs a pattern match and
+  sizes by memory (1.6 MB), stale sessions measure idleness, and the CPU who-line
+  named it only as "ruby". The census now flags any LEAF process (no children)
+  that burned ≥50% of one core over the last interval and over a ≥30-minute
+  lifetime and that nothing supervises — orphaned, or headless — excluding OS
+  daemons, app groups and managed agents. Interpreters are labelled by the script
+  they run, so the finding (and the CPU who-line) says `build-tool`. The
+  `runaways` dimension (sprawl source) is yellow at one and red at two; the
+  finding names pid, rate, age, parentage and working directory; `banshee
+  reap-runaways`, `POST /actions/reap-runaways/{preview,execute}` and the
+  `reap_runaways_*` MCP tools kill ONLY orphaned runaways and list the parented
+  ones as spared. Thresholds and the interpreter/system-path lists are census
+  overlay keys (`runaway_min_*`, `interpreters`, `runaway_system_prefixes`).
+
 ### Fixed
 
 - **Low disk owns the menu bar glyph** (banshee-y1k). The dominant source was

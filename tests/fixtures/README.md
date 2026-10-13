@@ -25,6 +25,7 @@ format cannot drift between implementations:
 | `deltas-episode.json` | the episode anchor: `lookback: "episode"`, `episodeId` present (lowercased), compared against the stored `censusAtPeak` rather than a clock interval, so the summary is about the incident |
 | `samples.json` | two cheap-tier readings STRADDLING A REBOOT — different `bootTimeSecs` (the delta discriminator), an UPPERCASE UUID (any-case-in), full volume lists |
 | `rollups.json` | two 5-minute buckets: one with distinct avg/max and populated deltas, one whose deltas a reboot VOIDED (`null`, which is not zero) |
+| `reap-runaways.json` | the runaway reap (`banshee-87l.5`): an executed report with one ORPHANED row that reaps (`terminated`) and one headless row with a live parent that is `spare` with the parent pid in `reason` and a null `outcome` — the two verdicts pinned side by side |
 | `census-full.json` | the FULLY-POPULATED census, ~40 fields across seven nested types: a stale session with `cwd` and a live one with `cwd: null`, a stale-AND-busy tmux session (so the reapable filter is distinguishable from a staleness filter), and per-agent percentages that sum to 46.0 against an honest `monitorTotal` of 29.183 — the never-sum rule made testable |
 | `stats.json` | the `/stats` body |
 | `datetime-variants.json` | the generous-decode table, cross-checked by both languages |

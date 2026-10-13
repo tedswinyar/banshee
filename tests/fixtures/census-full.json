@@ -126,5 +126,20 @@
             "percentOfOneCore": 47.0
         }
     ],
-    "pressureKills": 0
+    "pressureKills": 0,
+    "runaways": [
+        {
+            "pid": 11275,
+            "program": "build-tool",
+            "comm": "ruby",
+            "recentPercentOfOneCore": 92.4,
+            "cumulativePercentOfOneCore": 88.1,
+            "ageSecs": 118800,
+            "rssBytes": 1572864,
+            "orphaned": true,
+            "hasTty": false,
+            "childCount": 0,
+            "cwd": "/Users/example/Code/example-ws/src/ExamplePackage"
+        }
+    ]
 }

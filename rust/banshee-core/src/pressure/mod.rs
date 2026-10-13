@@ -44,6 +44,8 @@ use who::Consumer;
 pub enum Action {
     ReapStaleSessions,
     ReapOrphans,
+    /// Kill an orphaned runaway (`banshee-87l.5`): a core back for one SIGTERM.
+    ReapRunaways,
     RelaunchApps,
     /// Only a reboot truly resets a saturated compressor pool.
     Reboot,
@@ -59,10 +61,13 @@ impl Action {
         match self {
             Action::ReapStaleSessions => 0,
             Action::ReapOrphans => 1,
-            Action::RelaunchApps => 2,
-            Action::OpenDiskTool => 3,
-            Action::Reboot => 4,
-            Action::None => 5,
+            // Right behind the orphans: a runaway is one process and one
+            // signal, the cheapest core on the machine to get back.
+            Action::ReapRunaways => 2,
+            Action::RelaunchApps => 3,
+            Action::OpenDiskTool => 4,
+            Action::Reboot => 5,
+            Action::None => 6,
         }
     }
 
@@ -70,6 +75,7 @@ impl Action {
         match self {
             Action::ReapStaleSessions => "Reap stale agent sessions",
             Action::ReapOrphans => "Reap orphaned helper processes",
+            Action::ReapRunaways => "Reap runaway processes",
             Action::RelaunchApps => "Quit and relaunch the biggest apps",
             Action::Reboot => "Reboot",
             Action::OpenDiskTool => "Open a disk-usage tool to see what is using the space",
@@ -974,6 +980,10 @@ fn series_for(
             .iter()
             .map(|c| (c.taken_at, f64::from(c.orphans.orphan_count)))
             .collect(),
+        Dimension::Runaways => censuses
+            .iter()
+            .map(|c| (c.taken_at, c.runaways.len() as f64))
+            .collect(),
         Dimension::ManagedAgents => censuses
             .iter()
             // A ratio whose denominator is a process that started moments ago is
@@ -1122,6 +1132,7 @@ fn detail_for(
         Dimension::Thermal => format!("kernel reports {}", thermal_level_name(value)),
         Dimension::Agents => format!("{value:.0} stale"),
         Dimension::Orphans => format!("{value:.0} orphaned"),
+        Dimension::Runaways => format!("{value:.0} runaway"),
         Dimension::ManagedAgents => format!("{value:.1}% of one core"),
         Dimension::Disk => {
             let mut s = format!("{} free", fmt_bytes(value));
@@ -1244,10 +1255,16 @@ fn build_findings(
         .map(|r| {
             let action = action_for(r.dimension, r.band, stale_sessions);
             let who = who_for(r.dimension);
+            let message = match (r.dimension, census) {
+                (Dimension::Runaways, Some(c)) if !c.runaways.is_empty() => {
+                    runaways_message(&c.runaways)
+                }
+                _ => message_for(r, swap_total),
+            };
             Finding {
                 dimension: r.dimension,
                 band: r.band,
-                message: message_for(r, swap_total),
+                message,
                 action,
                 action_label: action.label().to_string(),
                 who_line: who::who_line(&who),
@@ -1370,6 +1387,9 @@ fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
             "{:.0} orphaned helper processes. Their parent sessions are gone.",
             r.value
         ),
+        // The census-naming detail (pid, rate, age, cwd) is appended by
+        // `build_findings`, which has the census; this is the fallback wording.
+        Dimension::Runaways => format!("{:.0} unsupervised process(es) burning a core.", r.value),
         Dimension::ManagedAgents => format!(
             "Managed agents are using {:.0}% of one core — up from the recorded baseline.",
             r.value
@@ -1411,10 +1431,50 @@ fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
     }
 }
 
+/// Name each runaway the way a person would investigate it: what, which pid,
+/// how hard, for how long, whether anyone is left to own it, and where it was
+/// working. "ruby 97%" sent a person to `lsof`; this sentence should not.
+fn runaways_message(runaways: &[crate::census::Runaway]) -> String {
+    let n = runaways.len();
+    let mut m = format!(
+        "{n} unsupervised process{} burning a core: ",
+        if n == 1 { "" } else { "es" }
+    );
+    let parts: Vec<String> = runaways
+        .iter()
+        .take(3)
+        .map(|r| {
+            let mut s = format!(
+                "{} (pid {}) at {:.0}% of one core for {}, {}",
+                r.program,
+                r.pid,
+                r.recent_percent_of_one_core,
+                fmt_duration(r.age_secs as f64),
+                if r.orphaned {
+                    "orphaned, no children"
+                } else {
+                    "no terminal, no children"
+                }
+            );
+            if let Some(cwd) = &r.cwd {
+                s.push_str(&format!(", in {cwd}"));
+            }
+            s
+        })
+        .collect();
+    m.push_str(&parts.join("; "));
+    if n > 3 {
+        m.push_str(&format!("; and {} more", n - 3));
+    }
+    m.push('.');
+    m
+}
+
 fn action_for(d: Dimension, band: Band, stale_sessions: usize) -> Action {
     match d {
         Dimension::Agents => Action::ReapStaleSessions,
         Dimension::Orphans => Action::ReapOrphans,
+        Dimension::Runaways => Action::ReapRunaways,
         // Memory pressure's cheapest real lever is the biggest app group:
         // quit-and-relaunch reclaims swapped pages. Measured 2026-08-31: Chrome
         // at 115 processes and 7.71 GB. The kernel's verdict is the same story,

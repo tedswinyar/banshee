@@ -1281,6 +1281,8 @@ async fn every_keyed_route_is_refused_over_tcp_including_actions() {
         "/actions/reap-stale-sessions/execute",
         "/actions/reap-orphans/preview",
         "/actions/reap-orphans/execute",
+        "/actions/reap-runaways/preview",
+        "/actions/reap-runaways/execute",
         "/backup",
     ] {
         let resp = client
@@ -1496,6 +1498,32 @@ async fn reap_orphans_preview_and_execute_route_to_core() {
             .all(|c| c["outcome"].is_string()),
         "every executed candidate has an outcome: {execute}"
     );
+}
+
+/// The runaway reap (`banshee-87l.5`) routes to core like the other two. The
+/// fixture census has nothing hot, so both calls are the empty no-op the e2e
+/// harness pins — the shape, action name and execute flag are what this checks.
+#[tokio::test]
+async fn reap_runaways_preview_and_execute_route_to_core() {
+    let s = TestServer::start_with_actions(action_runner()).await;
+
+    let preview = post_json(&s, "/actions/reap-runaways/preview").await;
+    assert_eq!(preview["action"], "reapRunaways");
+    assert_eq!(preview["executed"], false);
+    assert!(preview["candidates"].is_array(), "{preview}");
+    assert!(preview["termWaitSecs"].is_number(), "{preview}");
+
+    let execute = post_json(&s, "/actions/reap-runaways/execute").await;
+    assert_eq!(execute["action"], "reapRunaways");
+    assert_eq!(execute["executed"], true);
+
+    let with_pids = s
+        .post(
+            "/actions/reap-runaways/execute",
+            Some(r#"{"pids": [11275]}"#),
+        )
+        .await;
+    assert_eq!(with_pids.status(), 422, "a target list is refused");
 }
 
 /// An empty body executes; a caller-supplied target list is a 422 in the

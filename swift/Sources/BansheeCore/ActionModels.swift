@@ -164,6 +164,107 @@ public struct OrphanCandidate: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// One runaway process (`banshee-87l.5`): a leaf burning a core over a real
+/// lifetime that nothing supervises. `verdict` is `reap` only when ORPHANED; a
+/// headless, childless spinner with a live parent is `spare`, with the parent
+/// pid in `reason`, for a person to look at.
+public struct RunawayCandidate: Codable, Identifiable, Equatable, Sendable {
+    public var id: Int { pid }
+
+    public let pid: Int
+    /// The script-aware label (`build-tool`), what a person would call it.
+    public let program: String
+    /// The kernel's `comm` basename, re-verified before SIGKILL.
+    public let comm: String
+    /// Full command line, so a person can tell WHICH build this was.
+    public let args: String
+    public let cumulativePercentOfOneCore: Double
+    public let ageSecs: UInt64
+    public let rssBytes: UInt64
+    public let orphaned: Bool
+    public let hasTty: Bool
+    public let childCount: Int
+    public let verdict: SessionVerdict
+    /// Human wording for the verdict, composed in core and rendered verbatim.
+    public let reason: String
+    /// Nil on a preview and on a spared row. After execute: "terminated" or
+    /// "killed".
+    public let outcome: String?
+
+    public init(
+        pid: Int, program: String, comm: String, args: String,
+        cumulativePercentOfOneCore: Double, ageSecs: UInt64, rssBytes: UInt64,
+        orphaned: Bool, hasTty: Bool, childCount: Int, verdict: SessionVerdict,
+        reason: String, outcome: String?
+    ) {
+        self.pid = pid
+        self.program = program
+        self.comm = comm
+        self.args = args
+        self.cumulativePercentOfOneCore = cumulativePercentOfOneCore
+        self.ageSecs = ageSecs
+        self.rssBytes = rssBytes
+        self.orphaned = orphaned
+        self.hasTty = hasTty
+        self.childCount = childCount
+        self.verdict = verdict
+        self.reason = reason
+        self.outcome = outcome
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case pid, program, comm, args, cumulativePercentOfOneCore, ageSecs, rssBytes
+        case orphaned, hasTty, childCount, verdict, reason, outcome
+    }
+
+    // Hand-written for present-as-null on `outcome`; pinned by
+    // `testEncodeCoversEveryRunawayCandidateField`.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(pid, forKey: .pid)
+        try c.encode(program, forKey: .program)
+        try c.encode(comm, forKey: .comm)
+        try c.encode(args, forKey: .args)
+        try c.encode(cumulativePercentOfOneCore, forKey: .cumulativePercentOfOneCore)
+        try c.encode(ageSecs, forKey: .ageSecs)
+        try c.encode(rssBytes, forKey: .rssBytes)
+        try c.encode(orphaned, forKey: .orphaned)
+        try c.encode(hasTty, forKey: .hasTty)
+        try c.encode(childCount, forKey: .childCount)
+        try c.encode(verdict, forKey: .verdict)
+        try c.encode(reason, forKey: .reason)
+        if let outcome {
+            try c.encode(outcome, forKey: .outcome)
+        } else {
+            try c.encodeNil(forKey: .outcome)
+        }
+    }
+}
+
+/// The result of a reap-runaways preview or execute.
+public struct RunawayReapReport: Codable, Equatable, Sendable {
+    /// "reapRunaways" — matches the `Action` vocabulary.
+    public let action: String
+    public let executed: Bool
+    public let termWaitSecs: UInt64
+    public let candidates: [RunawayCandidate]
+
+    public init(
+        action: String, executed: Bool, termWaitSecs: UInt64,
+        candidates: [RunawayCandidate]
+    ) {
+        self.action = action
+        self.executed = executed
+        self.termWaitSecs = termWaitSecs
+        self.candidates = candidates
+    }
+
+    /// The rows execute would (or did) act on — the orphaned ones.
+    public var toReap: [RunawayCandidate] {
+        candidates.filter { $0.verdict == .reap }
+    }
+}
+
 /// The result of a reap-orphans preview or execute.
 public struct OrphanReapReport: Codable, Equatable, Sendable {
     /// "reapOrphans" — matches the `Action` vocabulary.

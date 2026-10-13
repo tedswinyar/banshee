@@ -133,6 +133,47 @@ pub struct OrphanReapReport {
     pub candidates: Vec<OrphanCandidate>,
 }
 
+/// One runaway process (`banshee-87l.5`): a leaf burning a core over a real
+/// lifetime that nothing supervises. The reap selection has NO recent-rate
+/// lens (an action runs one fresh `ps`, there is no previous cycle to
+/// difference), so it uses the lifetime ratio and the supervision tests only.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunawayCandidate {
+    pub pid: u32,
+    /// The script-aware label (`build-tool`), what a person would call it.
+    pub program: String,
+    /// The kernel's `comm` basename, re-verified before SIGKILL.
+    pub comm: String,
+    /// Full command line, so a person can tell WHICH build this was.
+    pub args: String,
+    pub cumulative_percent_of_one_core: f64,
+    pub age_secs: u64,
+    pub rss_bytes: u64,
+    pub orphaned: bool,
+    pub has_tty: bool,
+    pub child_count: u32,
+    /// `reap` only when ORPHANED: nothing can be waiting on it. A headless,
+    /// childless spinner with a live parent is listed as `spare` — its parent
+    /// (an IDE, a supervisor) may still own it, and a person should look.
+    pub verdict: SessionVerdict,
+    /// Human wording for the verdict, composed here (ADR-0005).
+    pub reason: String,
+    /// `null` on a preview and on a spared row. On execute: `"terminated"`
+    /// (died on SIGTERM) or `"killed"` (survived the grace and was SIGKILLed).
+    pub outcome: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunawayReapReport {
+    /// `"reapRunaways"` — matches the `Finding.action` vocabulary.
+    pub action: String,
+    pub executed: bool,
+    pub term_wait_secs: u64,
+    pub candidates: Vec<RunawayCandidate>,
+}
+
 // --- The runner ---------------------------------------------------------------
 
 /// Runs the two reap actions. Holds a `dyn CommandRunner` rather than being
@@ -441,6 +482,137 @@ impl ActionRunner {
             term_wait_secs: self.term_wait.as_secs(),
             candidates,
         })
+    }
+
+    // ---- reap_runaways --------------------------------------------------------
+
+    pub fn preview_runaways(&self) -> Result<RunawayReapReport> {
+        Ok(RunawayReapReport {
+            action: "reapRunaways".into(),
+            executed: false,
+            term_wait_secs: self.term_wait.as_secs(),
+            candidates: self.runaway_candidates()?,
+        })
+    }
+
+    /// SIGTERM the `reap` rows → wait → RECOMPUTE → SIGKILL only the pids that
+    /// are still runaways under the same `comm`. The same three-reading rule as
+    /// the orphans: a recycled pid would have to be a leaf burning a core,
+    /// orphaned, AND report the same executable to be touched.
+    pub fn execute_runaways(&self) -> Result<RunawayReapReport> {
+        let mut candidates = self.runaway_candidates()?;
+        let targets: Vec<String> = candidates
+            .iter()
+            .filter(|c| c.verdict == SessionVerdict::Reap)
+            .map(|c| c.pid.to_string())
+            .collect();
+
+        if !targets.is_empty() {
+            let mut term_args = vec!["-TERM"];
+            term_args.extend(targets.iter().map(String::as_str));
+            self.runner.run("kill", &term_args)?;
+
+            std::thread::sleep(self.term_wait);
+
+            let fresh: std::collections::HashMap<u32, String> = self
+                .runaway_candidates()?
+                .into_iter()
+                .filter(|c| c.verdict == SessionVerdict::Reap)
+                .map(|c| (c.pid, c.comm))
+                .collect();
+
+            let mut kill_args = vec!["-KILL".to_string()];
+            for c in candidates
+                .iter_mut()
+                .filter(|c| c.verdict == SessionVerdict::Reap)
+            {
+                if fresh.get(&c.pid) == Some(&c.comm) {
+                    c.outcome = Some("killed".into());
+                    kill_args.push(c.pid.to_string());
+                } else {
+                    c.outcome = Some("terminated".into());
+                }
+            }
+            if kill_args.len() > 1 {
+                let args: Vec<&str> = kill_args.iter().map(String::as_str).collect();
+                self.runner.run("kill", &args)?;
+            }
+        }
+
+        Ok(RunawayReapReport {
+            action: "reapRunaways".into(),
+            executed: true,
+            term_wait_secs: self.term_wait.as_secs(),
+            candidates,
+        })
+    }
+
+    /// The one selection function for runaways: fresh `ps`, the census's own
+    /// lifetime and supervision rules (`census::Runaway`, minus the recent rate
+    /// an action cannot measure), verdict by parentage. No pid list is accepted.
+    fn runaway_candidates(&self) -> Result<Vec<RunawayCandidate>> {
+        let core = self
+            .runner
+            .run("ps", &["-Ao", "pid=,ppid=,rss=,etime=,time=,tty=,comm="])?;
+        let args_out = self.runner.run("ps", &["-Ao", "pid=,args="])?;
+        let rows = parse::merge_ps(
+            parse::parse_ps_core(&core),
+            &parse::parse_ps_args(&args_out),
+        );
+        let mut children: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        for r in &rows {
+            *children.entry(r.ppid).or_insert(0) += 1;
+        }
+        let cfg = &self.config;
+        let mut out: Vec<RunawayCandidate> = rows
+            .iter()
+            .filter(|r| r.pid > 1 && r.ppid != 0)
+            .filter(|r| !cfg.is_system_executable(&r.comm))
+            .filter(|r| cfg.app_groups_matching(&r.args).next().is_none())
+            .filter(|r| cfg.monitor_agents_matching(&r.args).next().is_none())
+            .filter(|r| r.etime_secs >= cfg.runaway_min_life_secs)
+            .filter(|r| r.cpu_percent_of_one_core() >= cfg.runaway_min_cumulative_percent)
+            .filter_map(|r| {
+                let child_count = children.get(&r.pid).copied().unwrap_or(0);
+                let orphaned = r.ppid == 1;
+                let has_tty = !r.is_ide_spawned();
+                if child_count != 0 || !(orphaned || !has_tty) {
+                    return None;
+                }
+                let (verdict, reason) = if orphaned {
+                    (
+                        SessionVerdict::Reap,
+                        "orphaned (parent is launchd), no children, burning a core".to_string(),
+                    )
+                } else {
+                    (
+                        SessionVerdict::Spare,
+                        format!(
+                            "headless and childless but still parented by pid {} — \
+                             look before killing",
+                            r.ppid
+                        ),
+                    )
+                };
+                Some(RunawayCandidate {
+                    pid: r.pid,
+                    program: crate::census::script_label(r, cfg),
+                    comm: r.program().to_string(),
+                    args: r.args.clone(),
+                    cumulative_percent_of_one_core: r.cpu_percent_of_one_core(),
+                    age_secs: r.etime_secs,
+                    rss_bytes: r.rss_bytes(),
+                    orphaned,
+                    has_tty,
+                    child_count,
+                    verdict,
+                    reason,
+                    outcome: None,
+                })
+            })
+            .collect();
+        out.sort_by_key(|c| c.pid);
+        Ok(out)
     }
 
     /// The one selection function: fresh `ps`, the census's own pattern match,
@@ -832,6 +1004,144 @@ mod tests {
                 .preview_orphans()
                 .is_err()
         );
+    }
+
+    // ---- runaways ------------------------------------------------------------
+
+    /// `ps` output with one orphaned runaway (11275), one headless childless
+    /// spinner with a live parent (600 under 500), one hot supervisor WITH a
+    /// child (700 → 701), and a hot system daemon. Only 11275 reaps; 600 is
+    /// listed as spare; the rest are not candidates.
+    const RUNAWAY_CORE: &str = "\
+11275     1   1536 1-09:30:00 1790:00.00 ??       /Users/example/.cache/build-tools/ruby4.0.x/bin/ruby
+  500     1  40000 05:00:00    0:10.00 ??       /Applications/Kiro.app/Contents/MacOS/Kiro
+  600   500  90000 02:00:00   95:00.00 ??       claude
+  700     1   8000 03:00:00  170:00.00 ??       /usr/bin/make
+  701   700  20000 00:10:00    9:00.00 ??       /usr/bin/cc
+  800     1   5000 04:00:00  230:00.00 ??       /System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd
+";
+    const RUNAWAY_ARGS: &str = "\
+11275 /Users/example/.cache/build-tools/ruby4.0.x/bin/ruby --disable=gems /Users/example/.cache/build-tools/private-bin/build-tool
+500 /Applications/Kiro.app/Contents/MacOS/Kiro
+600 claude
+700 /usr/bin/make -j8
+701 /usr/bin/cc -O2 main.c
+800 /System/Library/PrivateFrameworks/MediaAnalysis.framework/Versions/A/mediaanalysisd
+";
+
+    fn runaway_runner() -> FakeRunner {
+        FakeRunner::new()
+            .with(PS_CORE_CMD, RUNAWAY_CORE)
+            .with(PS_ARGS_CMD, RUNAWAY_ARGS)
+    }
+
+    /// Selection and verdicts: the orphan reaps, the parented spinner is
+    /// spared-with-reason, the supervisor and the daemon are not candidates.
+    #[test]
+    fn runaway_selection_reaps_only_the_orphaned_leaf() {
+        let report = actions(runaway_runner()).preview_runaways().unwrap();
+        assert!(!report.executed);
+        assert_eq!(report.action, "reapRunaways");
+        let rows: Vec<(u32, &str, SessionVerdict)> = report
+            .candidates
+            .iter()
+            .map(|c| (c.pid, c.program.as_str(), c.verdict))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                (600, "claude", SessionVerdict::Spare),
+                (11275, "build-tool", SessionVerdict::Reap),
+            ],
+            "{:?}",
+            report.candidates
+        );
+        let spared = &report.candidates[0];
+        assert!(spared.reason.contains("pid 500"), "{}", spared.reason);
+        let orphan = &report.candidates[1];
+        assert_eq!(orphan.comm, "ruby");
+        assert!(orphan.orphaned && !orphan.has_tty && orphan.child_count == 0);
+        assert!(orphan.args.ends_with("build-tool"));
+        assert!(report.candidates.iter().all(|c| c.outcome.is_none()));
+    }
+
+    /// Execute TERMs only the reap rows, recomputes, and KILLs only a survivor
+    /// that is still the same executable. Here 11275 is gone by the second
+    /// reading, so nothing is SIGKILLed and the spared row keeps a null outcome.
+    #[test]
+    fn execute_runaways_terms_reap_rows_only_and_reverifies_before_kill() {
+        let after_core = "\
+  500     1  40000 05:00:00    0:10.00 ??       /Applications/Kiro.app/Contents/MacOS/Kiro
+  600   500  90000 02:00:00   95:00.00 ??       claude
+";
+        let after_args = "500 /Applications/Kiro.app/Contents/MacOS/Kiro\n600 claude\n";
+        let (r, a) = actions_shared(
+            FakeRunner::new()
+                .with_sequence(PS_CORE_CMD, &[RUNAWAY_CORE, after_core])
+                .with_sequence(PS_ARGS_CMD, &[RUNAWAY_ARGS, after_args]),
+        );
+        let report = a.execute_runaways().unwrap();
+        assert!(report.executed);
+        let kills = r.calls_to("kill");
+        assert_eq!(kills, vec!["kill -TERM 11275"], "{kills:?}");
+        let orphan = report.candidates.iter().find(|c| c.pid == 11275).unwrap();
+        assert_eq!(orphan.outcome.as_deref(), Some("terminated"));
+        let spared = report.candidates.iter().find(|c| c.pid == 600).unwrap();
+        assert_eq!(spared.outcome, None, "a spared row is never acted on");
+    }
+
+    /// A survivor that is STILL the same program is SIGKILLed; one whose pid was
+    /// recycled by a different executable is not.
+    #[test]
+    fn execute_runaways_sigkills_a_verified_survivor_but_not_a_recycled_pid() {
+        let after_core = "\
+11275     1   1536 1-09:30:05 1790:05.00 ??       /Users/example/.cache/build-tools/ruby4.0.x/bin/ruby
+";
+        let (r, a) = actions_shared(
+            FakeRunner::new()
+                .with_sequence(PS_CORE_CMD, &[RUNAWAY_CORE, after_core])
+                .with(PS_ARGS_CMD, RUNAWAY_ARGS),
+        );
+        let report = a.execute_runaways().unwrap();
+        assert_eq!(
+            r.calls_to("kill"),
+            vec!["kill -TERM 11275", "kill -KILL 11275"]
+        );
+        let orphan = report.candidates.iter().find(|c| c.pid == 11275).unwrap();
+        assert_eq!(orphan.outcome.as_deref(), Some("killed"));
+
+        // Recycled: same pid, now a Python leaf — still orphaned and hot, but a
+        // different comm. The TERM went out; the KILL must not.
+        let recycled_core = "\
+11275     1   1536 1-09:30:05 1790:05.00 ??       /usr/bin/python3
+";
+        let (r, a) = actions_shared(
+            FakeRunner::new()
+                .with_sequence(PS_CORE_CMD, &[RUNAWAY_CORE, recycled_core])
+                .with(PS_ARGS_CMD, RUNAWAY_ARGS),
+        );
+        a.execute_runaways().unwrap();
+        assert_eq!(r.calls_to("kill"), vec!["kill -TERM 11275"]);
+    }
+
+    #[test]
+    fn a_runaway_preview_kills_nothing_and_a_failing_ps_is_an_error() {
+        let (r, a) = actions_shared(runaway_runner());
+        a.preview_runaways().unwrap();
+        assert!(r.calls_to("kill").is_empty());
+        assert!(
+            actions(runner().unavailable("ps"))
+                .preview_runaways()
+                .is_err()
+        );
+    }
+
+    /// With nothing hot on the machine the report is an empty no-op — the shape
+    /// the e2e harness pins under its impossible overlay.
+    #[test]
+    fn a_calm_machine_has_no_runaway_candidates() {
+        let report = actions(runner()).preview_runaways().unwrap();
+        assert!(report.candidates.is_empty(), "{:?}", report.candidates);
     }
 
     // ---- wire shape ---------------------------------------------------------

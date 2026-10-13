@@ -137,6 +137,8 @@ final class ReapActionModelTests: XCTestCase {
     func testReapKindMapsOnlyReapActions() {
         XCTAssertEqual(ReapKind(action: .reapStaleSessions), .staleSessions)
         XCTAssertEqual(ReapKind(action: .reapOrphans), .orphans)
+        XCTAssertEqual(ReapKind(action: .reapRunaways), .runaways)
+        XCTAssertEqual(ReapKind.runaways.action, .reapRunaways)
         XCTAssertNil(ReapKind(action: .relaunchApps))
         XCTAssertNil(ReapKind(action: .reboot))
         XCTAssertNil(ReapKind(action: .openDiskTool))

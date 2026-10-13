@@ -84,6 +84,7 @@ pub fn attribute(d: Dimension, census: &Census, config: &PressureConfig) -> Vec<
             .unwrap_or_else(|| by_cumulative_cpu(census, config)),
         Dimension::Agents => stale_sessions_by_program(census),
         Dimension::Orphans => orphans_by_program(census),
+        Dimension::Runaways => runaways_by_rate(census),
         Dimension::ManagedAgents => managed_agents_by_rate(census, config),
         Dimension::Disk | Dimension::Uptime => Vec::new(),
     };
@@ -287,6 +288,26 @@ fn orphans_by_program(census: &Census) -> Vec<Ranked> {
         .iter()
         .filter_map(|p| Ranked::new(&p.program, p.count, p.rss_bytes as f64, Measure::Bytes))
         .collect()
+}
+
+/// Runaways by their recent rate, one entry per process (the pid is in the
+/// finding text; the who-line names the program a person would recognise —
+/// `build-tool`, not `ruby`).
+fn runaways_by_rate(census: &Census) -> Vec<Ranked> {
+    rank(
+        census
+            .runaways
+            .iter()
+            .filter_map(|r| {
+                Ranked::new(
+                    &r.program,
+                    1,
+                    r.recent_percent_of_one_core,
+                    Measure::PercentOfOneCore,
+                )
+            })
+            .collect(),
+    )
 }
 
 /// Managed-agent groups by their own rate. Ranked, never summed: each figure

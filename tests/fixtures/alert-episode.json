@@ -35,6 +35,7 @@
             }
         ],
         "orphanCount": 23,
+        "runawayCount": 0,
         "monitorPercentOfOneCore": 29.183
     },
     "suppressed": 39,

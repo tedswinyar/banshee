@@ -152,6 +152,27 @@ Processes matching `mcp|language.server|tree.sitter` (case-insensitive) with
 Measured 2026-08-04: **498 MCP processes / 1.9 GB total, ~45 orphaned.** Every
 agent session spawns roughly a dozen.
 
+### Runaway processes
+
+A class defined by BEHAVIOUR, not by name (`banshee-87l.5`). A runaway is a leaf
+(no child processes) that burned at least 50% of one core over the last census
+interval AND at least 50% over a lifetime of at least 30 minutes, and that nothing
+supervises: its parent is launchd (`orphaned`), or it has no controlling
+terminal. Operating-system daemons (by executable path prefix), configured app
+groups and managed agents are never candidates. For an interpreter (`ruby`,
+`python3`, `node`…) the label is the script it runs, which also fixes the CPU
+who-line: "ruby ×1 at 97% of one core" told nobody anything.
+
+Measured 2026-10-11: a `build-tool` Ruby launcher orphaned when its agent
+session exited ran at **92% of one core for 33 hours** with no children, no open
+files and 1.6 MB resident. The orphan dimension never saw it (no pattern match,
+nothing to size); stale sessions never saw it (quiet ≠ burning). It would have
+gone yellow on the second census after the session died.
+
+The recent rate comes from the per-pid CPU delta the census already keeps for the
+who-line, so the class costs no new spawn; `lsof` runs only for flagged
+runaways, the same economy as stale sessions.
+
 ### tmux sessions
 
 `tmux list-panes -a -F "#{session_name}|#{pane_pid}|#{pane_current_command}|#{session_activity}"`.
@@ -320,6 +341,7 @@ list. The rules, per dimension:
 | cpu, thermal | the RECENT-RATE lens: CPU burned since the previous census ÷ the interval (`census.cpu_consumers`), falling back to the cumulative-CPU rule when there is no predecessor | ANY process the census saw, grouped by app-group name or program basename — not just agent sessions. The fallback names agent sessions by program plus the managed agents as ONE deduplicated entry (`monitor_total`), never the sum of per-group percentages, whose denominators differ |
 | agents (stale sessions) | RSS that reaping frees | stale sessions only, by program |
 | orphans | the census's own per-program breakdown (count first) | `orphans_by_program` |
+| runaways | recent rate, one entry per process, labelled by script | `census.runaways` |
 | managedAgents | each group's own rate, RANKED not summed | `monitor_agents` |
 | disk, uptime | — | nobody: what is taking the space is a disk tool's question (ADR-0003) |
 
@@ -368,6 +390,13 @@ survivorship check → `SIGKILL` survivors.
 
 Killing sessions orphans their MCP servers, so a session reap should suggest an
 orphan reap immediately after.
+
+**`reap_runaways`** (`banshee-87l.5`) — recompute on a fresh `ps` using the
+census's lifetime and supervision rules (an action has no previous cycle, so no
+recent rate). Verdict `reap` ONLY for an orphaned leaf; a headless, childless
+spinner with a live parent is `spare` with the parent pid named, for a person to
+look at. `SIGTERM` the reap rows → wait 8s → recompute → `SIGKILL` only a survivor
+still reporting the same executable. A recycled pid fails that test.
 
 ## Measured cost of the cheap tier (2026-08-31)
 

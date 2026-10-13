@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::{CoreError, Result};
 
 /// Bump this when adding a migration below.
-pub const CURRENT_VERSION: i64 = 15;
+pub const CURRENT_VERSION: i64 = 16;
 
 /// Validate an existing database or initialize a fresh one, applying any
 /// pending forward migrations. Refuses databases newer than this build.
@@ -501,6 +501,33 @@ fn migrate_step(conn: &Connection, from: i64) -> Result<()> {
             // stays as a cheap secondary observable but no longer drives the band.
             conn.execute_batch("ALTER TABLE censuses ADD COLUMN pressure_kills INTEGER;")?;
         }
+        15 => {
+            // v16: runaway processes (`banshee-87l.5`). A census list of the
+            // unsupervised processes burning a core — the 2026-10-11 build-tool
+            // launcher that spun at 92% for 33 hours with no parent, no children
+            // and 1.6 MB resident, which no existing dimension could see. A child
+            // table cascading with its census like the others; empty rows are the
+            // normal case. `cwd` is NULL when lsof found nothing, which is "not
+            // known", not "no directory".
+            conn.execute_batch(
+                "CREATE TABLE census_runaways (
+                    census_id          TEXT    NOT NULL REFERENCES censuses(id) ON DELETE CASCADE,
+                    rank               INTEGER NOT NULL,
+                    pid                INTEGER NOT NULL,
+                    program            TEXT    NOT NULL,
+                    comm               TEXT    NOT NULL,
+                    recent_percent     REAL    NOT NULL,
+                    cumulative_percent REAL    NOT NULL,
+                    age_secs           INTEGER NOT NULL,
+                    rss_bytes          INTEGER NOT NULL,
+                    orphaned           INTEGER NOT NULL,
+                    has_tty            INTEGER NOT NULL,
+                    child_count        INTEGER NOT NULL,
+                    cwd                TEXT,
+                    PRIMARY KEY (census_id, rank)
+                );",
+            )?;
+        }
         other => {
             return Err(CoreError::Schema(format!(
                 "no migration step defined from v{other}"
@@ -618,15 +645,6 @@ mod tests {
         n == 1
     }
 
-    fn column_exists(conn: &Connection, table: &str, column: &str) -> bool {
-        conn.prepare(&format!("PRAGMA table_info({table})"))
-            .unwrap()
-            .query_map([], |r| r.get::<_, String>(1))
-            .unwrap()
-            .filter_map(std::result::Result::ok)
-            .any(|c| c == column)
-    }
-
     #[test]
     fn refuses_database_from_the_future() {
         let conn = mem();
@@ -679,6 +697,7 @@ mod tests {
             "census_app_groups",
             "census_monitor_agents",
             "census_cpu_consumers",
+            "census_runaways",
         ] {
             let n: i64 = conn
                 .query_row(
@@ -861,12 +880,29 @@ mod tests {
             // Simulate a migration interrupted mid-flight: apply the DDL and
             // the version bump inside a transaction, then roll it back (== a
             // crash before COMMIT under the atomic design). The DDL here must
-            // BE the newest arm's (v15, the census `pressure_kills` column), or
-            // this test quietly stops covering the step it claims to. Copy it
-            // verbatim from the `14 =>` arm after any `cargo fmt`.
+            // BE the newest arm's (v16, the `census_runaways` table), or this
+            // test quietly stops covering the step it claims to. Copy it
+            // verbatim from the `15 =>` arm after any `cargo fmt`.
             let tx = conn.unchecked_transaction().unwrap();
-            tx.execute_batch("ALTER TABLE censuses ADD COLUMN pressure_kills INTEGER;")
-                .unwrap();
+            tx.execute_batch(
+                "CREATE TABLE census_runaways (
+                    census_id          TEXT    NOT NULL REFERENCES censuses(id) ON DELETE CASCADE,
+                    rank               INTEGER NOT NULL,
+                    pid                INTEGER NOT NULL,
+                    program            TEXT    NOT NULL,
+                    comm               TEXT    NOT NULL,
+                    recent_percent     REAL    NOT NULL,
+                    cumulative_percent REAL    NOT NULL,
+                    age_secs           INTEGER NOT NULL,
+                    rss_bytes          INTEGER NOT NULL,
+                    orphaned           INTEGER NOT NULL,
+                    has_tty            INTEGER NOT NULL,
+                    child_count        INTEGER NOT NULL,
+                    cwd                TEXT,
+                    PRIMARY KEY (census_id, rank)
+                );",
+            )
+            .unwrap();
             tx.pragma_update(None, "user_version", CURRENT_VERSION)
                 .unwrap();
             tx.rollback().unwrap();
@@ -881,8 +917,8 @@ mod tests {
                 "rolled-back migration must leave the version where it was"
             );
             assert!(
-                !column_exists(&conn, "censuses", "pressure_kills"),
-                "the rolled-back ALTER TABLE must not have taken effect"
+                !table_exists(&conn, "census_runaways"),
+                "the rolled-back CREATE TABLE must not have taken effect"
             );
         }
 

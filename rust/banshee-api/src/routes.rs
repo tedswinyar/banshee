@@ -79,6 +79,14 @@ pub fn router(state: AppState, transport: Transport) -> Router {
         )
         .route("/actions/reap-orphans/preview", post(preview_reap_orphans))
         .route("/actions/reap-orphans/execute", post(execute_reap_orphans))
+        .route(
+            "/actions/reap-runaways/preview",
+            post(preview_reap_runaways),
+        )
+        .route(
+            "/actions/reap-runaways/execute",
+            post(execute_reap_runaways),
+        )
         .route("/backup", post(create_backup));
 
     // The transport decides what guards the keyed routes (ADR-0008 Phase 3). Over the
@@ -693,6 +701,17 @@ async fn execute_reap_orphans(
     ApiJson(ExecuteBody {}): ApiJson<ExecuteBody>,
 ) -> Result<Response, ApiError> {
     run_action(state, |a| a.execute_orphans()).await
+}
+
+async fn preview_reap_runaways(State(state): State<AppState>) -> Result<Response, ApiError> {
+    run_action(state, |a| a.preview_runaways()).await
+}
+
+async fn execute_reap_runaways(
+    State(state): State<AppState>,
+    ApiJson(ExecuteBody {}): ApiJson<ExecuteBody>,
+) -> Result<Response, ApiError> {
+    run_action(state, |a| a.execute_runaways()).await
 }
 
 /// Take a VERIFIED snapshot of the database into a daemon-owned `backups/`

@@ -76,6 +76,45 @@ final class ActionWireFormatTests: XCTestCase {
         }
     }
 
+    // ---- reap-runaways ------------------------------------------------------
+
+    /// The reap-runaways report (`banshee-87l.5`): one orphaned row that reaps,
+    /// one headless row with a live parent that is spared with the parent named.
+    func testDecodesTheRunawayReapFixtureAtFullDepth() throws {
+        let report = try Wire.decoder().decode(
+            RunawayReapReport.self,
+            from: WireFormatTests.fixture("reap-runaways.json")
+        )
+        XCTAssertEqual(report.action, "reapRunaways")
+        XCTAssertTrue(report.executed)
+        XCTAssertEqual(report.termWaitSecs, 8)
+        XCTAssertEqual(report.candidates.count, 2)
+        let spared = report.candidates[0]
+        XCTAssertEqual(spared.verdict, .spare)
+        XCTAssertNil(spared.outcome, "a spared row is never acted on")
+        XCTAssertTrue(spared.reason.contains("pid 500"))
+        let reaped = report.candidates[1]
+        XCTAssertEqual(reaped.program, "build-tool")
+        XCTAssertEqual(reaped.comm, "ruby")
+        XCTAssertTrue(reaped.orphaned)
+        XCTAssertEqual(reaped.outcome, "terminated")
+        XCTAssertEqual(report.toReap.map(\.pid), [11275])
+    }
+
+    func testEncodeCoversEveryRunawayCandidateField() throws {
+        let report = try Wire.decoder().decode(
+            RunawayReapReport.self,
+            from: WireFormatTests.fixture("reap-runaways.json")
+        )
+        for original in report.candidates {
+            let data = try Wire.encoder().encode(original)
+            let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            XCTAssertTrue(obj.keys.contains("outcome"), "outcome is present-as-null")
+            let round = try Wire.decoder().decode(RunawayCandidate.self, from: data)
+            XCTAssertEqual(round, original)
+        }
+    }
+
     // ---- reap-orphans -------------------------------------------------------
 
     func testDecodesTheOrphanReapFixtureAtFullDepth() throws {

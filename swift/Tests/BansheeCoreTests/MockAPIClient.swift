@@ -177,6 +177,29 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         return orphanExecuteResult
     }
+
+    var runawayPreviewResult: RunawayReapReport?
+    var runawayExecuteResult: RunawayReapReport?
+    var runawayPreviewCalls = 0
+    var runawayExecuteCalls = 0
+
+    func reapRunawaysPreview() async throws -> RunawayReapReport {
+        runawayPreviewCalls += 1
+        try checkFailure()
+        guard let runawayPreviewResult else {
+            throw APIError.httpError(status: 500, message: "no runaway preview configured")
+        }
+        return runawayPreviewResult
+    }
+
+    func reapRunawaysExecute() async throws -> RunawayReapReport {
+        runawayExecuteCalls += 1
+        try checkFailure()
+        guard let runawayExecuteResult else {
+            throw APIError.httpError(status: 500, message: "no runaway execute configured")
+        }
+        return runawayExecuteResult
+    }
 }
 
 extension Finding {
@@ -209,6 +232,7 @@ extension Finding {
         switch action {
         case .reapStaleSessions: return "Reap stale agent sessions"
         case .reapOrphans: return "Reap orphaned helper processes"
+        case .reapRunaways: return "Reap runaway processes"
         case .relaunchApps: return "Quit and relaunch the biggest apps"
         case .reboot: return "Reboot"
         case .openDiskTool: return "Open a disk-usage tool to see what is using the space"

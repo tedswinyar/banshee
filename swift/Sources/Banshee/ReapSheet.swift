@@ -103,6 +103,8 @@ struct ReapSheet: View {
             SessionCandidateList(report: report)
         case .orphans(let report):
             OrphanCandidateList(report: report)
+        case .runaways(let report):
+            RunawayCandidateList(report: report)
         case nil:
             EmptyView()
         }
@@ -156,6 +158,9 @@ struct ReapSheet: View {
         case .orphans(let r):
             let n = r.candidates.count
             return n == 1 ? "Reap 1 orphan" : "Reap \(n) orphans"
+        case .runaways(let r):
+            let n = r.toReap.count
+            return n == 1 ? "Reap 1 runaway" : "Reap \(n) runaways"
         case nil:
             return "Reap"
         }
@@ -224,6 +229,39 @@ struct OrphanCandidateList: View {
                         subtitle: c.args,
                         detail: ByteFormat.short(c.rssBytes),
                         verdictReap: true,
+                        outcome: c.outcome
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Runaway candidates: the orphaned ones that would be reaped, and every spared
+/// one with the reason — a hot headless process with a live parent is shown so
+/// the person can go and look, never killed from here.
+struct RunawayCandidateList: View {
+    let report: RunawayReapReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            if report.candidates.isEmpty {
+                Text("No runaway processes right now.")
+                    .font(Typography.body)
+                    .foregroundStyle(Palette.textSecondary)
+            } else {
+                if !report.executed {
+                    Text("Recomputed at reap time — only orphaned runaways are killed; spared rows are for you to look at.")
+                        .font(Typography.caption)
+                        .foregroundStyle(Palette.textSecondary)
+                }
+                ForEach(report.candidates) { c in
+                    ReapRow(
+                        title: "\(c.program) (pid \(c.pid)) · \(Int(c.cumulativePercentOfOneCore.rounded()))% of one core",
+                        subtitle: c.reason,
+                        detail: Format.duration(c.ageSecs),
+                        verdictReap: c.verdict == .reap,
                         outcome: c.outcome
                     )
                 }

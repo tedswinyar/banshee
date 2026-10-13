@@ -182,6 +182,52 @@ pub struct CpuConsumer {
     pub percent_of_one_core: f64,
 }
 
+/// A process burning a core that nothing is supervising (`banshee-87l.5`).
+///
+/// Defined by behaviour, not by name. The orphan dimension needs a pattern match
+/// and sizes by memory; the stale-session dimension needs an agent CLI and
+/// measures idleness. Neither saw the evidence case: a `build-tool` Ruby
+/// launcher orphaned to launchd when its agent session exited, 92% of one core
+/// for 33 hours, no children, 1.6 MB resident.
+///
+/// A runaway (1) burned at least `runaway_min_recent_percent` of one core over
+/// the last census interval, (2) has burned at least
+/// `runaway_min_cumulative_percent` over a lifetime of at least
+/// `runaway_min_life_secs`, and (3) is an unsupervised LEAF: it has no child
+/// processes, and either its parent is launchd (`orphaned`) or nothing owns a
+/// terminal for it. OS daemons (`runaway_system_prefixes`), configured app
+/// groups and managed agents are never candidates. "No children" is what
+/// separates a dead wrapper from a live supervisor, orphaned or not: a nohup'd
+/// build has rustc children, a spinning launcher has none.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Runaway {
+    pub pid: u32,
+    /// What a person would call it: the script for an interpreter
+    /// (`build-tool`, not `ruby`), else the `comm` basename. See `script_label`.
+    pub program: String,
+    /// The kernel's own record of the executable (`comm` basename), so a reap can
+    /// re-verify identity on a fresh `ps`.
+    pub comm: String,
+    /// Percent of one core over the LAST census interval.
+    pub recent_percent_of_one_core: f64,
+    /// Percent of one core over the whole lifetime.
+    pub cumulative_percent_of_one_core: f64,
+    pub age_secs: u64,
+    pub rss_bytes: u64,
+    /// `ppid == 1`. The strongest signal, and the only shape the reap will kill.
+    pub orphaned: bool,
+    /// Something owns a terminal for it; a person could be watching. Always
+    /// false unless `orphaned` (a parented process with a terminal is spared).
+    pub has_tty: bool,
+    /// Processes whose parent this is. Always 0 for a flagged runaway; carried
+    /// so the wire says why, and so the reap can re-check it.
+    pub child_count: u32,
+    /// Working directory via `lsof`, run ONLY for flagged runaways (the stale
+    /// session economy). It tells a person WHICH build this was.
+    pub cwd: Option<String>,
+}
+
 /// The per-pid cumulative CPU seconds of ONE census cycle, kept in memory so the
 /// NEXT cycle can difference against it. Never serialized — the differenced
 /// result (`Census::cpu_consumers`) is what survives storage; this is scaffolding
@@ -265,8 +311,105 @@ pub fn cpu_snapshot(rows: &[ProcRow], at: DateTime<Utc>) -> CpuSnapshot {
 fn cpu_label(r: &ProcRow, config: &CensusConfig) -> String {
     match config.app_groups_matching(&r.args).next() {
         Some(name) => name.to_string(),
-        None => r.program().to_string(),
+        None => script_label(r, config),
     }
+}
+
+/// What a person would call this process: for an interpreter, the basename of
+/// the script it runs (the first argument after argv[0] that is not a flag);
+/// otherwise the `comm` basename. The 33-hour runaway was `ruby --disable=…
+/// …/private-bin/build-tool`, and "ruby" told nobody anything.
+pub fn script_label(r: &ProcRow, config: &CensusConfig) -> String {
+    let program = r.program();
+    if !config.is_interpreter(program) {
+        return program.to_string();
+    }
+    for a in r.args.split_whitespace().skip(1) {
+        // Inline code or a module name follows these; there is no script.
+        if matches!(a, "-c" | "-e" | "-m" | "-r" | "-p" | "-x") {
+            break;
+        }
+        if a.starts_with('-') {
+            continue;
+        }
+        let name = parse::basename(a);
+        if !name.is_empty() {
+            return name.to_string();
+        }
+        break;
+    }
+    program.to_string()
+}
+
+/// Flag the runaways in `rows` (see `Runaway`). Pure, like
+/// `recent_cpu_consumers`, and driven from the same two census cycles: with no
+/// previous snapshot there is no recent rate, so nothing is flagged — an
+/// unmeasured process is not a runaway. Sorted by recent rate, then pid.
+pub fn classify_runaways(
+    prev: Option<&CpuSnapshot>,
+    rows: &[ProcRow],
+    at: DateTime<Utc>,
+    config: &CensusConfig,
+) -> Vec<Runaway> {
+    let Some(prev) = prev else {
+        return Vec::new();
+    };
+    let dt = (at - prev.at).num_milliseconds() as f64 / 1000.0;
+    if dt <= 0.0 {
+        return Vec::new();
+    }
+    let mut children: HashMap<u32, u32> = HashMap::new();
+    for r in rows {
+        *children.entry(r.ppid).or_insert(0) += 1;
+    }
+
+    let mut out: Vec<Runaway> = rows
+        .iter()
+        .filter(|r| r.pid > 1 && r.ppid != 0)
+        .filter(|r| !config.is_system_executable(&r.comm))
+        .filter(|r| config.app_groups_matching(&r.args).next().is_none())
+        .filter(|r| config.monitor_agents_matching(&r.args).next().is_none())
+        .filter(|r| r.etime_secs >= config.runaway_min_life_secs)
+        .filter(|r| r.cpu_percent_of_one_core() >= config.runaway_min_cumulative_percent)
+        .filter_map(|r| {
+            let prev_cpu = *prev.cpu_by_pid.get(&r.pid)?;
+            // A cumulative figure that went DOWN is a reused pid: not this process.
+            if r.cpu_secs < prev_cpu {
+                return None;
+            }
+            let recent = (r.cpu_secs - prev_cpu) * 100.0 / dt;
+            if recent < config.runaway_min_recent_percent {
+                return None;
+            }
+            let child_count = children.get(&r.pid).copied().unwrap_or(0);
+            let orphaned = r.ppid == 1;
+            let has_tty = !r.is_ide_spawned();
+            let unsupervised = child_count == 0 && (orphaned || !has_tty);
+            if !unsupervised {
+                return None;
+            }
+            Some(Runaway {
+                pid: r.pid,
+                program: script_label(r, config),
+                comm: r.program().to_string(),
+                recent_percent_of_one_core: recent,
+                cumulative_percent_of_one_core: r.cpu_percent_of_one_core(),
+                age_secs: r.etime_secs,
+                rss_bytes: r.rss_bytes(),
+                orphaned,
+                has_tty,
+                child_count,
+                cwd: None,
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.recent_percent_of_one_core
+            .partial_cmp(&a.recent_percent_of_one_core)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.pid.cmp(&b.pid))
+    });
+    out
 }
 
 /// Rank CPU consumers by their recent rate over the census interval.
@@ -370,6 +513,12 @@ pub struct Census {
     /// where the last ended), so summing across censuses does not double-count.
     #[serde(default)]
     pub pressure_kills: Option<u64>,
+    /// Unsupervised processes burning a core (`banshee-87l.5`), ranked by recent
+    /// rate. Empty on the first census after a start (no predecessor to
+    /// difference), and on a pre-v16 census row. What the Runaways dimension
+    /// bands on.
+    #[serde(default)]
+    pub runaways: Vec<Runaway>,
 }
 
 impl Census {
@@ -472,12 +621,13 @@ impl<R: CommandRunner> CensusCollector<R> {
         // The recent-rate CPU consumers, differenced against the previous
         // cycle's per-pid times (`banshee-aen`). One lock: read the predecessor,
         // rank, then replace it with this cycle's snapshot for the next tick.
-        let cpu_consumers = {
+        let (cpu_consumers, mut runaways) = {
             let mut prev = self.prev_cpu.lock().unwrap_or_else(|e| e.into_inner());
             let consumers =
                 recent_cpu_consumers(prev.as_ref(), &rows, at, &self.config, CPU_CONSUMER_CAP);
+            let runaways = classify_runaways(prev.as_ref(), &rows, at, &self.config);
             *prev = Some(cpu_snapshot(&rows, at));
-            consumers
+            (consumers, runaways)
         };
 
         // `lsof` runs ONLY for sessions already flagged stale. `perf-scan` calls
@@ -486,6 +636,11 @@ impl<R: CommandRunner> CensusCollector<R> {
         let mut agent_sessions = agent_sessions;
         for s in agent_sessions.iter_mut().filter(|s| s.is_stale) {
             s.cwd = self.cwd_of(s.pid);
+        }
+        // Same economy for runaways: the directory names the build, and a
+        // census rarely has any to look up.
+        for r in runaways.iter_mut() {
+            r.cwd = self.cwd_of(r.pid);
         }
 
         // Honest jetsam kills over the window since the last census (`banshee-2dq`).
@@ -508,6 +663,7 @@ impl<R: CommandRunner> CensusCollector<R> {
             tmux_available,
             cpu_consumers,
             pressure_kills,
+            runaways,
         })
     }
 
@@ -1525,5 +1681,330 @@ mod tests {
         assert_eq!(c.cpu_consumers[0].name, "Chrome Helper (Renderer)");
         assert_eq!(c.cpu_consumers[0].proc_count, 4);
         assert!((c.cpu_consumers[0].percent_of_one_core - 312.4).abs() < 1e-6);
+
+        // The runaway: labelled by its SCRIPT with the kernel's comm beside it,
+        // orphaned, childless, and located.
+        assert_eq!(c.runaways.len(), 1);
+        let r = &c.runaways[0];
+        assert_eq!(
+            (r.pid, r.program.as_str(), r.comm.as_str()),
+            (11275, "build-tool", "ruby")
+        );
+        assert!(r.orphaned && !r.has_tty && r.child_count == 0);
+        assert!((r.recent_percent_of_one_core - 92.4).abs() < 1e-6);
+        assert_eq!(
+            r.cwd.as_deref(),
+            Some("/Users/example/Code/example-ws/src/ExamplePackage")
+        );
+    }
+
+    /// A census recorded before runaways existed decodes with an EMPTY list, not
+    /// an error — the daemon reads its own year-old episode summaries.
+    #[test]
+    fn a_census_without_a_runaways_key_decodes_to_an_empty_list() {
+        let mut v: serde_json::Value = serde_json::from_str(FIXTURE_CENSUS).unwrap();
+        v.as_object_mut().unwrap().remove("runaways");
+        let c: Census = serde_json::from_value(v).unwrap();
+        assert!(c.runaways.is_empty());
+    }
+
+    // ---- runaways (`banshee-87l.5`) -----------------------------------------
+
+    fn proc_row(
+        pid: u32,
+        ppid: u32,
+        etime_secs: u64,
+        cpu_secs: f64,
+        tty: &str,
+        comm: &str,
+        args: &str,
+    ) -> ProcRow {
+        ProcRow {
+            pid,
+            ppid,
+            rss_kb: 1536,
+            etime_secs,
+            cpu_secs,
+            tty: tty.into(),
+            comm: comm.into(),
+            args: args.into(),
+        }
+    }
+
+    const RUBY: &str = "/Users/example/.cache/build-tools/ruby4.0.x/bin/ruby";
+    const LAUNCHER_ARGS: &str = "/Users/example/.cache/build-tools/ruby4.0.x/bin/ruby \
+        --disable=gems,rubyopt --disable-did_you_mean \
+        /Users/example/.cache/build-tools/private-bin/build-tool";
+    const HOURS_33: u64 = 33 * 3600;
+    const CPU_30H: f64 = 30.0 * 3600.0;
+
+    /// Two cycles 300 s apart; `prev_cpu` is the earlier cumulative figure per pid.
+    fn two_cycles(prev_cpu: &[(u32, f64)]) -> (CpuSnapshot, DateTime<Utc>) {
+        let t0 = DateTime::from_timestamp(1_791_800_000, 0).unwrap();
+        (
+            CpuSnapshot {
+                at: t0,
+                cpu_by_pid: prev_cpu.iter().copied().collect(),
+            },
+            t0 + chrono::Duration::seconds(300),
+        )
+    }
+
+    /// The evidence case: an interpreter launcher orphaned to launchd, burning a
+    /// core for 33 hours with no children, flagged under the SCRIPT name — not
+    /// `ruby`, which is what the who-line used to say.
+    #[test]
+    fn an_orphaned_launcher_burning_a_core_is_a_runaway_named_by_its_script() {
+        let cfg = CensusConfig::default();
+        let now = [proc_row(
+            11275,
+            1,
+            HOURS_33,
+            CPU_30H,
+            "??",
+            RUBY,
+            LAUNCHER_ARGS,
+        )];
+        // +276 s of CPU over a 300 s interval = 92% of one core.
+        let (prev, at) = two_cycles(&[(11275, CPU_30H - 276.0)]);
+
+        let out = classify_runaways(Some(&prev), &now, at, &cfg);
+        assert_eq!(out.len(), 1, "{out:?}");
+        let r = &out[0];
+        assert_eq!(r.program, "build-tool");
+        assert_eq!(r.comm, "ruby");
+        assert!(r.orphaned && !r.has_tty && r.child_count == 0);
+        assert!((r.recent_percent_of_one_core - 92.0).abs() < 1e-6);
+        assert!((r.cumulative_percent_of_one_core - 90.909).abs() < 1e-2);
+        assert_eq!(r.age_secs, HOURS_33);
+        assert_eq!(r.rss_bytes, 1536 * 1024);
+        assert_eq!(r.cwd, None, "the pure classifier never runs lsof");
+    }
+
+    /// Every rail, one at a time, against the same hot process. Mutation-proof:
+    /// delete any single filter in `classify_runaways` and one of these cases
+    /// flags something it must not.
+    #[test]
+    fn each_runaway_rail_spares_a_process_the_rule_must_not_flag() {
+        let cfg = CensusConfig::default();
+        let prev_cpu = CPU_30H - 276.0;
+        let system_daemon =
+            "/System/Library/PrivateFrameworks/MediaAnalysis.framework/mediaanalysisd";
+        type Case<'a> = (&'a str, Vec<ProcRow>, Vec<(u32, f64)>);
+        let cases: Vec<Case> = vec![
+            (
+                "a live supervisor: no tty, but it has a child",
+                vec![
+                    proc_row(100, 1, HOURS_33, CPU_30H, "??", RUBY, LAUNCHER_ARGS),
+                    proc_row(101, 100, 60, 1.0, "??", "/usr/bin/make", "make"),
+                ],
+                vec![(100, prev_cpu)],
+            ),
+            (
+                "a person is watching: parented AND owns a terminal",
+                vec![proc_row(
+                    100,
+                    500,
+                    HOURS_33,
+                    CPU_30H,
+                    "ttys003",
+                    RUBY,
+                    LAUNCHER_ARGS,
+                )],
+                vec![(100, prev_cpu)],
+            ),
+            (
+                "an operating-system daemon",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    system_daemon,
+                    system_daemon,
+                )],
+                vec![(100, prev_cpu)],
+            ),
+            (
+                "a configured app group (a browser may be busy)",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    "Google Chrome Helper",
+                    CHROME_ARGS,
+                )],
+                vec![(100, prev_cpu)],
+            ),
+            (
+                "a managed agent (its own dimension)",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    "/usr/local/bin/mdworker",
+                    "/usr/local/bin/mdworker",
+                )],
+                vec![(100, prev_cpu)],
+            ),
+            (
+                "too young: 10 minutes old, however hot",
+                vec![proc_row(100, 1, 600, 590.0, "??", RUBY, LAUNCHER_ARGS)],
+                vec![(100, 590.0 - 276.0)],
+            ),
+            (
+                "a burst: hot NOW but a 5% lifetime ratio",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    0.05 * HOURS_33 as f64,
+                    "??",
+                    RUBY,
+                    LAUNCHER_ARGS,
+                )],
+                vec![(100, 0.05 * HOURS_33 as f64 - 276.0)],
+            ),
+            (
+                "idle NOW despite a hot lifetime (+3 s over 300 s)",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    RUBY,
+                    LAUNCHER_ARGS,
+                )],
+                vec![(100, CPU_30H - 3.0)],
+            ),
+            (
+                "a reused pid (cumulative went DOWN)",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    RUBY,
+                    LAUNCHER_ARGS,
+                )],
+                vec![(100, CPU_30H + 1000.0)],
+            ),
+            (
+                "unmeasured: absent from the previous cycle",
+                vec![proc_row(
+                    100,
+                    1,
+                    HOURS_33,
+                    CPU_30H,
+                    "??",
+                    RUBY,
+                    LAUNCHER_ARGS,
+                )],
+                vec![],
+            ),
+        ];
+        for (name, now, prev_cpu) in cases {
+            let (prev, at) = two_cycles(&prev_cpu);
+            let out = classify_runaways(Some(&prev), &now, at, &cfg);
+            assert!(out.is_empty(), "{name}: must not be flagged, got {out:?}");
+        }
+    }
+
+    /// The second unsupervised shape: parented, but headless and childless — an
+    /// agent CLI spinning under an IDE (the original `87l.5` case).
+    #[test]
+    fn a_headless_childless_spinner_is_a_runaway_even_with_a_live_parent() {
+        let cfg = CensusConfig::default();
+        let kiro = "/Applications/Kiro.app/Contents/MacOS/Kiro";
+        let now = [
+            proc_row(200, 777, 2 * 3600, 1.5 * 3600.0, "??", "claude", "claude"),
+            proc_row(777, 1, 9 * 3600, 100.0, "??", kiro, kiro),
+        ];
+        let (prev, at) = two_cycles(&[(200, 1.5 * 3600.0 - 240.0), (777, 100.0)]);
+        let out = classify_runaways(Some(&prev), &now, at, &cfg);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].pid, 200);
+        assert!(!out[0].orphaned && !out[0].has_tty && out[0].child_count == 0);
+        assert!((out[0].recent_percent_of_one_core - 80.0).abs() < 1e-6);
+    }
+
+    /// No previous cycle means no rate, and no rate means nothing is a runaway.
+    /// "Could not measure" is never "is spinning".
+    #[test]
+    fn the_first_census_flags_no_runaways() {
+        let cfg = CensusConfig::default();
+        let now = [proc_row(
+            11275,
+            1,
+            HOURS_33,
+            CPU_30H,
+            "??",
+            RUBY,
+            LAUNCHER_ARGS,
+        )];
+        let at = DateTime::from_timestamp(1_791_800_300, 0).unwrap();
+        assert!(classify_runaways(None, &now, at, &cfg).is_empty());
+    }
+
+    /// Hottest first, pid as the tiebreak, so the finding names the worst one.
+    #[test]
+    fn runaways_rank_by_recent_rate_then_pid() {
+        let cfg = CensusConfig::default();
+        let now = [
+            proc_row(300, 1, HOURS_33, CPU_30H, "??", RUBY, LAUNCHER_ARGS),
+            proc_row(100, 1, HOURS_33, CPU_30H, "??", RUBY, LAUNCHER_ARGS),
+            proc_row(200, 1, HOURS_33, CPU_30H, "??", RUBY, LAUNCHER_ARGS),
+        ];
+        let (prev, at) = two_cycles(&[
+            (300, CPU_30H - 150.0),
+            (100, CPU_30H - 270.0),
+            (200, CPU_30H - 270.0),
+        ]);
+        let pids: Vec<u32> = classify_runaways(Some(&prev), &now, at, &cfg)
+            .iter()
+            .map(|r| r.pid)
+            .collect();
+        assert_eq!(pids, vec![100, 200, 300]);
+    }
+
+    /// The label rule and its edges: a flag-only command line falls back to the
+    /// interpreter, a non-interpreter keeps its comm name even when its args name
+    /// a file, and the CPU who-line inherits the same label.
+    #[test]
+    fn script_label_names_the_script_for_interpreters_only() {
+        let cfg = CensusConfig::default();
+        let label =
+            |comm: &str, args: &str| script_label(&proc_row(1, 1, 1, 0.0, "??", comm, args), &cfg);
+        assert_eq!(label(RUBY, LAUNCHER_ARGS), "build-tool");
+        assert_eq!(
+            label(
+                "/usr/bin/python3",
+                "python3 -u /opt/tool/bin/serve.py --port 8"
+            ),
+            "serve.py"
+        );
+        assert_eq!(label("/usr/bin/python3", "python3 -c print(1)"), "python3");
+        assert_eq!(label("/usr/bin/python3", "python3"), "python3");
+        assert_eq!(
+            label("/opt/homebrew/bin/node", "node /x/y/server.js"),
+            "server.js"
+        );
+        assert_eq!(label("/usr/local/bin/rg", "rg --files build-tool"), "rg");
+        assert_eq!(
+            cpu_label(&proc_row(1, 1, 1, 0.0, "??", RUBY, LAUNCHER_ARGS), &cfg),
+            "build-tool"
+        );
+        assert_eq!(
+            cpu_label(&cpu_row(1, 0.0, "Google Chrome", CHROME_ARGS), &cfg),
+            "Google Chrome",
+            "app group still wins"
+        );
     }
 }

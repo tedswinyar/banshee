@@ -58,6 +58,7 @@ struct CensusView: View {
                 staleSessions(census)
                 tmux(census)
                 orphans(census)
+                runaways(census)
                 appGroups(census)
                 monitors(census)
             }
@@ -143,6 +144,22 @@ struct CensusView: View {
         }
     }
 
+    private func runaways(_ census: Census) -> some View {
+        section("Runaway processes") {
+            if census.runaways.isEmpty {
+                quiet("No unsupervised process is burning a core.")
+            } else {
+                ForEach(census.runaways) { r in
+                    row(
+                        title: "\(r.program) (pid \(r.pid))",
+                        subtitle: "\(r.orphaned ? "orphaned" : "no terminal, no children") · \(Format.duration(r.ageSecs))\(r.cwd.map { " · \($0)" } ?? "")",
+                        meta: "\(Int(r.recentPercentOfOneCore.rounded()))% of one core"
+                    )
+                }
+            }
+        }
+    }
+
     private func appGroups(_ census: Census) -> some View {
         section("Biggest apps") {
             if census.appGroups.isEmpty {
@@ -223,5 +240,13 @@ enum Format {
     /// for RSS — the number the user will compare against.
     static func bytes(_ value: UInt64) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .memory)
+    }
+
+    /// Coarse wall-clock age, the same shape the finding list uses: `33h`, `2d`.
+    static func duration(_ secs: UInt64) -> String {
+        if secs < 60 { return "\(secs)s" }
+        if secs < 3600 { return "\(secs / 60)m" }
+        if secs < 86_400 { return "\(secs / 3600)h" }
+        return "\(secs / 86_400)d"
     }
 }
