@@ -1,0 +1,9 @@
+# Profiles expire yearly. With || turned into &&, an expired profile is refused only
+# when ExpirationDate is ALSO missing — i.e. never — and the release job would seal an
+# app that dies at launch on the first cut after the anniversary.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  if [[ -z "$v" || ! "$v" > "$now" ]]; then
+---NEW---
+  if [[ -z "$v" && ! "$v" > "$now" ]]; then

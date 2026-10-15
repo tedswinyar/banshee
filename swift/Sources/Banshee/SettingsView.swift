@@ -48,6 +48,13 @@ struct SettingsView: View {
                     .font(Typography.caption)
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                // Read from the code signature at render time (banshee-jie): whether a
+                // time-sensitive banner survives Focus is a property of how THIS build
+                // was signed, and the downgrade is otherwise silent.
+                Text(Capabilities.timeSensitiveNotificationsSummary)
+                    .font(Typography.caption)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {

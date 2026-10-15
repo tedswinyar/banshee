@@ -52,6 +52,17 @@ fi
 APPCAST_URL="${APPCAST_URL:-https://github.com/tedswinyar/banshee/releases/latest/download/appcast.xml}"
 SPARKLE_PUBLIC_KEY="${SPARKLE_PUBLIC_KEY:-}"
 
+# Time-sensitive notifications (banshee-jie, ruled 2026-10-12). Banshee.entitlements
+# carries the ONE capability the app claims; PROVISIONING_PROFILE (release.conf) is
+# the Developer ID profile that authorises it. Both are applied to the app's seal on
+# the Developer ID path only — see the signing section for why an ad-hoc build must
+# not carry the entitlement. SKIP_TIME_SENSITIVE=1 ships a Developer ID build
+# without it, as a deliberate act (same posture as SKIP_SPARKLE in build-dmg.sh).
+ENTITLEMENTS="$ROOT_DIR/Banshee.entitlements"
+PROVISIONING_PROFILE="${PROVISIONING_PROFILE:-}"
+# shellcheck source=lib/entitlements.sh
+. "$SCRIPT_DIR/lib/entitlements.sh"
+
 echo "==> Building $APP_NAME $VERSION ($CONFIGURATION)"
 # A release build must not carry the builder's home path (scripts/lib/bundle-scan.sh
 # explains the incident). Both compilers embed source paths into the binary — Rust in
@@ -197,9 +208,9 @@ echo "==> Signing (identity: ${SIGNING_IDENTITY})"
 # A function rather than an array of flags on purpose: stock macOS ships bash
 # 3.2, where expanding an empty array under `set -u` is an "unbound variable"
 # error — so `codesign "${OPTS[@]}"` with no flags would break a release on a
-# clean machine. The app needs no entitlements: it is a localhost HTTP client
-# that spawns the helpers as subprocesses (not dlopen), and the helpers exec
-# ps/tmux/git/kill, all of which the hardened runtime permits.
+# clean machine. The HELPERS need no entitlements: they exec ps/tmux/git/kill,
+# all of which the hardened runtime permits, and the app spawns them as
+# subprocesses (not dlopen).
 # SIGNING_KEYCHAIN (release.conf or env) names the keychain FILE holding the
 # Developer ID — the build server keeps it in its own keychain, unlocked by the
 # job, rather than in a login keychain nobody is logged in to. Unset, codesign
@@ -211,6 +222,55 @@ sign() {
     codesign --force --options runtime --timestamp --keychain "$SIGNING_KEYCHAIN" --sign "$SIGNING_IDENTITY" "$1"
   else
     codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$1"
+  fi
+}
+
+# The APP's seal is the one place entitlements go (banshee-jie). The app claims
+# `com.apple.developer.usernotifications.time-sensitive` so a Shrieking or red-disk
+# banner is presented immediately and through Focus instead of being silently
+# downgraded to `.active` (the 03:16 disk warning shown to an empty room,
+# banshee-3ue). It is a RESTRICTED entitlement (TN3125):
+#   - a Developer ID build may claim it ONLY with an embedded Developer ID
+#     provisioning profile (Contents/embedded.provisionprofile) that grants it for
+#     this App ID — without one amfid kills the app at launch, no dialog, and the
+#     DMG would notarize and staple fine first;
+#   - an ad-hoc signature cannot be authorised by any profile, so an ad-hoc build
+#     carrying it is killed the same way (probed 2026-10-15: SIGKILL, exit 137).
+# So: ad-hoc builds get no entitlements and time-sensitive banners present as
+# `.active` (the app logs which at launch); Developer ID builds REQUIRE the profile,
+# which is validated against this bundle id and team before anything is signed.
+# The entitlements actually sealed are composed in build/ from Banshee.entitlements
+# plus the application-identifier / team-identifier the profile expects.
+APP_CLAIMS_TIME_SENSITIVE=0
+SIGNED_ENTITLEMENTS="$ROOT_DIR/build/Banshee.signed.entitlements"
+if [ "$SIGNING_IDENTITY" = "-" ]; then
+  echo "==> Entitlements: none (ad-hoc build; time-sensitive banners present as .active)"
+elif [ "${SKIP_TIME_SENSITIVE:-}" = "1" ]; then
+  echo "==> WARNING: SKIP_TIME_SENSITIVE=1 — Developer ID build WITHOUT the time-sensitive capability; banners will not break through Focus" >&2
+else
+  if [ -z "$PROVISIONING_PROFILE" ]; then
+    echo "build-app.sh: a Developer ID build claims $BANSHEE_TIME_SENSITIVE_KEY and needs the provisioning profile that authorises it;" >&2
+    echo "build-app.sh: set PROVISIONING_PROFILE in release.conf (docs/build-pipeline.md → Entitlements), or SKIP_TIME_SENSITIVE=1 to ship without it deliberately" >&2
+    exit 1
+  fi
+  TEAM_ID="$(banshee_team_id_from_identity "$SIGNING_IDENTITY")" \
+    || { echo "build-app.sh: cannot read a Team ID from SIGNING_IDENTITY '$SIGNING_IDENTITY'" >&2; exit 1; }
+  PROFILE_PLIST="$ROOT_DIR/build/embedded.provisionprofile.plist"
+  banshee_profile_plist "$PROVISIONING_PROFILE" "$PROFILE_PLIST" || exit 1
+  banshee_check_profile_plist "$PROFILE_PLIST" "$BUNDLE_ID" "$TEAM_ID" || exit 1
+  banshee_compose_entitlements "$ENTITLEMENTS" "$TEAM_ID" "$BUNDLE_ID" "$SIGNED_ENTITLEMENTS" || exit 1
+  # Inside the bundle BEFORE the app is sealed, so the seal covers it.
+  /bin/cp -f "$PROVISIONING_PROFILE" "$APP_DIR/Contents/embedded.provisionprofile"
+  APP_CLAIMS_TIME_SENSITIVE=1
+  echo "==> Entitlements: $BANSHEE_TIME_SENSITIVE_KEY, authorised by $(basename "$PROVISIONING_PROFILE") for $TEAM_ID.$BUNDLE_ID"
+fi
+sign_app() {
+  if [ "$APP_CLAIMS_TIME_SENSITIVE" = 1 ] && [ -n "${SIGNING_KEYCHAIN:-}" ]; then
+    codesign --force --options runtime --timestamp --entitlements "$SIGNED_ENTITLEMENTS" --keychain "$SIGNING_KEYCHAIN" --sign "$SIGNING_IDENTITY" "$1"
+  elif [ "$APP_CLAIMS_TIME_SENSITIVE" = 1 ]; then
+    codesign --force --options runtime --timestamp --entitlements "$SIGNED_ENTITLEMENTS" --sign "$SIGNING_IDENTITY" "$1"
+  else
+    sign "$1"
   fi
 }
 # Sparkle.framework carries nested code — two XPC services, Updater.app, and
@@ -231,7 +291,21 @@ fi
 for bin in banshee-api banshee-mcp banshee; do
   sign "$APP_DIR/Contents/Helpers/$bin"
 done
-sign "$APP_DIR"
+sign_app "$APP_DIR"
+
+# The bytes that ship must agree with the decision above: a Developer ID bundle that
+# claims the capability without having been given it would be a release that does
+# not break through Focus and says nothing; an ad-hoc bundle that claims it would
+# not launch at all.
+if [ "$APP_CLAIMS_TIME_SENSITIVE" = 1 ]; then
+  banshee_signed_entitlements_claim "$APP_DIR" \
+    || { echo "build-app.sh: the sealed app does not carry $BANSHEE_TIME_SENSITIVE_KEY although it was signed with $SIGNED_ENTITLEMENTS" >&2; exit 1; }
+  [ -f "$APP_DIR/Contents/embedded.provisionprofile" ] \
+    || { echo "build-app.sh: Contents/embedded.provisionprofile is missing from the sealed app" >&2; exit 1; }
+elif banshee_signed_entitlements_claim "$APP_DIR"; then
+  echo "build-app.sh: the app carries $BANSHEE_TIME_SENSITIVE_KEY without a profile to authorise it — it would be killed at launch; refusing to finish" >&2
+  exit 1
+fi
 
 # The packaged bytes, not the source tree, are what ships: refuse a release bundle that
 # still carries the builder's home path anywhere (scripts/lib/bundle-scan.sh).

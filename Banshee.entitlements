@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      The ONE capability the app claims (banshee-jie, ruled 2026-10-12): a banner
+      posted at UNNotificationInterruptionLevel.timeSensitive is presented
+      immediately and through Focus only when the running code carries this
+      entitlement; without it macOS silently presents the banner as .active
+      (auto-dismissed, withheld under Focus). Shrieking and a red disk ask for it
+      (swift/Sources/BansheeCore/Notifications.swift).
+
+      This is a RESTRICTED entitlement (com.apple.developer.*, TN3125): the signed
+      app must also embed a Developer ID provisioning profile that authorises it,
+      or amfid kills the app at launch. An ad-hoc build cannot carry it at all
+      (probed 2026-10-15: SIGKILL, exit 137), so scripts/build-app.sh applies this
+      file ONLY on the Developer ID path, together with the profile, and adds the
+      application-identifier / team-identifier entitlements there — they are
+      derived from the signing identity, not written here.
+
+      No critical-alerts key: ruled out 2026-09-22 (Notifications.swift).
+    -->
+    <key>com.apple.developer.usernotifications.time-sensitive</key>
+    <true/>
+</dict>
+</plist>

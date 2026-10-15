@@ -21,6 +21,16 @@
 # The keychain FILE holding the Developer ID, for a machine where it is not in the
 # login keychain (codesign --keychain). Unlock it first (`security unlock-keychain`).
 #SIGNING_KEYCHAIN="$HOME/Library/Keychains/banshee-build.keychain-db"
+# The Developer ID PROVISIONING PROFILE that authorises the app's one entitlement,
+# com.apple.developer.usernotifications.time-sensitive (Banshee.entitlements). A
+# Developer ID build REQUIRES it: the entitlement is restricted, and an app that
+# claims it without an embedded profile is killed at launch. Make it in the
+# developer portal: Identifiers → the App ID → Capabilities → Time Sensitive
+# Notifications; Profiles → + → Distribution: Developer ID → that App ID → download.
+# Import on the build server with scripts/build-server/import-provisioning-profile.sh.
+# SKIP_TIME_SENSITIVE=1 in the environment ships a Developer ID build without the
+# capability — deliberately; the banners then do not break through Focus.
+#PROVISIONING_PROFILE="$HOME/.config/banshee-build/Banshee.provisionprofile"
 # The Sparkle EdDSA PRIVATE key as a file (generate_keys -x), for a machine whose
 # keychain does not hold it. Same key as everywhere else — never regenerate.
 #SPARKLE_PRIVATE_KEY_FILE="$HOME/.config/banshee-build/sparkle_private_key"

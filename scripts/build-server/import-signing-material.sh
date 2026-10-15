@@ -25,10 +25,15 @@ KC="$HOME/Library/Keychains/banshee-build.keychain-db"
 die() { printf 'import-signing-material: ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf 'import-signing-material: %s\n' "$*"; }
 
-P12="" SPARKLE_KEY="" SPARKLE_PUB="" NKEY="" NKEY_ID="" NISSUER="" RELEASES=""
+P12="" SPARKLE_KEY="" SPARKLE_PUB="" NKEY="" NKEY_ID="" NISSUER="" RELEASES="" PROFILE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --p12) P12="$2"; shift 2 ;;
+    # The Developer ID provisioning profile that authorises the time-sensitive
+    # notifications entitlement (banshee-jie). Optional HERE only because a server
+    # provisioned before 0.1.10 adds it later with import-provisioning-profile.sh;
+    # doctor --release at the end refuses a release without it.
+    --provisioning-profile) PROFILE="$2"; shift 2 ;;
     --sparkle-key) SPARKLE_KEY="$2"; shift 2 ;;
     --sparkle-public) SPARKLE_PUB="$2"; shift 2 ;;
     --notary-key) NKEY="$2"; shift 2 ;;
@@ -101,6 +106,10 @@ info "identity: $IDENTITY"
 # --- files -------------------------------------------------------------------
 /bin/cp -f "$SPARKLE_KEY" "$CFG/sparkle_private_key"; chmod 600 "$CFG/sparkle_private_key"
 /bin/cp -f "$NKEY" "$CFG/AuthKey.p8"; chmod 600 "$CFG/AuthKey.p8"
+if [ -n "$PROFILE" ]; then
+  "$ROOT_DIR/scripts/build-server/import-provisioning-profile.sh" --no-conf "$PROFILE" "$IDENTITY" \
+    || die "the provisioning profile was refused (see above)"
+fi
 
 # --- release.conf ------------------------------------------------------------
 cat > "$CFG/release.conf" <<CONF
@@ -113,6 +122,7 @@ NOTARY_KEY_ID="$NKEY_ID"
 NOTARY_ISSUER_ID="$NISSUER"
 SPARKLE_PUBLIC_KEY="$SPARKLE_PUB"
 SPARKLE_PRIVATE_KEY_FILE="$CFG/sparkle_private_key"
+${PROFILE:+PROVISIONING_PROFILE="$CFG/Banshee.provisionprofile"}
 ${RELEASES:+RELEASES_REPO="$RELEASES"}
 CONF
 chmod 600 "$CFG/release.conf"

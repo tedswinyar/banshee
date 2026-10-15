@@ -71,9 +71,11 @@ struct UserNotificationSink: NotificationSink {
         // No `.critical` case exists to map (maintainer ruling, 2026-09-22). Note
         // also that `.timeSensitive` is honoured fully only when the app carries the
         // time-sensitive notifications capability; without it the system presents
-        // the banner as `.active`. The app is currently signed with no entitlements
-        // (`scripts/build-app.sh`), so adding that capability is a signing change to
-        // make deliberately, on the build server, not here.
+        // the banner as `.active`. Since 0.1.10 (banshee-jie, ruled 2026-10-12) a
+        // Developer ID build carries it — `Banshee.entitlements`, sealed in by
+        // `scripts/build-app.sh` with the provisioning profile that authorises it.
+        // An ad-hoc build cannot (it would be killed at launch), so `Capabilities`
+        // reads what THIS process was actually granted and the launch log says which.
         content.interruptionLevel = switch notification.interruption {
         case .active: .active
         case .timeSensitive: .timeSensitive
@@ -116,6 +118,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let notifier = preferences.notificationsEnabled
             ? NotificationCoordinator(sink: UserNotificationSink())
             : nil
+        // Say at launch whether `.timeSensitive` means anything on this build. The
+        // downgrade is otherwise invisible: no error, the banner just auto-dismisses.
+        NSLog("banshee: time-sensitive notifications entitlement %@ — %@",
+              Capabilities.timeSensitiveNotifications ? "present" : "ABSENT",
+              Capabilities.timeSensitiveNotificationsSummary)
         // Core cannot see Version.swift; it needs this to notice a daemon that a
         // Sparkle update left behind (banshee-b25).
         PressureModel.shared.appVersion = Version.marketing

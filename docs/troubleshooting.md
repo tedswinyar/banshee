@@ -254,6 +254,32 @@ in `build-app.sh`). The scan is correct to refuse: the first published DMG shipp
 
 **Reference**: `build-pipeline.md`
 
+### The signed app does nothing when opened (or exits 137 from a terminal)
+
+**Symptom**: `open Banshee.app` shows nothing — no window, no menu bar glyph, no crash
+report; from a terminal the binary dies with `Killed: 9` / exit 137. The DMG
+notarized and stapled fine.
+
+**Diagnosis**: the app claims the restricted entitlement
+`com.apple.developer.usernotifications.time-sensitive` (`Banshee.entitlements`,
+since 0.1.10) and nothing authorises it: no `Contents/embedded.provisionprofile`, a
+profile for another App ID or team, an expired one, or an ad-hoc signature (which no
+profile can authorise). amfid kills such a process at exec. Confirm with
+`codesign -d --entitlements - Banshee.app` (is the key there?) and
+`security cms -D -i Banshee.app/Contents/embedded.provisionprofile` (what does the
+profile grant, for which `application-identifier`, until when?).
+
+**Fix**: a build from `scripts/build-app.sh` refuses to produce this bundle — it
+requires and validates `PROVISIONING_PROFILE` on the Developer ID path and never
+applies the entitlement ad-hoc — so a bundle in this state was signed some other
+way. Rebuild through the script; on the build server make sure
+`import-provisioning-profile.sh` has run (`doctor.sh --release` says).
+
+**Prevention**: `scripts/tests/test-entitlements.sh` and `test-app-bundle.sh` pin
+the branches; profiles expire yearly and `doctor --release` reports it.
+
+**Reference**: `build-pipeline.md` → Entitlements and the provisioning profile
+
 ## See also
 
 - [lessons/](lessons/) — earned findings, each with what it cost

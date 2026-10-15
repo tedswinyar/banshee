@@ -23,6 +23,42 @@ it, everything still works: ad-hoc signing, notarization skipped, DMG usable
 locally. This is deliberate — a fresh clone must produce a runnable build
 with zero Apple credentials.
 
+## Entitlements and the provisioning profile
+
+The app claims exactly one entitlement, `com.apple.developer.usernotifications.time-sensitive`
+(`Banshee.entitlements`, banshee-jie): it is what lets a Shrieking or red-disk banner
+be presented immediately and through Focus instead of being silently downgraded to
+an auto-dismissing `.active` one. It is a *restricted* entitlement (Apple TN3125),
+and that has two consequences `build-app.sh` enforces:
+
+| Signing | Entitlement | Why |
+|---|---|---|
+| ad-hoc (`make app`, a fresh clone) | **none** | an ad-hoc signature cannot be authorised by any profile; an ad-hoc binary carrying this key is SIGKILLed at launch (probed 2026-10-15, exit 137) |
+| Developer ID | **required**, with `PROVISIONING_PROFILE` | the claim must be backed by a Developer ID provisioning profile embedded at `Contents/embedded.provisionprofile`, or amfid kills the app at launch — after codesign, notarization and stapling all passed |
+| Developer ID, `SKIP_TIME_SENSITIVE=1` | none (loud warning) | the deliberate way to ship without it; banners then do not break through Focus |
+
+Before anything is signed the profile is decoded (`security cms -D`) and refused
+unless it is a Developer ID profile (`ProvisionsAllDevices`), grants the key, is for
+`<TEAM>.com.tedswinyar.banshee`, and has not expired (`scripts/lib/entitlements.sh`;
+`scripts/tests/test-entitlements.sh` pins each refusal). The entitlements actually
+sealed are composed in `build/` from the checked-in file plus the
+`com.apple.application-identifier` / `com.apple.developer.team-identifier` the
+profile expects, and the sealed app is read back to confirm the claim landed.
+`doctor.sh --release` runs the same profile check, so the release job stops at the
+credentials step rather than after a twenty-minute build.
+
+**Making the profile** (a person, once a year — profiles expire): developer.apple.com
+→ Certificates, Identifiers & Profiles → *Identifiers* → `com.tedswinyar.banshee`
+(create it as a macOS App ID with an explicit bundle id if absent) → *Capabilities*
+→ tick **Time Sensitive Notifications** → Save. Then *Profiles* → **+** →
+*Distribution: Developer ID* → that App ID → the Developer ID Application certificate
+→ name it → Generate → Download. On the build server, as `builder`:
+`scripts/build-server/import-provisioning-profile.sh ~/Banshee_Developer_ID.provisionprofile`
+(copies it 0600 under `~/.config/banshee-build/`, records `PROVISIONING_PROFILE` in
+release.conf, ends with `doctor.sh --release`). The app logs at launch whether it was
+granted the capability (`Capabilities.swift`) and Settings says the same, so a
+downgrade is never silent.
+
 ## Notarization credentials — why this is fragile
 
 Two ways to authenticate to the notary (`scripts/lib/notary.sh`): an **App Store

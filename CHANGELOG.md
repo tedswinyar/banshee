@@ -6,6 +6,33 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Time-sensitive notifications: the Developer ID build now carries the
+  entitlement, so a Shrieking or red-disk banner breaks through Focus and stays
+  until you look** (banshee-jie; ruled 2026-10-12). Since 0.1.7 the coordinator
+  has asked for `.timeSensitive` on those two banners, but the app was signed
+  with no entitlements, so macOS silently presented them as `.active` — the
+  auto-dismissing kind, withheld under Focus — and the 03:16 disk warning that
+  preceded a sub-1 GB morning was shown to an empty room. `Banshee.entitlements`
+  carries `com.apple.developer.usernotifications.time-sensitive`;
+  `scripts/build-app.sh` seals it into the app on the Developer ID path together
+  with the provisioning profile that authorises it (`PROVISIONING_PROFILE` in
+  release.conf → `Contents/embedded.provisionprofile`), composing the
+  application-identifier the profile expects from the signing identity. The
+  profile is decoded and checked before anything is signed — Developer ID, grants
+  the capability, this App ID and team, not expired — because codesign accepts
+  every one of those mistakes and amfid then kills the app at launch with no
+  dialog; `doctor.sh --release` checks the same, and `SKIP_TIME_SENSITIVE=1` is
+  the one deliberate way to ship without it. Ad-hoc builds (`make app`) stay
+  entitlement-free: an ad-hoc binary carrying this restricted entitlement is
+  SIGKILLed at launch (probed 2026-10-15, exit 137). The app reads what it was
+  actually granted from its own code signature at launch (`Capabilities`), logs
+  it, and says so in Settings, so a build that cannot break through Focus says
+  so instead of auto-dismissing quietly. New: `scripts/lib/entitlements.sh`,
+  `scripts/build-server/import-provisioning-profile.sh`, the Swift
+  `EntitlementsFileTests` and the scripts-suite `test-entitlements.sh`.
+
 ### Fixed
 
 - **A burst drop at comfortable headroom no longer colours the disk band or

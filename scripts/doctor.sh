@@ -89,6 +89,31 @@ if [ -n "$RELEASE_MODE" ]; then
     miss "SIGNING_IDENTITY" "unset or ad-hoc in release.conf — a release must be Developer ID signed"; rc=1
   fi
 
+  # The time-sensitive notifications capability (banshee-jie) is a restricted
+  # entitlement: a Developer ID build that claims it without the profile that
+  # authorises it signs, notarizes and staples fine — and is killed at launch. Checked
+  # by DECODING the configured profile and reading what it grants, not by stat.
+  # shellcheck source=lib/entitlements.sh
+  . "$SCRIPT_DIR/lib/entitlements.sh"
+  if [ "${SKIP_TIME_SENSITIVE:-}" = "1" ]; then
+    say "  skip provisioning profile — SKIP_TIME_SENSITIVE=1: this release will NOT break through Focus (deliberate)"
+  elif [ -z "${PROVISIONING_PROFILE:-}" ]; then
+    miss "PROVISIONING_PROFILE" "unset in release.conf — the app claims $BANSHEE_TIME_SENSITIVE_KEY and is KILLED at launch without the Developer ID profile that grants it (docs/build-pipeline.md → Entitlements; scripts/build-server/import-provisioning-profile.sh)"; rc=1
+  else
+    profile_team="$(banshee_team_id_from_identity "${SIGNING_IDENTITY:-}" 2>/dev/null || true)"
+    profile_plist="$(mktemp)"
+    if [ -z "$profile_team" ]; then
+      miss "provisioning profile" "cannot derive a Team ID from SIGNING_IDENTITY to check $PROVISIONING_PROFILE against"; rc=1
+    elif ! profile_reason="$(banshee_profile_plist "$PROVISIONING_PROFILE" "$profile_plist" 2>&1)"; then
+      miss "provisioning profile" "$profile_reason"; rc=1
+    elif ! profile_reason="$(banshee_check_profile_plist "$profile_plist" "$BANSHEE_BUNDLE_ID" "$profile_team" 2>&1)"; then
+      miss "provisioning profile" "$PROVISIONING_PROFILE: $profile_reason"; rc=1
+    else
+      ok "provisioning profile grants $BANSHEE_TIME_SENSITIVE_KEY to $profile_team.$BANSHEE_BUNDLE_ID: $PROVISIONING_PROFILE"
+    fi
+    rm -f "$profile_plist"
+  fi
+
   if notary_lines="$(banshee_notary_args 2>&1)"; then
     NOTARY_ARGS=(); while IFS= read -r a; do NOTARY_ARGS+=("$a"); done <<< "$notary_lines"
     if xcrun notarytool history "${NOTARY_ARGS[@]}" >/dev/null 2>&1; then

@@ -1,0 +1,13 @@
+# The entitlement rides the APP's seal and nothing else's. Sealing the bundle through
+# the helpers' plain `sign` builds, signs and notarizes a Developer ID app that never
+# breaks through Focus — the exact silent downgrade 0.1.10 exists to end.
+file: scripts/build-app.sh
+test: test-app-bundle
+---OLD---
+sign_app "$APP_DIR"
+
+# The bytes that ship
+---NEW---
+sign "$APP_DIR"
+
+# The bytes that ship

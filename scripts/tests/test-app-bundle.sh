@@ -162,5 +162,40 @@ t "the settings set the background picture" \
 t "the styled path uses dmgbuild, not a bare hdiutil UDZO create" \
   bash -c "grep -q 'dmgbuild not installed' '$BUILD_DMG'"
 
+# ---------------------------------------------------------------------------
+# 5. The time-sensitive notifications entitlement rides the APP's seal, on the
+#    Developer ID path only, with the profile that authorises it (banshee-jie)
+# ---------------------------------------------------------------------------
+# Two opposite failures, both silent at build time: a Developer ID build sealed
+# WITHOUT the entitlement ships and never breaks through Focus; an ad-hoc build (or a
+# Developer ID build without its profile) sealed WITH it is killed at launch. These
+# pins keep the script's branches on the right side of each.
+t "the app is sealed through sign_app, not the helpers' sign" \
+  grep -qE '^sign_app "\$APP_DIR"$' "$BUILD_APP"
+t "the helpers are still sealed without entitlements" \
+  grep -qE 'sign "\$APP_DIR/Contents/Helpers/\$bin"' "$BUILD_APP"
+t "the Developer ID app seal carries the composed entitlements (both keychain branches)" bash -c \
+  '[ "$(grep -cE "codesign .*--entitlements \"\\\$SIGNED_ENTITLEMENTS\" .*--sign \"\\\$SIGNING_IDENTITY\"" "$1")" = 2 ]' _ "$BUILD_APP"
+t "…and every entitled codesign line also uses the hardened runtime" bash -c \
+  '! grep -E "codesign .*--entitlements" "$1" | grep -v -- "--options runtime" | grep -q .' _ "$BUILD_APP"
+t_fails "the ad-hoc codesign line never carries entitlements" bash -c \
+  'grep -E "codesign .*--sign \"-\"" "$1" | grep -q -- "--entitlements"' _ "$BUILD_APP"
+t "the provisioning profile is embedded at Contents/embedded.provisionprofile" \
+  grep -q '"\$APP_DIR/Contents/embedded.provisionprofile"' "$BUILD_APP"
+t "…before the app is sealed (the seal must cover it)" bash -c \
+  '[ "$(grep -n "embedded.provisionprofile\"$" "$1" | head -1 | cut -d: -f1)" -lt "$(grep -n "^sign_app \"\$APP_DIR\"" "$1" | cut -d: -f1)" ]' _ "$BUILD_APP"
+t "a Developer ID build without PROVISIONING_PROFILE refuses to build (exit 1, not a silent downgrade)" bash -c \
+  'grep -A3 "if \[ -z \"\$PROVISIONING_PROFILE\" \]; then" "$1" | grep -q "exit 1"' _ "$BUILD_APP"
+t "the profile is validated against this bundle id and team before signing" \
+  grep -q 'banshee_check_profile_plist "$PROFILE_PLIST" "$BUNDLE_ID" "$TEAM_ID"' "$BUILD_APP"
+t "the sealed app is checked for the claim it was meant to carry" \
+  grep -q 'banshee_signed_entitlements_claim "$APP_DIR"' "$BUILD_APP"
+t "…and an unentitled build that somehow claims it is refused" bash -c \
+  'grep -A2 "elif banshee_signed_entitlements_claim \"\$APP_DIR\"; then" "$1" | grep -q "exit 1"' _ "$BUILD_APP"
+t "SKIP_TIME_SENSITIVE=1 is the only way to ship a Developer ID build without it" \
+  grep -q 'SKIP_TIME_SENSITIVE:-}" = "1"' "$BUILD_APP"
+t "doctor --release checks the profile too (the release job runs doctor before building)" \
+  grep -q 'banshee_check_profile_plist' "$SCRIPT_DIR/doctor.sh"
+
 echo "test-app-bundle: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

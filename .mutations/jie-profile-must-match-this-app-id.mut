@@ -1,0 +1,9 @@
+# A provisioning profile for another App ID or team signs, notarizes and staples fine
+# and the app is then killed at launch; the library must REFUSE it, not merely compare.
+# Inverting the comparison accepts every wrong profile and refuses the right one.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  if [ "$v" != "$team_id.$bundle_id" ]; then
+---NEW---
+  if [ "$v" = "$team_id.$bundle_id" ]; then

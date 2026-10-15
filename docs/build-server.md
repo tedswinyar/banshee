@@ -88,12 +88,24 @@ host's name from `BANSHEE_BUILD_HOST`, falling back to the machine's own hostnam
    # App Store Connect API key: appstoreconnect.apple.com → Users and Access →
    # Integrations → Team Keys → Generate (Developer role). Download AuthKey_XXXXXX.p8
    # ONCE; note the Key ID and the Issuer ID.
-   scp ~/DeveloperID.p12 ~/sparkle_private_key.txt ~/Downloads/AuthKey_*.p8 builder@<build-host>:
+   # Developer ID PROVISIONING PROFILE (since 0.1.10, banshee-jie): it authorises the
+   # app's time-sensitive notifications entitlement; without it the signed app is
+   # killed at launch. developer.apple.com → Identifiers → com.tedswinyar.banshee →
+   # Capabilities → tick "Time Sensitive Notifications"; Profiles → + → Distribution:
+   # Developer ID → that App ID → the Developer ID Application cert → Download.
+   scp ~/DeveloperID.p12 ~/sparkle_private_key.txt ~/Downloads/AuthKey_*.p8 \
+       ~/Downloads/Banshee_Developer_ID.provisionprofile builder@<build-host>:
    ```
 5. **As `builder`:** `~/banshee/scripts/build-server/import-signing-material.sh --p12
    ~/DeveloperID.p12 --sparkle-key ~/sparkle_private_key.txt --sparkle-public '<the
    SPARKLE_PUBLIC_KEY from the development machine's release.conf>' --notary-key
-   ~/AuthKey_XXXXXX.p8 --notary-key-id XXXXXX --notary-issuer <uuid>`. Creates
+   ~/AuthKey_XXXXXX.p8 --notary-key-id XXXXXX --notary-issuer <uuid>
+   --provisioning-profile ~/Banshee_Developer_ID.provisionprofile`. A server provisioned
+   before 0.1.10 adds the profile alone with
+   `~/banshee/scripts/build-server/import-provisioning-profile.sh ~/Banshee_Developer_ID.provisionprofile`
+   (refuses a profile that is not Developer ID, does not grant the entitlement, is for
+   another App ID or team, or has expired; records `PROVISIONING_PROFILE` in
+   release.conf; ends with `doctor.sh --release`). Creates
    `banshee-build.keychain-db` with a generated password (0600 file), imports the identity
    with codesign in its partition list, stores the two key files 0600, writes
    `~/.config/banshee-build/release.conf`, and ends with `doctor.sh --release` — which must
