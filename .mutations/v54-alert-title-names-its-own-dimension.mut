@@ -1,0 +1,8 @@
+# The title is built per reading (banshee-v54.1): the CPU row must not carry the
+# disk's label.
+file: rust/banshee-core/src/pressure/mod.rs
+test: every_reading_carries_its_own_notification_title_in_cores_words
+---OLD---
+            alert_title: alert_title_for(d, band),
+---NEW---
+            alert_title: alert_title_for(Dimension::Disk, band),

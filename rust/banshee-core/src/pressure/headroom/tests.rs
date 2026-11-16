@@ -36,6 +36,7 @@ fn reading(
         dimension: d,
         key: d.key().to_string(),
         label: d.label().to_string(),
+        alert_title: crate::pressure::alert_title_for(d, band),
         band,
         value,
         unit: d.unit(),
@@ -54,7 +55,7 @@ fn cpu(utilization: f64) -> DimensionReading {
     let band = if utilization >= 0.95 {
         Band::Red
     } else if utilization >= 0.85 {
-        Band::Yellow
+        Band::Amber
     } else {
         Band::Green
     };
@@ -72,7 +73,7 @@ fn memory(available_bytes: f64) -> DimensionReading {
     let band = if available_bytes < 512e6 {
         Band::Red
     } else if available_bytes < 2e9 {
-        Band::Yellow
+        Band::Amber
     } else {
         Band::Green
     };
@@ -249,7 +250,7 @@ fn the_shrieking_fixture_waits_five_minutes_and_names_the_dominant_source() {
     assert_eq!(mem.status, ConditionStatus::True);
     assert_eq!(
         mem.reason, "SwapRed",
-        "uptime (yellow, advisory) must not win"
+        "uptime (amber, advisory) must not win"
     );
     assert_eq!(mem.message, "35.6 GB in use, climbing 74 MB/min");
     assert_eq!(
@@ -512,7 +513,7 @@ fn stirring_caps_at_half_the_cores_and_restless_at_a_quarter() {
             memory(20e9),
             reading(
                 Dimension::Orphans,
-                Band::Yellow,
+                Band::Amber,
                 12.0,
                 0.07,
                 300,
@@ -542,9 +543,9 @@ fn stirring_caps_at_half_the_cores_and_restless_at_a_quarter() {
     assert_eq!(ten.recommended_parallelism, 3);
 }
 
-/// Thermal MODERATE halves it, rounding up: Stirring (one yellow — thermal
+/// Thermal MODERATE halves it, rounding up: Stirring (one amber — thermal
 /// itself) caps 8 cores at 4, then the halving makes it 2. The control is the
-/// same machine with an ORPHANS yellow instead, which stays at 4. Mutation-proof:
+/// same machine with an ORPHANS amber instead, which stays at 4. Mutation-proof:
 /// drop the halving and both read 4.
 #[test]
 fn thermal_moderate_halves_the_answer() {
@@ -556,7 +557,7 @@ fn thermal_moderate_halves_the_answer() {
             memory(20e9),
             reading(
                 Dimension::Thermal,
-                Band::Yellow,
+                Band::Amber,
                 1.0,
                 0.0,
                 300,
@@ -572,7 +573,7 @@ fn thermal_moderate_halves_the_answer() {
             memory(20e9),
             reading(
                 Dimension::Orphans,
-                Band::Yellow,
+                Band::Amber,
                 12.0,
                 0.07,
                 300,
@@ -711,7 +712,7 @@ fn conditions_are_ready_then_the_six_sources_in_order() {
     );
 }
 
-/// A yellow is `False` with a reason that says yellow — visible, not alarming.
+/// An amber is `False` with a reason that says amber — visible, not alarming.
 /// A source with two dimensions names the worst one. Advisory uptime is not a
 /// memory reading: alone, it leaves `MemoryPressure` Unknown.
 #[test]
@@ -723,7 +724,7 @@ fn a_condition_names_the_worst_non_advisory_dimension_of_its_source() {
             cpu(0.3),
             reading(
                 Dimension::Swap,
-                Band::Yellow,
+                Band::Amber,
                 5e9,
                 0.125,
                 200,
@@ -731,7 +732,7 @@ fn a_condition_names_the_worst_non_advisory_dimension_of_its_source() {
             ),
             reading(
                 Dimension::Uptime,
-                Band::Yellow,
+                Band::Amber,
                 12.0,
                 0.36,
                 86400,
@@ -741,8 +742,8 @@ fn a_condition_names_the_worst_non_advisory_dimension_of_its_source() {
     );
     let h = derive(&p, eight(), &config());
     let mem = condition(&h, "MemoryPressure");
-    assert_eq!(mem.status, ConditionStatus::False, "yellow is not pressure");
-    assert_eq!(mem.reason, "SwapYellow");
+    assert_eq!(mem.status, ConditionStatus::False, "amber is not pressure");
+    assert_eq!(mem.reason, "SwapAmber");
     assert_eq!(mem.message, "5.0 GB in use");
     assert_eq!(mem.since, Some(at() - chrono::Duration::seconds(200)));
 
@@ -753,7 +754,7 @@ fn a_condition_names_the_worst_non_advisory_dimension_of_its_source() {
             cpu(0.3),
             reading(
                 Dimension::Uptime,
-                Band::Yellow,
+                Band::Amber,
                 12.0,
                 0.36,
                 86400,
@@ -770,11 +771,11 @@ fn a_condition_names_the_worst_non_advisory_dimension_of_its_source() {
 }
 
 /// An all-green source reports its PRIMARY dimension (available memory), not the
-/// green that happens to sit closest to its own yellow line. Found live: thrash
+/// green that happens to sit closest to its own amber line. Found live: thrash
 /// at 0 ops/sec has severity −0.11 and 7 GB available has −3.5, so "worst by
 /// severity" named thrash and `MemoryPressure` read `peak 0 swap ops/sec`.
 /// Mutation-proof, verified: pick the worst green by severity and this names
-/// thrash. The yellow case is unchanged — out of band still wins.
+/// thrash. The amber case is unchanged — out of band still wins.
 #[test]
 fn an_all_green_source_reports_its_primary_dimension() {
     let thrash = reading(
@@ -798,10 +799,10 @@ fn an_all_green_source_reports_its_primary_dimension() {
         "the primary dimension, not the closest green"
     );
 
-    // Out of band still wins over the primary: a yellow thrash names itself.
+    // Out of band still wins over the primary: an amber thrash names itself.
     let hot_thrash = reading(
         Dimension::Thrash,
-        Band::Yellow,
+        Band::Amber,
         150.0,
         0.05,
         60,
@@ -813,7 +814,7 @@ fn an_all_green_source_reports_its_primary_dimension() {
         vec![cpu(0.3), memory(7.2e9), hot_thrash],
     );
     let h = derive(&p, eight(), &config());
-    assert_eq!(condition(&h, "MemoryPressure").reason, "ThrashYellow");
+    assert_eq!(condition(&h, "MemoryPressure").reason, "ThrashAmber");
     assert_eq!(
         condition(&h, "MemoryPressure").message,
         "peak 150 swap ops/sec"

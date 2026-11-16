@@ -626,7 +626,7 @@ mod tests {
 
     /// Load must be divided by core count. Mutation-proof: return `self.load_1m`
     /// unchanged from `per_core` and this fails — 4.20 is "busy" per-core on one
-    /// core but 0.525 on eight, which is the difference between a yellow band
+    /// core but 0.525 on eight, which is the difference between an amber band
     /// and a green one.
     #[test]
     fn load_is_reported_per_core() {

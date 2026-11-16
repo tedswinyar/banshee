@@ -1,0 +1,8 @@
+# A new app reading a daemon from before the amber rename (banshee-v54.1) sees
+# "yellow"; it must decode as amber or the whole verdict fails to parse.
+file: swift/Sources/BansheeCore/Models.swift
+test: WireFormatTests/testTheOldBandWordDecodesAsAmberAndIsNeverWritten
+---OLD---
+        } else if raw == "yellow" {
+---NEW---
+        } else if raw == "no-longer-accepted" {

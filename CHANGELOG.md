@@ -6,6 +6,30 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING (wire): the middle band is `amber`, not `yellow`** (banshee-v54.1).
+  It has always drawn orange; once the band word appears beside its dot the name
+  and the colour disagreed on screen. Renamed everywhere rather than papered over:
+  `band`/`pending` values on every payload, the headroom `reason` tokens
+  (`CpuYellow` → `CpuAmber`, `SwapYellow` → `SwapAmber`, and so on), every string
+  core composes, and the e2e seam variables `BANSHEE_DISK_YELLOW_INTERVAL_MS` and
+  `BANSHEE_DISK_YELLOW_EPISODE_UP_SECS` (now `…_AMBER_…`; the old names are not
+  read). **Anything that matches the word `yellow` or a `…Yellow` reason must be
+  updated.** Two readers accept the old word so nothing already recorded is lost:
+  core reads stored alert episodes written as `yellow` (they would otherwise be
+  dropped from `/alerts` silently), and the app decodes `yellow` from a daemon it
+  has outpaced. Nothing writes it.
+- **The disk notification's title is composed in core** (banshee-v54.1). Every
+  dimension reading carries `alertTitle` ("Banshee: Disk headroom is red"), and the
+  app shows it verbatim instead of building the sentence itself (ADR-0005). From a
+  daemon older than the field the banner falls back to the overall label.
+- **The Alerts tab names things the way the rest of the app does** (banshee-v54.1):
+  "CPU utilization · peaked at Wailing" where it printed the wire keys ("cpu ·
+  peaked at wailing"). Episodes carry `dimensionLabel` and `peak.levelName`,
+  refreshed on read, so episodes recorded before the fields existed show them too.
+- On-screen text uses American spelling ("summarized", "canceled").
+
 ### Added
 
 - **Time-sensitive notifications: the Developer ID build now carries the

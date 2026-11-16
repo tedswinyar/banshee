@@ -1,8 +1,8 @@
 # The disk channel fires on the disk BAND alone. Gating it on the overall level
-# is the exact defect of banshee-3ue: a red disk behind a redder CPU, or a yellow
+# is the exact defect of banshee-3ue: a red disk behind a redder CPU, or an amber
 # disk under a Restless verdict, is never named.
 file: swift/Sources/BansheeCore/Notifications.swift
-test: testDiskYellowNotifiesOnEntryThenRarely
+test: testDiskAmberNotifiesOnEntryThenRarely
 ---OLD---
         guard let reading, let band, band > .green else { return nil }
 ---NEW---

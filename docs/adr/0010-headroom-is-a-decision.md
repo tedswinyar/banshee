@@ -90,7 +90,7 @@ never blocks by default.**
      see "Decided" below.)
    - `slots = min(cpuSlots, memSlots)`, then capped by level: Quiet → `cores`,
      Stirring → `ceil(cores / 2)`, Restless → `ceil(cores / 4)`.
-   - Thermal MODERATE (yellow) halves it (rounding up): the fans are already at
+   - Thermal MODERATE (amber) halves it (rounding up): the fans are already at
      work and the machine is spending capacity on cooling.
    - **Zero, and `shouldWait`, when:** the level is Wailing or Shrieking (a
      sustained red — the machine is in the state the notification levels exist
@@ -117,7 +117,7 @@ never blocks by default.**
    non-advisory dimension of that source is red, `False` when there is a
    reading and none is red, `Unknown` when the source has no reading yet (no
    census, pre-v11 thermal). `reason` is a CamelCase token naming the worst
-   dimension and its band (`SwapRed`, `CpuYellow`, `AllGreen`, `NoReading`);
+   dimension and its band (`SwapRed`, `CpuAmber`, `AllGreen`, `NoReading`);
    `message` is that dimension's `detail` string from the verdict, verbatim;
    `since` is when the worst dimension entered its band (`evaluatedAt −
    heldSecs`, so a gap in observation truncates it honestly), null when Unknown.
@@ -156,7 +156,7 @@ hysteresis-confirmed (two consecutive samples, ≥ 30 s), which is systemd-oomd'
 window, and Apple says thermal SERIOUS means stop or defer work. (d) The retry
 ladder stays. One follow-up is filed under the name "headroom: leave slowly": the
 kubelet holds a pressure condition for five minutes after it clears; Banshee already
-tracks that window as `recovering`, and treating a recovering dimension like a yellow
+tracks that window as `recovering`, and treating a recovering dimension like an amber
 for the level cap is the analog.
 
 **Escape hatch.** If a consumer needs enforcement rather than advice, that is a

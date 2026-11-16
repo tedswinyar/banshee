@@ -84,6 +84,14 @@ impl Action {
     }
 }
 
+/// The title of a notification about one dimension in one band: the product
+/// name, the dimension's label, and the band as a word. A sentence, unlike the
+/// level label ("Banshee: Wailing, memory"), on purpose: the disk banner is its
+/// own notice and should not read as a second level banner.
+pub fn alert_title_for(dimension: Dimension, band: Band) -> String {
+    format!("Banshee: {} is {}", dimension.label(), band.word())
+}
+
 /// One dimension, as the UI receives it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,10 +99,17 @@ pub struct DimensionReading {
     pub dimension: Dimension,
     pub key: String,
     pub label: String,
+    /// The title a notification about THIS dimension carries: "Banshee: Disk
+    /// headroom is red". Composed here so the app does not write a second voice
+    /// (ADR-0005; `banshee-v54.1` moved it out of the Swift banner code), and so
+    /// the CLI and MCP can show the same words. `default` only so a payload from
+    /// a daemon older than the field still parses.
+    #[serde(default)]
+    pub alert_title: String,
     pub band: Band,
     pub value: f64,
     pub unit: Unit,
-    /// 0.0 at the yellow line, 1.0 at red, above 1.0 beyond. Comparable across
+    /// 0.0 at the amber line, 1.0 at red, above 1.0 beyond. Comparable across
     /// dimensions, which is what makes "which source is winning" answerable.
     pub severity: f64,
     /// How long this band has held, counting back only as far as the observations
@@ -505,7 +520,7 @@ pub fn evaluate(
 
     for d in ALL_DIMENSIONS {
         // Disk reads the FULL slice the sampler fetched, not the ten-minute
-        // window: its yellow episode up-delay is minutes long (`banshee-dok`),
+        // window: its amber episode up-delay is minutes long (`banshee-dok`),
         // and `held_secs` counts only what the series covers, so a ten-minute
         // series caps every observable hold at ten minutes. The replay is
         // causal — more history never changes the current band, it only lets
@@ -558,7 +573,7 @@ pub fn evaluate(
                 disk::forced_floor(
                     tail,
                     config.disk_projection_red_secs,
-                    config.disk_projection_yellow_secs,
+                    config.disk_projection_amber_secs,
                     spec.confirm_samples,
                 ),
                 outcome.value,
@@ -575,7 +590,7 @@ pub fn evaluate(
             // burst — 90 GB lost over 7 days is ~150 KB/s, which against
             // 100 GB free projects "full in a week" and yet could never move
             // the band above. Its own window (the rollups), its own trigger
-            // (full within `disk_trend_alert_secs`), its own ceiling (Yellow,
+            // (full within `disk_trend_alert_secs`), its own ceiling (Amber,
             // never Red, never severity): three horizons, deliberately, not
             // one window retuned (`banshee-wql`).
             let newest_volume = history.last().and_then(|s| s.volumes.first());
@@ -625,7 +640,7 @@ pub fn evaluate(
             } else if trend_band == band && trend_held > held {
                 // Same band from two causes: the band has stood as long as the
                 // LONGEST-standing cause, and the standing trend is what lets a
-                // slow drain meet the yellow episode delay (`banshee-dok`).
+                // slow drain meet the amber episode delay (`banshee-dok`).
                 held = trend_held;
             }
             // The detail carries every horizon that is speaking, burst first,
@@ -634,12 +649,12 @@ pub fn evaluate(
             // UNGATED rule: above the headroom floor the drop is information,
             // not a band (`banshee-f77`), and information is kept.
             let mut notes = String::new();
-            if drop_band == Band::Yellow
+            if drop_band == Band::Amber
                 && let Some(n) = disk::drop_note(&series.points, config.disk_drop_window_secs)
             {
                 notes.push_str(&n);
             }
-            if trend_band == Band::Yellow
+            if trend_band == Band::Amber
                 && let Some(s) = week_slope
                 && let Some(n) = disk::trend_note(&week, s, outcome.value)
             {
@@ -673,6 +688,7 @@ pub fn evaluate(
             dimension: d,
             key: d.key().to_string(),
             label: d.label().to_string(),
+            alert_title: alert_title_for(d, band),
             band,
             value: outcome.value,
             unit: d.unit(),
@@ -797,18 +813,18 @@ pub fn assess(
 
 /// How far past its own threshold a value is, normalised so dimensions compare.
 ///
-/// 0.0 at yellow, 1.0 at red, above 1.0 beyond red, negative when green.
+/// 0.0 at amber, 1.0 at red, above 1.0 beyond red, negative when green.
 fn severity_of(spec: &band::BandSpec, value: f64) -> f64 {
     if !value.is_finite() {
         return -1.0;
     }
     let span = if spec.inverted {
-        spec.yellow - spec.red
+        spec.amber - spec.red
     } else {
-        spec.red - spec.yellow
+        spec.red - spec.amber
     };
     if span <= 0.0 {
-        // A degenerate spec (red == yellow) would divide by zero. Report a bare
+        // A degenerate spec (red == amber) would divide by zero. Report a bare
         // "at or past the line" rather than infinity, which would win every
         // dominant-source comparison forever.
         return if spec.raw_band(value) == Band::Green {
@@ -818,9 +834,9 @@ fn severity_of(spec: &band::BandSpec, value: f64) -> f64 {
         };
     }
     if spec.inverted {
-        (spec.yellow - value) / span
+        (spec.amber - value) / span
     } else {
-        (value - spec.yellow) / span
+        (value - spec.amber) / span
     }
 }
 
@@ -1087,7 +1103,7 @@ fn detail_for(
     match d {
         // Headline is MEASURED utilization; the run queue (load-per-core) is the
         // labeled secondary (`banshee-87l.19`). When demand is deep but the cores
-        // are NOT busy — below the yellow line — that is scheduling contention, not
+        // are NOT busy — below the amber line — that is scheduling contention, not
         // saturation, and the words say exactly that. No "saturation", no fire, and
         // deliberately NO "I/O wait": XNU's load average counts running and runnable
         // threads only, never uninterruptible/I-O-wait, so the contention is at the
@@ -1102,7 +1118,7 @@ fn detail_for(
                 ));
             }
             if let Some(demand) = cpu_demand {
-                if demand > config.cpu_contention_demand_per_core && value < config.cpu.yellow {
+                if demand > config.cpu_contention_demand_per_core && value < config.cpu.amber {
                     s.push_str(&format!(
                         "; {demand:.1}× per core queued — scheduling contention, \
                          cores not saturated"
@@ -1247,7 +1263,7 @@ fn build_findings(
     swap_total: Option<u64>,
     config: &PressureConfig,
 ) -> Vec<Finding> {
-    // Every finding — yellow as well as red — names its consumers. Yellow is
+    // Every finding — amber as well as red — names its consumers. Amber is
     // where a person can still act cheaply, and "who" is the action.
     let who_for = |d: Dimension| -> Vec<Consumer> {
         census
@@ -1352,7 +1368,7 @@ fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
         // Red means MEASURED utilization is at or above the saturation line — the
         // cores really are pegged, not merely that the run queue is long (`banshee-87l.19`).
         // That is the ONE case that earns the word "saturated"
-        // and the fire glyph. Yellow is "busy, keeping up". The claim follows the
+        // and the fire glyph. Amber is "busy, keeping up". The claim follows the
         // BAND, not the raw value: a held red is still the model's official
         // position while recovery is unconfirmed. No "I/O wait" — XNU load counts
         // runnable threads only, and in any case this dimension is now busy-time,
@@ -1362,7 +1378,7 @@ fn message_for(r: &DimensionReading, swap_total: Option<u64>) -> String {
         }
         Dimension::Cpu => format!("CPU is {:.0}% busy.", r.value * 100.0),
         // Red is Apple's "serious"/"critical": the machine IS being slowed. That
-        // changes how every load figure should be read, so say so. Yellow is
+        // changes how every load figure should be read, so say so. Amber is
         // "fair": fans up, headroom shrinking, nothing throttled yet.
         Dimension::Thermal if r.band == Band::Red => format!(
             "The kernel reports {} thermal pressure. The CPU is being throttled, so load \

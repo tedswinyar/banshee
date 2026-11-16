@@ -2,7 +2,7 @@
 # (banshee-3sn). Severing the override leaves the floor computed and discarded —
 # the config-value-that-silently-does-nothing shape, worn by a band.
 file: rust/banshee-core/src/pressure/mod.rs
-test: a_fast_emptying_disk_is_red_though_its_bytes_say_yellow
+test: a_fast_emptying_disk_is_red_though_its_bytes_say_amber
 ---OLD---
             let (mut band, mut held) = if forced > outcome.band {
 ---NEW---

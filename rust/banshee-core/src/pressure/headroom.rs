@@ -50,7 +50,7 @@ pub struct Condition {
     pub kind: String,
     pub status: ConditionStatus,
     /// A CamelCase token naming the worst dimension and its band (`SwapRed`,
-    /// `CpuYellow`), or `AllGreen` / `NoReading`. Stable; branch on it.
+    /// `CpuAmber`), or `AllGreen` / `NoReading`. Stable; branch on it.
     pub reason: String,
     /// The worst dimension's `detail` string from the verdict, VERBATIM — the same
     /// words the popover and `banshee status` show (ADR-0005).
@@ -236,7 +236,7 @@ pub fn derive(p: &Pressure, machine: Option<MachineFacts>, config: &PressureConf
     // Thermal MODERATE: the fans are at work and the machine is spending capacity
     // on cooling. Halve, rounding up.
     if p.reading(Dimension::Thermal)
-        .is_some_and(|r| r.band == Band::Yellow)
+        .is_some_and(|r| r.band == Band::Amber)
     {
         slots = slots.div_ceil(2);
     }
@@ -303,7 +303,7 @@ fn conditions_for(p: &Pressure) -> Vec<Condition> {
     });
     for source in CONDITION_SOURCES {
         // Uptime informs findings, never conditions: a 12-day uptime must not make
-        // `MemoryPressure` read `UptimeYellow`. But the OTHER advisory dimensions —
+        // `MemoryPressure` read `UptimeAmber`. But the OTHER advisory dimensions —
         // availability, kernel reclaimability, compressor occupancy — ARE genuine
         // memory-pressure signals for the headroom decision (availability even
         // drives the per-slot math directly, below), so only Uptime is excluded
@@ -315,7 +315,7 @@ fn conditions_for(p: &Pressure) -> Vec<Condition> {
         // Something out of band names itself: the worst dimension wins. When
         // EVERYTHING is green, "worst by severity" is meaningless — found live,
         // where an all-green memory source reported `peak 0 swap ops/sec` because
-        // thrash at zero sits closer to its yellow line than 7 GB available does
+        // thrash at zero sits closer to its amber line than 7 GB available does
         // to its own. The green message is the source's PRIMARY dimension, the
         // first declared (available memory, not thrash; agents, not orphans).
         let worst = worst_reading(p, |r| mine(r) && r.band > Band::Green)
@@ -391,7 +391,7 @@ fn worst_reading(
 fn band_word(b: Band) -> &'static str {
     match b {
         Band::Green => "green",
-        Band::Yellow => "yellow",
+        Band::Amber => "amber",
         Band::Red => "red",
     }
 }
@@ -399,7 +399,7 @@ fn band_word(b: Band) -> &'static str {
 fn band_word_camel(b: Band) -> &'static str {
     match b {
         Band::Green => "Green",
-        Band::Yellow => "Yellow",
+        Band::Amber => "Amber",
         Band::Red => "Red",
     }
 }

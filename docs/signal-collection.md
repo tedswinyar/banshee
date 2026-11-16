@@ -22,7 +22,7 @@ run when you're worried. It is a battery and I/O bug every 15 seconds.
 
 | Tier | Cadence | Cost | Contents |
 |---|---|---|---|
-| **Cheap** | 15s (10s at disk yellow, 5s at disk red) | sub-millisecond syscalls | load, swap, memory pressure, `vm_stat`, boot time, `statfs`, process count |
+| **Cheap** | 15s (10s at disk amber, 5s at disk red) | sub-millisecond syscalls | load, swap, memory pressure, `vm_stat`, boot time, `statfs`, process count |
 | **Census** | 5 min | one `ps` walk + `tmux` + selective `lsof` | agent sessions, orphans, app groups, monitoring agents |
 
 `lsof` runs **only** for sessions already flagged stale by the cheap `etime`
@@ -42,7 +42,7 @@ test — never for every PID.
 | Kernel memory pressure level | `sysctl -n kern.memorystatus_vm_pressure_level` | 1 normal, 2 warn, 4 critical. The kernel's OWN verdict, banded as its own dimension since schema v8: the 2026-09-01 parity run measured WARN while available RAM was comfortably green (swap carried the pressure), so it is a signal in its own right, not a restatement of availability. Stored per sample; 0 marks a pre-v8 row ("not recorded" — skipped by the model, never read as normal). |
 | Kernel reclaimable % | `sysctl -n kern.memorystatus_level` | The kernel's OWN reclaimability **percentage** — a DIFFERENT quantity from `memorystatus_vm_pressure_level` above (a percent, not a 1/2/4 level) and from availability (measured 40% here vs our 11.5% at the same instant, 2026-09-01 parity). The `KernelFree` **advisory** dimension since schema v13: shown, banded to colour the row, never a bell. Stored per sample; NULL marks a pre-v13 row. |
 | Jetsam kills (sysctl) | `sysctl -n kern.memorystatus.kill_on_sustained_pressure_count` | Lifetime counter of processes the kernel killed via the **sustained-pressure** path only — cheap integer read, 0 on a healthy machine. It does NOT count idle-exit or per-process-limit kills, which is how the 2026-09-15 crisis killed ~170 processes while this counter stayed 0 (banshee-714). **This no longer drives the `Jetsam` dimension** (banshee-2dq): it stayed 0 through a real crisis, so it was a false-negative here and — read as a lifetime delta — a false-positive on routine reaping elsewhere. It remains on the wire as a cheap secondary observable; the dimension now bands on the census-tier honest count below. Stored per sample; NULL marks a pre-v13 row. |
-| Kernel thermal pressure level | `notify_get_state("com.apple.system.thermalpressurelevel")` | 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping (`OSThermalNotification.h`, the macOS arm of the enum; Foundation's `ProcessInfo.thermalState` collapses it to nominal/fair/serious/critical). The kernel's OWN verdict about heat, banded as the eleventh dimension since schema v11: moderate is yellow, heavy and above red. A throttled machine runs slower for the same load figure, so a load red without this beside it is a story with a missing chapter. Stored per sample; NULL marks a pre-v11 row ("not recorded" — skipped by the model, never read as nominal, because 0 IS nominal). |
+| Kernel thermal pressure level | `notify_get_state("com.apple.system.thermalpressurelevel")` | 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping (`OSThermalNotification.h`, the macOS arm of the enum; Foundation's `ProcessInfo.thermalState` collapses it to nominal/fair/serious/critical). The kernel's OWN verdict about heat, banded as the eleventh dimension since schema v11: moderate is amber, heavy and above red. A throttled machine runs slower for the same load figure, so a load red without this beside it is a story with a missing chapter. Stored per sample; NULL marks a pre-v11 row ("not recorded" — skipped by the model, never read as nominal, because 0 IS nominal). |
 | CPU speed limit | `IOPMCopyCPUPowerStatus` → `CPU_Speed_Limit` (percent) | **Absent on Apple silicon**: the call returns `kIOReturnNotFound` and `pmset -g therm` says no CPU power status is recorded (probed 2026-09-08). Only an Intel PMU publishes it. Stored nullable, never banded — when present it is the direct measurement of throttling and rides beside the level for the record. |
 | CPU tick counters (total / idle) | `host_processor_info(PROCESSOR_CPU_LOAD_INFO)`, summed across cores | Cumulative ticks: `total` = user+system+idle+nice, `idle` the idle state alone (schema v12). Lifetime counters — **differentiate them** to get MEASURED utilization, see below. Stored nullable; NULL marks a pre-v12 row ("not recorded"). |
 | Swapins / swapouts / compressor pages | one `vm_stat` pass | lifetime counters — **differentiate them**, see below. `pages_compressor × page_size` is compressed-bytes occupancy: the `Compressor` **advisory** dimension since schema v13, and the signal that now BACKS the Shrieking reboot finding — before v13 that finding asserted "only a reboot resets a saturated compressor pool" while Banshee measured nothing about the compressor. No new sysctl: the raw signal was already collected here, simply unused by the model. |
@@ -57,30 +57,30 @@ test — never for every PID.
   every running AND runnable thread — a churning security agent's blocked threads
   among them — so a deep run queue is not proof the cores are busy. When load per
   core is deep (`> cpu_contention_demand_per_core`, default 3) but measured
-  utilization is below yellow, that is **scheduling contention**, not saturation, and
+  utilization is below amber, that is **scheduling contention**, not saturation, and
   the copy says exactly that. It is contention at the scheduler's run queue, never
   "I/O wait": XNU's load average does NOT count uninterruptible/I-O-wait threads the
   way Linux does, so that word would be a lie on this platform.
 - **CPU utilization** (the band) = `Δ(cpu_ticks_total − cpu_ticks_idle) ÷
   Δcpu_ticks_total` between consecutive samples — the fraction of CPU time actually
-  spent doing work, a rate signal (see below). Yellow `≥ 0.85`, red `≥ 0.95`. This is
+  spent doing work, a rate signal (see below). Amber `≥ 0.85`, red `≥ 0.95`. This is
   the headline CPU number; load per core rides beside it as context.
-- **Swap %** = `used ÷ total`. Yellow `≥ 60`, red `≥ 90`. Since banshee-cwl the
+- **Swap %** = `used ÷ total`. Amber `≥ 60`, red `≥ 90`. Since banshee-cwl the
   swap detail also reports pool fill as "pool N% full", and the swap FINDING
   projects exhaustion of the allocated pool at the current climb rate — a
   ceiling distinct from the volume's own "full in X". Swapfiles live on the
   data volume, so when the pool rivals free space the DISK finding says "N of
   the volume is swap": the memory→swap→disk→jetsam spiral, named once.
-- **Disk free bytes** on the data volume, from `statfs`. Yellow `≤ 60 GB`, red
+- **Disk free bytes** on the data volume, from `statfs`. Amber `≤ 60 GB`, red
   `≤ 30 GB`, and three TIME horizons beside the bytes: a ten-minute Theil–Sen
-  slope whose time-to-full forces Yellow at 2 h and Red at 1 h (banshee-3sn), a
-  rolling-hour **burst drop** of ≥ 10 GB or ≥ 2% of the volume that forces Yellow
-  (banshee-636), and a seven-day rollup trend that forces Yellow when it forecasts
+  slope whose time-to-full forces Amber at 2 h and Red at 1 h (banshee-3sn), a
+  rolling-hour **burst drop** of ≥ 10 GB or ≥ 2% of the volume that forces Amber
+  (banshee-636), and a seven-day rollup trend that forces Amber when it forecasts
   full within 14 days (banshee-nio). **The two short horizons are gated on absolute
   headroom** (banshee-f77): they may move the band only at or below
-  `disk_time_axis_floor_bytes`, which defaults to the byte yellow line itself, read
+  `disk_time_axis_floor_bytes`, which defaults to the byte amber line itself, read
   from the band spec. Measured 2026-10-13: free fell 91.0 → 78.8 GB in an hour of
-  agent worktrees and swapfile growth, the drop floor forced Yellow, disk
+  agent worktrees and swapfile growth, the drop floor forced Amber, disk
   precedence took the menu-bar glyph, and the detail read "full in 1.6 days" —
   on a volume with 78 GB in hand, while memory was the real story. Above the floor
   the bytes own the band (and so the glyph), the drop is still said in the detail
@@ -183,7 +183,7 @@ Measured 2026-10-11: a `build-tool` Ruby launcher orphaned when its agent
 session exited ran at **92% of one core for 33 hours** with no children, no open
 files and 1.6 MB resident. The orphan dimension never saw it (no pattern match,
 nothing to size); stale sessions never saw it (quiet ≠ burning). It would have
-gone yellow on the second census after the session died.
+gone amber on the second census after the session died.
 
 The recent rate comes from the per-pid CPU delta the census already keeps for the
 who-line, so the class costs no new spawn; `lsof` runs only for flagged
@@ -345,7 +345,7 @@ impact:
 
 ### The who line
 
-Every finding — yellow as well as red — names the top consumers behind it, from
+Every finding — amber as well as red — names the top consumers behind it, from
 the newest census and nothing else: no new spawn, no new sysctl
 (`pressure/who.rs`). Naming the culprit is the action; "35.6 GB of swap in use"
 is a symptom and "who: Chrome ×115 at 7.7 GB, claude ×8 at 2.1 GB" is a to-do

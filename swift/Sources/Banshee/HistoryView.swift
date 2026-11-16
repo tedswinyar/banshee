@@ -142,7 +142,7 @@ struct HistoryView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("No history in this window.")
                 .font(Typography.rowTitle)
-            Text("History is drawn from 5-minute buckets, each summarised as it closes; the first appears within five minutes of the daemon starting and they survive 30 days. If the daemon was just installed, history accrues from now.")
+            Text("History is drawn from 5-minute buckets, each summarized as it closes; the first appears within five minutes of the daemon starting and they survive 30 days. If the daemon was just installed, history accrues from now.")
                 .font(Typography.body)
                 .foregroundStyle(Palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

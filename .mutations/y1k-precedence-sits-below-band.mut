@@ -1,8 +1,8 @@
-# banshee-y1k: precedence is a tie-break WITHIN a band, never above it. A yellow disk
+# banshee-y1k: precedence is a tie-break WITHIN a band, never above it. An amber disk
 # under a red thrash is still a memory story; moving the precedence term ahead of the
-# band comparison makes disk win whenever it is merely yellow.
+# band comparison makes disk win whenever it is merely amber.
 file: rust/banshee-core/src/pressure/level.rs
-test: a_yellow_disk_does_not_displace_a_red_elsewhere
+test: an_amber_disk_does_not_displace_a_red_elsewhere
 ---OLD---
             a.band
                 .cmp(&b.band)

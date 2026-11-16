@@ -3,7 +3,7 @@
 // Bytes free is the wrong urgency scale for a volume that is emptying. Measured
 // 2026-09-15: the data volume lost 37 GB in 50 minutes (~12 MB/s — an agent's
 // cargo target plus growing swapfiles), and for 40 of those minutes the byte
-// band said yellow, the linear severity said "less urgent than everything else",
+// band said amber, the linear severity said "less urgent than everything else",
 // and the one notice had already been spent. "Full in 22 min" then happened in
 // silence behind the memory glyph, because a byte-linear severity (1.08 at 12 GB
 // free) can never outrank a thrash storm (8.36) — and at 0 bytes free everything
@@ -35,9 +35,9 @@
 //
 // The two SHORT horizons — the projection floor and the burst-drop floor — are
 // gated on absolute headroom (`banshee-f77`): they may move the band only at or
-// below `disk_time_axis_floor_bytes` (default: the byte yellow line). Measured
+// below `disk_time_axis_floor_bytes` (default: the byte amber line). Measured
 // 2026-10-13 ~11:40 PT: free fell 91.0 → 78.8 GB in an hour, the drop floor
-// forced Yellow, disk took the menu-bar glyph by precedence, and the detail
+// forced Amber, disk took the menu-bar glyph by precedence, and the detail
 // said "full in 1.6 days" — on a volume with 78 GB in hand, while memory was
 // the real story. Above the floor the rules still SPEAK (the drop note stays in
 // the detail) but the bytes own the band, and the projection is put into words
@@ -91,7 +91,7 @@ pub(super) fn projected_full_secs(free_bytes: f64, slope: Option<f64>) -> Option
 ///
 /// Replaces the byte-linear `severity_of` for Disk ONLY; every other dimension
 /// keeps the linear normalisation. Deliberately positive even in the green band
-/// (0.25 at the 60 GB yellow line) — the green severity is never compared
+/// (0.25 at the 60 GB amber line) — the green severity is never compared
 /// (`dominant_source` filters on band first), and clamping it negative to match
 /// the linear contract would put a discontinuity exactly where the curve is
 /// supposed to be smooth.
@@ -114,9 +114,9 @@ pub(super) fn severity(
 }
 
 /// The band floor the PROJECTION forces, regardless of bytes: at or under
-/// `yellow_secs` to full is at least Yellow, at or under `red_secs` is Red.
+/// `amber_secs` to full is at least Amber, at or under `red_secs` is Red.
 /// This is the "orange when it should be red" case from 2026-09-15 — 40 minutes
-/// of "full in ~1 h" spent entirely inside the yellow byte band.
+/// of "full in ~1 h" spent entirely inside the amber byte band.
 ///
 /// Returns the floor and how many trailing samples it has held, judged
 /// per-sample: sample `i`'s floor uses only `points[..=i]`, what the model knew
@@ -128,13 +128,13 @@ pub(super) fn severity(
 pub(super) fn forced_floor(
     points: &[(DateTime<Utc>, f64)],
     red_secs: f64,
-    yellow_secs: f64,
+    amber_secs: f64,
     confirm: usize,
 ) -> (Band, usize) {
     let floor_at = |i: usize| -> Band {
         match slope_per_sec(&points[..=i]).and_then(|s| projected_full_secs(points[i].1, Some(s))) {
             Some(p) if p <= red_secs => Band::Red,
-            Some(p) if p <= yellow_secs => Band::Yellow,
+            Some(p) if p <= amber_secs => Band::Amber,
             _ => Band::Green,
         }
     };
@@ -239,7 +239,7 @@ pub(super) fn week_slope_per_sec(
 }
 
 /// The band floor the WEEK trend forces (`banshee-nio`): full within
-/// `alert_secs` at the fitted week rate is at least Yellow. Never Red — a
+/// `alert_secs` at the fitted week rate is at least Amber. Never Red — a
 /// two-week horizon is a standing debt to schedule, not an emergency; red
 /// stays owned by bytes and the ten-minute projection. Judged per-sample
 /// against each sample's own free bytes through the same confirm machine as
@@ -255,7 +255,7 @@ pub(super) fn trend_floor(
     };
     let floor_at = |i: usize| -> Band {
         match projected_full_secs(points[i].1, Some(slope)) {
-            Some(p) if p <= alert_secs => Band::Yellow,
+            Some(p) if p <= alert_secs => Band::Amber,
             _ => Band::Green,
         }
     };
@@ -280,7 +280,7 @@ fn drop_within(points: &[(DateTime<Utc>, f64)], i: usize, window_secs: u64) -> f
 
 /// The band floor a BURST DROP forces (`banshee-636`): free space falling by
 /// `drop_bytes` — or `drop_fraction` of the volume TOTAL, whichever is the
-/// smaller trigger — inside the rolling window is at least Yellow, whatever
+/// smaller trigger — inside the rolling window is at least Amber, whatever
 /// the absolute level (below the headroom gate, `gate_on_headroom` —
 /// `banshee-f77`). The fraction is of the TOTAL, never of current free
 /// (Ted's explicit rule): a free-relative trigger goes hypersensitive exactly
@@ -303,7 +303,7 @@ pub(super) fn drop_floor(
     };
     let floor_at = |i: usize| -> Band {
         if drop_within(points, i, window_secs) >= threshold {
-            Band::Yellow
+            Band::Amber
         } else {
             Band::Green
         }
@@ -318,7 +318,7 @@ pub(super) fn drop_floor(
 /// glyph. The gate reads the NEWEST free reading, not each sample's: a floor
 /// is a judgement about now, and the confirm machine has already done its work
 /// on the shape. Pass-through at the floor exactly (`<=`), so the line the
-/// bytes turn yellow at is also the line the time axis wakes at — one line,
+/// bytes turn amber at is also the line the time axis wakes at — one line,
 /// not two that must be kept in step.
 pub(super) fn gate_on_headroom(
     floor: (Band, usize),
@@ -396,7 +396,7 @@ mod tests {
 
     const RED_BYTES: f64 = 30e9;
     const RED_SECS: f64 = 3600.0;
-    const YELLOW_SECS: f64 = 7200.0;
+    const AMBER_SECS: f64 = 7200.0;
 
     fn at(secs: i64) -> DateTime<Utc> {
         DateTime::from_timestamp(1_757_000_000 + secs, 0).unwrap()
@@ -421,7 +421,7 @@ mod tests {
         assert!((sev(20e9) - 2.25).abs() < 1e-9);
         assert!((sev(12e9) - 6.25).abs() < 1e-9, "the 2026-09-15 low");
         assert!((sev(5e9) - 36.0).abs() < 1e-9);
-        assert!((sev(60e9) - 0.25).abs() < 1e-9, "smooth through yellow");
+        assert!((sev(60e9) - 0.25).abs() < 1e-9, "smooth through amber");
     }
 
     /// The time term is 1.0 at one hour to full, and the WORSE axis wins.
@@ -434,7 +434,7 @@ mod tests {
             (sev - 6.25).abs() < 1e-9,
             "12 GB free: bytes (6.25) still beats 22 min (2.73): {sev}"
         );
-        // At 40 GB free — yellow by bytes, term 0.5625 — a 45-minute projection
+        // At 40 GB free — amber by bytes, term 0.5625 — a 45-minute projection
         // is what decides.
         let sev = severity(RED_BYTES, RED_SECS, 40e9, Some(45.0 * 60.0));
         assert!(
@@ -573,30 +573,30 @@ mod tests {
     // ---- the forced floor ---------------------------------------------------
 
     /// Pin (c)'s mechanism: a projection at or under an hour forces Red however
-    /// many bytes are free. 40 GB free is mid-yellow; emptying at ~250 MB/tick
+    /// many bytes are free. 40 GB free is mid-amber; emptying at ~250 MB/tick
     /// it is ~40 minutes from empty. Mutation-proof: delete the Red arm of
-    /// `floor_at` and this floors at Yellow.
+    /// `floor_at` and this floors at Amber.
     #[test]
     fn a_sub_hour_projection_forces_red_whatever_the_bytes_say() {
         let points = falling(21, 40e9, 0.25e9);
-        let (band, held) = forced_floor(&points, RED_SECS, YELLOW_SECS, 2);
+        let (band, held) = forced_floor(&points, RED_SECS, AMBER_SECS, 2);
         assert_eq!(band, Band::Red);
         assert!(held >= 2, "and it has held: {held}");
 
         // The distinguishing contrast: the same bytes, flat, force nothing.
         let flat: Vec<_> = (0..21).map(|i| (at(i * 15), 40e9)).collect();
-        assert_eq!(forced_floor(&flat, RED_SECS, YELLOW_SECS, 2).0, Band::Green);
+        assert_eq!(forced_floor(&flat, RED_SECS, AMBER_SECS, 2).0, Band::Green);
     }
 
-    /// Between one and two hours to full the floor is Yellow — the 18:08–18:51Z
-    /// stretch, 37 GB lost straight through the yellow band with "full in ~1 h"
+    /// Between one and two hours to full the floor is Amber — the 18:08–18:51Z
+    /// stretch, 37 GB lost straight through the amber band with "full in ~1 h"
     /// on screen the whole way.
     #[test]
-    fn a_sub_two_hour_projection_forces_at_least_yellow() {
+    fn a_sub_two_hour_projection_forces_at_least_amber() {
         // 90 GB — green by bytes — emptying at 250 MB/tick: 90 min to full.
         let points = falling(21, 90e9, 0.25e9);
-        let (band, _) = forced_floor(&points, RED_SECS, YELLOW_SECS, 2);
-        assert_eq!(band, Band::Yellow, "green bytes, yellow time");
+        let (band, _) = forced_floor(&points, RED_SECS, AMBER_SECS, 2);
+        assert_eq!(band, Band::Amber, "green bytes, amber time");
     }
 
     /// The floor needs `confirm` consecutive samples IN BOTH DIRECTIONS — a
@@ -609,13 +609,13 @@ mod tests {
         // Two points, one steep interval: a projection exists, but one tick of
         // evidence must not force anything with confirm = 2.
         let two = falling(2, 10e9, 5e9);
-        assert_eq!(forced_floor(&two, RED_SECS, YELLOW_SECS, 2).0, Band::Green);
+        assert_eq!(forced_floor(&two, RED_SECS, AMBER_SECS, 2).0, Band::Green);
 
         // A held Red floor, then a single rebound tick that lifts the newest
         // projection out of range: still Red — the drop is pending, not adopted.
         let mut points = falling(20, 10e9, 0.25e9);
         points.push((at(20 * 15), 200e9));
-        let (band, _) = forced_floor(&points, RED_SECS, YELLOW_SECS, 2);
+        let (band, _) = forced_floor(&points, RED_SECS, AMBER_SECS, 2);
         assert_eq!(band, Band::Red, "one good tick does not lift the floor");
     }
 
@@ -628,11 +628,11 @@ mod tests {
     /// below it, it passes through untouched. 78.8 GB is the 2026-10-13
     /// reading; 45 GB is the 2026-09-15 band. Mutation-proof: flip `>` to `>=`
     /// and the at-the-line case loses its floor; drop the gate (return `floor`)
-    /// and 78.8 GB keeps Yellow.
+    /// and 78.8 GB keeps Amber.
     #[test]
     fn the_headroom_gate_discards_a_floor_above_the_line_and_keeps_it_below() {
         assert_eq!(
-            gate_on_headroom((Band::Yellow, 47), 78.8e9, FLOOR),
+            gate_on_headroom((Band::Amber, 47), 78.8e9, FLOOR),
             (Band::Green, 0)
         );
         assert_eq!(
@@ -640,23 +640,23 @@ mod tests {
             (Band::Green, 0)
         );
         assert_eq!(
-            gate_on_headroom((Band::Yellow, 47), 45e9, FLOOR),
-            (Band::Yellow, 47)
+            gate_on_headroom((Band::Amber, 47), 45e9, FLOOR),
+            (Band::Amber, 47)
         );
         assert_eq!(
             gate_on_headroom((Band::Red, 9), 45e9, FLOOR),
             (Band::Red, 9)
         );
         assert_eq!(
-            gate_on_headroom((Band::Yellow, 3), FLOOR, FLOOR),
-            (Band::Yellow, 3),
+            gate_on_headroom((Band::Amber, 3), FLOOR, FLOOR),
+            (Band::Amber, 3),
             "at the line exactly the time axis is awake"
         );
     }
 
     /// The "full in" clause is said only below the floor and inside the
     /// horizon. 78.4 GB at a 1.6-day slope (today) says nothing; 45 GB at 1.9
-    /// hours (the existing yellow case) speaks; 45 GB at 3 days is beyond the
+    /// hours (the existing amber case) speaks; 45 GB at 3 days is beyond the
     /// cap and is silent even though it is below the floor; the cap is
     /// inclusive. Mutation-proof: delete the floor check and today's reading
     /// says "full in 1.6 days"; delete the horizon check and 3 days is spoken.

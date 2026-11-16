@@ -227,7 +227,7 @@ private final class SocketExchange: @unchecked Sendable {
                         }
                     case .cancelled:
                         finish(.failure(APIError.serverUnreachable(
-                            "connection to banshee-api on \(path) was cancelled")))
+                            "connection to banshee-api on \(path) was canceled")))
                     default:
                         break
                     }

@@ -1,0 +1,8 @@
+# With no levelName from an older daemon the Alerts line shows the LEVEL's wire
+# key (banshee-v54.1), not some other field.
+file: swift/Sources/BansheeCore/AlertModels.swift
+test: RecordWireFormatTests/testAnEpisodeWithoutDisplayNamesFallsBackToTheWireKeys
+---OLD---
+    public var peakLevelDisplay: String { peak.levelName ?? peak.level.rawValue }
+---NEW---
+    public var peakLevelDisplay: String { peak.levelName ?? dimension }

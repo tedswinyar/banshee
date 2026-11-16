@@ -370,9 +370,9 @@ final class PressureModelTests: XCTestCase {
     }
 
     func testBandOrderPutsRedWorstAndGreenBest() {
-        XCTAssertEqual(Band.allCases, [.green, .yellow, .red])
-        XCTAssertTrue(Band.red > .yellow)
-        XCTAssertTrue(Band.yellow > .green)
+        XCTAssertEqual(Band.allCases, [.green, .amber, .red])
+        XCTAssertTrue(Band.red > .amber)
+        XCTAssertTrue(Band.amber > .green)
     }
 
     /// The refresh cadence must not outrun the sampler. Polling faster than the

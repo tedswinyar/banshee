@@ -88,6 +88,17 @@ def alerts():
     base = json.loads(fixture("alert-episode"))
     now = dt.datetime.now(dt.timezone.utc)
 
+    # Core's display labels for the dimensions these synthetic episodes use
+    # (rust/banshee-core/src/pressure/config.rs, Dimension::label). A KeyError here
+    # means an episode was added for a dimension this table does not know.
+    DIMENSION_LABELS = {
+        "cpu": "CPU utilization",
+        "thrash": "Swap thrash",
+        "swap": "Swap in use",
+        "orphans": "Orphaned helpers",
+        "agents": "Stale agent sessions",
+    }
+
     def ep(dimension, hours_ago, dur_min, state, level, band, message, who, suppressed, census=False):
         e = json.loads(json.dumps(base))
         start = now - dt.timedelta(hours=hours_ago)
@@ -96,6 +107,7 @@ def alerts():
         e.update({
             "id": str(uuid.uuid5(uuid.NAMESPACE_URL, "banshee-fixture-" + dimension + str(hours_ago))),
             "dimension": dimension,
+            "dimensionLabel": DIMENSION_LABELS[dimension],
             "startedAt": fmt(start),
             "endedAt": fmt(end) if state != "firing" else None,
             "suppressed": suppressed,
@@ -103,7 +115,8 @@ def alerts():
             "lastNotifiedAt": fmt(peak_at),
             "recoveringSince": fmt(end) if state == "recovering" else None,
         })
-        e["peak"].update({"band": band, "level": level, "at": fmt(peak_at), "message": message, "whoLine": who})
+        e["peak"].update({"band": band, "level": level, "levelName": level.capitalize(),
+                          "at": fmt(peak_at), "message": message, "whoLine": who})
         if not census:
             e["censusAtPeak"] = None
         return e
@@ -120,7 +133,7 @@ def alerts():
         ep("orphans", 27.0, 61, "closed", "restless", "red",
            "45 orphaned helper processes — their parent sessions are gone.",
            "who: mcp-server ×31, language-server ×9", 0),
-        ep("agents", 52.0, 900, "closed", "stirring", "yellow",
+        ep("agents", 52.0, 900, "closed", "stirring", "amber",
            "17 agent sessions idle for more than two days.", "who: claude ×14, codex ×3", 0),
     ])
 

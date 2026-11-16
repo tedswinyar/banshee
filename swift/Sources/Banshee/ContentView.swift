@@ -387,7 +387,7 @@ struct DimensionRow: View {
     static func color(for band: Band) -> Color {
         switch band {
         case .green: return Palette.bandGreen
-        case .yellow: return Palette.bandYellow
+        case .amber: return Palette.bandAmber
         case .red: return Palette.bandRed
         }
     }

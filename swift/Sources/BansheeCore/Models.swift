@@ -52,18 +52,37 @@ public enum Level: String, Codable, Sendable, Comparable, CaseIterable {
 /// How bad one dimension is right now.
 public enum Band: String, Codable, Sendable, Comparable, CaseIterable {
     case green
-    case yellow
+    case amber
     case red
 
     private var rank: Int {
         switch self {
         case .green: return 0
-        case .yellow: return 1
+        case .amber: return 1
         case .red: return 2
         }
     }
 
     public static func < (lhs: Band, rhs: Band) -> Bool { lhs.rank < rhs.rank }
+
+    /// The middle band was `yellow` on the wire until `banshee-v54.1`. The app
+    /// normally updates BEFORE the daemon (Sparkle first, then the popover's
+    /// "Update the daemon"), so for that window a new app is reading an old daemon:
+    /// without this every pressure read would fail to decode and the menu bar would
+    /// show an error where the mismatch row should be. It is the SAME band under
+    /// its old name, so mapping it is not the client-side severity guess the strict
+    /// decode exists to prevent — any other unknown word still throws.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if let band = Band(rawValue: raw) {
+            self = band
+        } else if raw == "yellow" {
+            self = .amber
+        } else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: decoder.codingPath, debugDescription: "unknown band \"\(raw)\""))
+        }
+    }
 }
 
 /// What a dimension's pressure comes FROM — the menu bar's suffix glyph.
@@ -154,10 +173,14 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
     public let dimension: String
     public let key: String
     public let label: String
+    /// The title a notification about this dimension carries, in core's words:
+    /// "Banshee: Disk headroom is red" (`banshee-v54.1`). Nil only from a daemon
+    /// older than the field, which Sparkle's app-first update makes routine.
+    public let alertTitle: String?
     public let band: Band
     public let value: Double
     public let unit: ReadingUnit
-    /// 0.0 at the yellow line, 1.0 at red, above 1.0 beyond, negative when green.
+    /// 0.0 at the amber line, 1.0 at red, above 1.0 beyond, negative when green.
     public let severity: Double
     /// How long the band has held, counting back only as far as the observations are
     /// CONTINUOUS.
@@ -183,7 +206,8 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
     public let recovering: Bool
 
     public init(
-        dimension: String, key: String, label: String, band: Band, value: Double,
+        dimension: String, key: String, label: String, alertTitle: String? = nil,
+        band: Band, value: Double,
         unit: ReadingUnit, severity: Double, heldSecs: UInt64,
         observationGapSecs: UInt64? = nil, trendPerSec: Double?,
         detail: String, advisory: Bool, pending: Band?, recovering: Bool = false
@@ -191,6 +215,7 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
         self.dimension = dimension
         self.key = key
         self.label = label
+        self.alertTitle = alertTitle
         self.band = band
         self.value = value
         self.unit = unit
@@ -205,7 +230,7 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case dimension, key, label, band, value, unit, severity, heldSecs
+        case dimension, key, label, alertTitle, band, value, unit, severity, heldSecs
         case observationGapSecs, trendPerSec, detail, advisory, pending, recovering
     }
 
@@ -218,6 +243,7 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
         dimension = try c.decode(String.self, forKey: .dimension)
         key = try c.decode(String.self, forKey: .key)
         label = try c.decode(String.self, forKey: .label)
+        alertTitle = try c.decodeIfPresent(String.self, forKey: .alertTitle)
         band = try c.decode(Band.self, forKey: .band)
         value = try c.decode(Double.self, forKey: .value)
         unit = try c.decode(ReadingUnit.self, forKey: .unit)
@@ -246,6 +272,11 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
         try c.encode(dimension, forKey: .dimension)
         try c.encode(key, forKey: .key)
         try c.encode(label, forKey: .label)
+        if let alertTitle {
+            try c.encode(alertTitle, forKey: .alertTitle)
+        } else {
+            try c.encodeNil(forKey: .alertTitle)
+        }
         try c.encode(band, forKey: .band)
         try c.encode(value, forKey: .value)
         try c.encode(unit, forKey: .unit)

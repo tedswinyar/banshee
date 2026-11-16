@@ -314,13 +314,13 @@ and the statuses are spelled `True` / `False` / `Unknown` as Kubernetes spells t
 |---|---|---|---|
 | `type` | string | no | `Ready`, or `<Source>Pressure` |
 | `status` | enum | no | `True` (a red on that source) \| `False` (a reading, nothing red) \| `Unknown` (no reading yet — no census, a pre-v11 thermal column). For `Ready`, `True` means the verdict is trustworthy |
-| `reason` | string | no | CamelCase token: the worst dimension and its band (`SwapRed`, `CpuYellow`), or `AllGreen`, `NoReading`, `VerdictAvailable`, `Checking`. Stable; branch on it |
+| `reason` | string | no | CamelCase token: the worst dimension and its band (`SwapRed`, `CpuAmber`), or `AllGreen`, `NoReading`, `VerdictAvailable`, `Checking`. Stable; branch on it |
 | `message` | string | no | that dimension's `detail` from the verdict, verbatim |
 | `since` | datetime | **yes** | when the worst dimension entered its band (`evaluatedAt − heldSecs`, so a gap in observation truncates it); null when `Unknown`, and always null for `Ready` |
 
 **Polarity.** Like Kubernetes, `<Source>Pressure: True` is bad news and
-`Ready: True` is good news. A yellow band is `False` with a reason that says so
-(`SwapYellow`) — visible without being an alarm. Advisory dimensions (uptime) never
+`Ready: True` is good news. An amber band is `False` with a reason that says so
+(`SwapAmber`) — visible without being an alarm. Advisory dimensions (uptime) never
 appear in a condition.
 
 **The formula** (ADR-0010 decision 5; the defaults are configuration in
@@ -335,6 +335,22 @@ ADR).
 (Wailing), 300 (Shrieking). Every one of those numbers is a wire contract, and
 `tests/fixtures/headroom-*.json` pin them in both languages.
 
+### The middle band is `amber` (it was `yellow`)
+
+The middle band has always drawn orange. It was named `yellow` on the wire until
+the band word started appearing beside its dot, where the two disagreed. It is now
+`amber` everywhere: `band` and `pending` values, the headroom `reason` tokens
+(`CpuAmber`, `SwapAmber`, where they were `CpuYellow`, `SwapYellow`), and every
+string core composes. **This is a breaking rename for anything that matched the old
+word.** Two readers stay lenient on purpose, and only on read:
+
+- core deserializes `"yellow"` as amber, because alert episodes are stored as JSON
+  and a row that fails to parse is dropped from `/alerts` without an error;
+- the app decodes `"yellow"` as amber, because it normally updates before the
+  daemon does and would otherwise fail to decode every reading in between.
+
+Nothing writes `yellow`.
+
 ### DimensionReading
 
 ```json
@@ -342,6 +358,7 @@ ADR).
     "dimension": "swap",
     "key": "swap",
     "label": "Swap in use",
+    "alertTitle": "Banshee: Swap in use is red",
     "band": "red",
     "value": 35600000000.0,
     "unit": "bytes",
@@ -359,10 +376,11 @@ ADR).
 |---|---|---|---|
 | `dimension`, `key` | enum/string | no | `cpu`, `thermal`, `memory`, `swap`, `kernelPressure`, `thrash`, `kernelFree`, `compressor`, `jetsam`, `agents`, `orphans`, `runaways`, `managedAgents`, `disk`, `uptime` |
 | `label` | string | no | composed in core, so every surface says the same words |
-| `band` | enum | no | `green` \| `yellow` \| `red`, **after hysteresis** |
+| `alertTitle` | string | no | the title a notification about this dimension carries (`Banshee: Disk headroom is red`), composed in core so no client writes its own. Absent from a daemon older than the field; clients fall back to `accessibilityLabel` |
+| `band` | enum | no | `green` \| `amber` \| `red`, **after hysteresis**. Written `yellow` before the rename (see below); readers accept the old word, nothing writes it |
 | `value` | number | no | the newest reading, in `unit` |
 | `unit` | enum | no | `ratio` \| `bytes` \| `perSecond` \| `count` \| `percent` \| `days` |
-| `severity` | number | no | 0.0 at yellow, 1.0 at red, negative when green; comparable ACROSS dimensions |
+| `severity` | number | no | 0.0 at amber, 1.0 at red, negative when green; comparable ACROSS dimensions |
 | `heldSecs` | integer | no | how long this band has held, counting back only as far as the observations are CONTINUOUS |
 | `observationGapSecs` | integer | **yes** | the gap in observations that cut `heldSecs` short, when one did |
 | `trendPerSec` | number | **yes** | null when a trend is not meaningful (a single point) |
@@ -496,8 +514,13 @@ decoded by both unit suites. What binds:
   census fell in the bucket (or the rollup pre-dates v9) — the same
   null-is-not-zero rule as the deltas.**
 - **`AlertEpisode`** (ADR-0009) is one continuous incident on one dimension:
-  `{id, dimension, startedAt, endedAt, peak{band, level, severity, at, message},
-  suppressed, state, lastNotifiedAt, recoveringSince}`. `state` is `firing` |
+  `{id, dimension, dimensionLabel, startedAt, endedAt, peak{band, level, levelName,
+  severity, at, message}, suppressed, state, lastNotifiedAt, recoveringSince}`.
+  `dimensionLabel` (`CPU utilization`) and `peak.levelName` (`Wailing`) are the
+  display names for `dimension` and `peak.level`, composed in core and **refreshed
+  on every read** rather than trusted from the stored row, so an episode recorded
+  before they existed still carries them. A client older than a daemon ignores
+  them; a client newer than a daemon falls back to the keys. `state` is `firing` |
   `recovering` | `closed` and is carried rather than derived. **`endedAt: null`
   means STILL OPEN** — present as null, never absent — and open episodes are served
   by `/alerts` whatever `since` says. `peak` is the worst moment (level first, then

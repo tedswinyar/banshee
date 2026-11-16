@@ -52,6 +52,13 @@ pub enum EpisodeState {
 pub struct EpisodePeak {
     pub band: Band,
     pub level: Level,
+    /// The level's display name ("Wailing"), so a client shows the same word the
+    /// header does instead of the wire key (`banshee-v54.1`). A pure function of
+    /// `level`: the store refreshes it on every read
+    /// (`AlertEpisode::with_display_names`), so a row written before the field
+    /// existed still carries it.
+    #[serde(default)]
+    pub level_name: String,
     pub severity: f64,
     #[serde(with = "crate::wire_time")]
     pub at: DateTime<Utc>,
@@ -74,6 +81,11 @@ pub struct EpisodePeak {
 pub struct AlertEpisode {
     pub id: Uuid,
     pub dimension: Dimension,
+    /// The dimension's display label ("CPU utilization") — the same words the
+    /// verdict's rows use, where the Alerts line used to print the wire key
+    /// (`banshee-v54.1`). Refreshed on read like `peak.levelName`.
+    #[serde(default)]
+    pub dimension_label: String,
     /// When the dimension's red run began — `now - heldSecs` at the moment the
     /// episode opened, not the moment it crossed the up delay. The delay decides
     /// WHETHER to speak; it is not when the trouble started.
@@ -118,6 +130,18 @@ pub struct AlertEpisode {
 }
 
 impl AlertEpisode {
+    /// Set the two display names from the enums they are derived from.
+    ///
+    /// Called on every read from the store rather than trusted from the stored
+    /// JSON: an episode written before the fields existed has neither, and a label
+    /// reworded in a later release must not leave old episodes saying the old
+    /// words. One function, so the record and the verdict cannot drift.
+    pub fn with_display_names(mut self) -> Self {
+        self.dimension_label = self.dimension.label().to_string();
+        self.peak.level_name = self.peak.level.name().to_string();
+        self
+    }
+
     pub fn is_open(&self) -> bool {
         self.ended_at.is_none()
     }
@@ -322,23 +346,23 @@ fn open_if_due(
     now: DateTime<Utc>,
     config: &PressureConfig,
 ) -> Option<AlertEpisode> {
-    // Red is the actionable state. A yellow dimension is worth SEEING, in the
+    // Red is the actionable state. An amber dimension is worth SEEING, in the
     // window and the time series, but not worth an episode — and interrupting
     // for it is exactly how a monitor gets muted. That reasoning holds for CPU
-    // and memory, which flap through yellow on every build. It does NOT hold
+    // and memory, which flap through amber on every build. It does NOT hold
     // for disk (`banshee-dok`): disk barely flaps and moves one way, so a
-    // SUSTAINED disk yellow is a standing debt — and its 30–60 GB yellow band
+    // SUSTAINED disk amber is a standing debt — and its 30–60 GB amber band
     // is precisely "leaving the target floor while action is still cheap".
-    // Disk yellow therefore opens too, behind its own much longer up-delay,
-    // so `banshee alerts` and the app's yellow banner tell one story.
+    // Disk amber therefore opens too, behind its own much longer up-delay,
+    // so `banshee alerts` and the app's amber banner tell one story.
     //
     // The up delays reuse `held_secs`, which counts only CONTINUOUS observation:
     // a red that "held" across a 17-minute hole in the series
     // is 45 seconds of evidence, not 17 minutes, and does not open an episode.
     let due = match r.band {
         Band::Red => r.held_secs >= config.episode_up_secs,
-        Band::Yellow if r.dimension == Dimension::Disk => {
-            r.held_secs >= config.disk_yellow_episode_up_secs
+        Band::Amber if r.dimension == Dimension::Disk => {
+            r.held_secs >= config.disk_amber_episode_up_secs
         }
         _ => false,
     };
@@ -352,6 +376,7 @@ fn open_if_due(
     let mut episode = AlertEpisode {
         id: Uuid::new_v4(),
         dimension: r.dimension,
+        dimension_label: r.dimension.label().to_string(),
         started_at: now - Duration::seconds(r.held_secs as i64),
         ended_at: None,
         peak: peak_now(r, pressure, now),
@@ -420,13 +445,13 @@ fn step(
     config: &PressureConfig,
 ) -> Option<(AlertEpisode, bool)> {
     let mut next = e.clone();
-    // What keeps THIS episode firing. Disk fires on yellow-or-worse
+    // What keeps THIS episode firing. Disk fires on amber-or-worse
     // (`banshee-dok`): one excursion below the target floor is one incident,
     // however many times it crosses the red line inside it — matching the app's
-    // single-identifier disk banner, where red→yellow says nothing and the
+    // single-identifier disk banner, where red→amber says nothing and the
     // banner clears only on green. Every other dimension fires on red alone.
     let in_band = if e.dimension == Dimension::Disk {
-        r.band >= Band::Yellow
+        r.band >= Band::Amber
     } else {
         r.band == Band::Red
     };
@@ -519,6 +544,7 @@ fn peak_now(r: &DimensionReading, pressure: &Pressure, now: DateTime<Utc>) -> Ep
     EpisodePeak {
         band: r.band,
         level: pressure.level,
+        level_name: pressure.level.name().to_string(),
         severity: r.severity,
         at: now,
         message: message_for(r, pressure),
@@ -733,6 +759,7 @@ mod tests {
             dimension,
             key: dimension.key().to_string(),
             label: dimension.label().to_string(),
+            alert_title: crate::pressure::alert_title_for(dimension, band),
             band,
             value: 99.0,
             unit: Unit::Ratio,
@@ -782,11 +809,13 @@ mod tests {
         AlertEpisode {
             id: Uuid::new_v4(),
             dimension,
+            dimension_label: dimension.label().to_string(),
             started_at: at(started),
             ended_at: None,
             peak: EpisodePeak {
                 band: Band::Red,
                 level: peak,
+                level_name: peak.name().to_string(),
                 severity: 2.0,
                 at: at(started),
                 message: "prior".into(),
@@ -946,13 +975,13 @@ mod tests {
         );
     }
 
-    /// Yellow is worth SEEING, not an episode. Mutation-proof: open on
-    /// `>= Yellow` and a merely-uneasy machine starts a record.
+    /// Amber is worth SEEING, not an episode. Mutation-proof: open on
+    /// `>= Amber` and a merely-uneasy machine starts a record.
     #[test]
-    fn a_yellow_dimension_does_not_open() {
+    fn an_amber_dimension_does_not_open() {
         let p = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Cpu, Band::Yellow, 900)],
+            vec![reading(Dimension::Cpu, Band::Amber, 900)],
         );
         assert!(
             reconcile_episodes(&[], &p, None, at(0), &cfg())
@@ -961,18 +990,18 @@ mod tests {
         );
     }
 
-    /// Disk is the exception (`banshee-dok`): a disk yellow that has held past
-    /// its OWN long delay opens an episode. The 30–60 GB yellow band is exactly
+    /// Disk is the exception (`banshee-dok`): a disk amber that has held past
+    /// its OWN long delay opens an episode. The 30–60 GB amber band is exactly
     /// "leaving the target floor while action is still cheap", and it was the
-    /// one range that produced no record — the app's banner spoke on yellow
+    /// one range that produced no record — the app's banner spoke on amber
     /// while `banshee alerts` stayed silent. Mutation-proof both ways: judge
-    /// disk yellow on `episode_up_secs` and the 25-minute hold below opens;
-    /// drop the disk yellow arm and the 30-minute hold never does.
+    /// disk amber on `episode_up_secs` and the 25-minute hold below opens;
+    /// drop the disk amber arm and the 30-minute hold never does.
     #[test]
-    fn a_sustained_disk_yellow_opens_behind_its_own_delay() {
+    fn a_sustained_disk_amber_opens_behind_its_own_delay() {
         let short = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Disk, Band::Yellow, 1500)],
+            vec![reading(Dimension::Disk, Band::Amber, 1500)],
         );
         assert!(
             reconcile_episodes(&[], &short, None, at(0), &cfg())
@@ -983,28 +1012,28 @@ mod tests {
 
         let sustained = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Disk, Band::Yellow, 1800)],
+            vec![reading(Dimension::Disk, Band::Amber, 1800)],
         );
         let out = reconcile_episodes(&[], &sustained, None, at(0), &cfg());
         assert_eq!(out.episodes.len(), 1);
-        assert_eq!(out.episodes[0].peak.band, Band::Yellow);
+        assert_eq!(out.episodes[0].peak.band, Band::Amber);
         assert_eq!(out.episodes[0].state, EpisodeState::Firing);
         assert_eq!(out.notifications.len(), 1);
         assert_eq!(out.notifications[0].kind, NotificationKind::Opened);
     }
 
-    /// A disk episode rides THROUGH yellow (`banshee-dok`): one excursion below
+    /// A disk episode rides THROUGH amber (`banshee-dok`): one excursion below
     /// the target floor is one incident, however many times it crosses the red
     /// line inside it — the app's single-identifier disk banner clears only on
     /// green, and the episode record must tell the same story. Every other
     /// dimension still starts recovery the moment it leaves red; the CPU
     /// contrast pins that the ride-through is disk's alone.
     #[test]
-    fn a_disk_episode_rides_through_yellow_and_recovers_on_green() {
+    fn a_disk_episode_rides_through_amber_and_recovers_on_green() {
         let disk = firing(Dimension::Disk, -3600, Some(-600), Level::Wailing);
         let eased = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Disk, Band::Yellow, 300)],
+            vec![reading(Dimension::Disk, Band::Amber, 300)],
         );
         let out = reconcile_episodes(std::slice::from_ref(&disk), &eased, None, at(0), &cfg());
         assert!(
@@ -1023,7 +1052,7 @@ mod tests {
         let cpu = firing(Dimension::Cpu, -3600, Some(-600), Level::Wailing);
         let eased = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Cpu, Band::Yellow, 300)],
+            vec![reading(Dimension::Cpu, Band::Amber, 300)],
         );
         let out = reconcile_episodes(&[cpu], &eased, None, at(0), &cfg());
         assert_eq!(out.episodes[0].state, EpisodeState::Recovering);
@@ -1301,7 +1330,7 @@ mod tests {
         let open = vec![firing(Dimension::Cpu, -600, Some(-600), Level::Wailing)];
         let p = pressure(
             Level::Stirring,
-            vec![reading(Dimension::Cpu, Band::Yellow, 15)],
+            vec![reading(Dimension::Cpu, Band::Amber, 15)],
         );
         let out = reconcile_episodes(&open, &p, None, at(0), &cfg());
         assert_eq!(out.episodes[0].state, EpisodeState::Recovering);

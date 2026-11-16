@@ -1021,6 +1021,9 @@ impl SampleStore {
         Ok(rows
             .iter()
             .filter_map(|d| serde_json::from_str::<AlertEpisode>(d).ok())
+            // Display names come from the enums, not from whatever the row was
+            // written with — see `with_display_names`.
+            .map(AlertEpisode::with_display_names)
             .collect())
     }
 
@@ -2124,11 +2127,13 @@ mod tests {
         AlertEpisode {
             id: Uuid::new_v4(),
             dimension,
+            dimension_label: dimension.label().to_string(),
             started_at: at(started),
             ended_at: ended.map(at),
             peak: EpisodePeak {
                 band: Band::Red,
                 level,
+                level_name: level.name().to_string(),
                 severity: 2.5,
                 at: at(started),
                 message: "something happened".into(),
@@ -2286,6 +2291,123 @@ mod tests {
             st.count_episodes().unwrap(),
             2,
             "both rows are still stored"
+        );
+    }
+
+    /// An episode stored BEFORE the band was renamed carries `"band":"yellow"` in
+    /// its JSON, and it must still be read (`banshee-v54.1`). The skip-on-parse-error
+    /// rule above is exactly what would hide the breakage: without the alias on
+    /// `Band::Amber` the row is dropped without a word and the Alerts tab loses a
+    /// year of amber history. Nothing writes the old word any more, which the first
+    /// assertion pins. Mutation-proof: delete the `#[serde(alias = "yellow")]` and
+    /// the read comes back empty.
+    #[test]
+    fn an_episode_stored_with_the_old_band_word_is_still_read() {
+        let st = SampleStore::open_in_memory().unwrap();
+        let mut e = episode(
+            Dimension::Disk,
+            Level::Stirring,
+            "2026-08-31T15:00:00.000000Z",
+            None,
+        );
+        e.peak.band = Band::Amber;
+        let current = serde_json::to_string(&e).unwrap();
+        assert!(
+            current.contains(r#""band":"amber""#),
+            "the band is written as amber: {current}"
+        );
+        let old = current.replace(r#""band":"amber""#, r#""band":"yellow""#);
+        assert_ne!(old, current, "the old row really carries the old word");
+        st.conn
+            .execute(
+                "INSERT INTO alert_episodes (id, dimension, started_at, ended_at, detail)
+                 VALUES (?1, 'disk', '2026-08-31T15:00:00.000000Z', NULL, ?2)",
+                params![e.id.to_string(), old],
+            )
+            .unwrap();
+
+        let got = st.open_episodes().unwrap();
+        let bands: Vec<Band> = got.iter().map(|e| e.peak.band).collect();
+        assert_eq!(bands, vec![Band::Amber], "read back, and as amber");
+    }
+
+    /// The two display names are REFRESHED on read, not trusted from the row
+    /// (`banshee-v54.1`). Two rows prove the two halves: one written before the
+    /// fields existed (absent), and one carrying words a later release reworded
+    /// (stale). Both must come back with today's names. A fixture with only the
+    /// absent row could not tell "refreshed" from "defaulted then never looked at".
+    /// Mutation-proof: drop `.map(AlertEpisode::with_display_names)` from the read
+    /// and the stale row says STALE while the absent one comes back empty.
+    #[test]
+    fn display_names_are_refreshed_on_read_for_old_and_stale_rows() {
+        let st = SampleStore::open_in_memory().unwrap();
+        let absent = episode(
+            Dimension::Disk,
+            Level::Stirring,
+            "2026-08-31T15:00:00.000000Z",
+            None,
+        );
+        let stale = episode(
+            Dimension::Cpu,
+            Level::Wailing,
+            "2026-08-31T16:00:00.000000Z",
+            None,
+        );
+        let strip = |e: &AlertEpisode| {
+            let mut v: serde_json::Value = serde_json::to_value(e).unwrap();
+            assert!(
+                v.as_object_mut()
+                    .unwrap()
+                    .remove("dimensionLabel")
+                    .is_some()
+            );
+            assert!(
+                v["peak"]
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("levelName")
+                    .is_some()
+            );
+            v.to_string()
+        };
+        let spoil = |e: &AlertEpisode| {
+            let mut v: serde_json::Value = serde_json::to_value(e).unwrap();
+            v["dimensionLabel"] = "STALE".into();
+            v["peak"]["levelName"] = "STALE".into();
+            v.to_string()
+        };
+        for (e, dim, detail) in [
+            (&absent, "disk", strip(&absent)),
+            (&stale, "cpu", spoil(&stale)),
+        ] {
+            st.conn
+                .execute(
+                    "INSERT INTO alert_episodes (id, dimension, started_at, ended_at, detail)
+                     VALUES (?1, ?2, ?3, NULL, ?4)",
+                    params![
+                        e.id.to_string(),
+                        dim,
+                        wire_time::to_wire(&e.started_at),
+                        detail
+                    ],
+                )
+                .unwrap();
+        }
+
+        let got = st
+            .episodes_since(at("2026-08-31T00:00:00.000000Z"))
+            .unwrap();
+        let names: Vec<(&str, &str)> = got
+            .iter()
+            .map(|e| (e.dimension_label.as_str(), e.peak.level_name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                ("CPU utilization", "Wailing"),
+                ("Disk headroom", "Stirring")
+            ],
+            "newest first, both with today's names"
         );
     }
 

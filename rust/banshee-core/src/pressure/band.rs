@@ -17,13 +17,31 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum Band {
     Green,
-    Yellow,
+    /// Written `amber` on the wire. It was `yellow` until the brand pass
+    /// (`banshee-v54.1`): the band always drew orange, and once the band word
+    /// appeared beside its dot the two disagreed on screen.
+    ///
+    /// **The alias is load-bearing, not politeness.** Alert episodes are stored as
+    /// JSON (`alert_episodes.detail`) and `list_alert_episodes` drops any row that
+    /// fails to parse, so without it every episode recorded before the rename would
+    /// silently vanish from the Alerts tab. Read-only: nothing writes `yellow`.
+    #[serde(alias = "yellow")]
+    Amber,
     Red,
 }
 
 impl Band {
     pub fn is_at_least(self, other: Band) -> bool {
         self >= other
+    }
+
+    /// The band as a person reads it — the same word the wire carries.
+    pub fn word(self) -> &'static str {
+        match self {
+            Band::Green => "green",
+            Band::Amber => "amber",
+            Band::Red => "red",
+        }
     }
 }
 
@@ -35,8 +53,8 @@ impl Band {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BandSpec {
-    /// Value at or beyond which the dimension is Yellow.
-    pub yellow: f64,
+    /// Value at or beyond which the dimension is Amber.
+    pub amber: f64,
     /// Value at or beyond which the dimension is Red.
     pub red: f64,
     /// How far the value must fall BELOW a threshold before the band is left.
@@ -51,9 +69,9 @@ pub struct BandSpec {
 
 impl BandSpec {
     /// Rising-is-worse spec.
-    pub fn rising(yellow: f64, red: f64, margin: f64, confirm_samples: usize) -> Self {
+    pub fn rising(amber: f64, red: f64, margin: f64, confirm_samples: usize) -> Self {
         Self {
-            yellow,
+            amber,
             red,
             margin,
             confirm_samples,
@@ -61,11 +79,11 @@ impl BandSpec {
         }
     }
 
-    /// Falling-is-worse spec (free bytes, free pages). `yellow` must be the
+    /// Falling-is-worse spec (free bytes, free pages). `amber` must be the
     /// HIGHER number, since crossing downward is what matters.
-    pub fn falling(yellow: f64, red: f64, margin: f64, confirm_samples: usize) -> Self {
+    pub fn falling(amber: f64, red: f64, margin: f64, confirm_samples: usize) -> Self {
         Self {
-            yellow,
+            amber,
             red,
             margin,
             confirm_samples,
@@ -88,15 +106,15 @@ impl BandSpec {
         if self.inverted {
             if value <= self.red {
                 Band::Red
-            } else if value <= self.yellow {
-                Band::Yellow
+            } else if value <= self.amber {
+                Band::Amber
             } else {
                 Band::Green
             }
         } else if value >= self.red {
             Band::Red
-        } else if value >= self.yellow {
-            Band::Yellow
+        } else if value >= self.amber {
+            Band::Amber
         } else {
             Band::Green
         }
@@ -125,17 +143,17 @@ impl BandSpec {
             Band::Red => {
                 if !clears(self.red) {
                     Band::Red
-                } else if raw == Band::Green && !clears(self.yellow) {
-                    Band::Yellow
+                } else if raw == Band::Green && !clears(self.amber) {
+                    Band::Amber
                 } else {
                     raw
                 }
             }
-            Band::Yellow => {
-                if clears(self.yellow) {
+            Band::Amber => {
+                if clears(self.amber) {
                     Band::Green
                 } else {
-                    Band::Yellow
+                    Band::Amber
                 }
             }
             Band::Green => Band::Green,
@@ -217,13 +235,13 @@ pub fn replay(spec: &BandSpec, values: &[f64]) -> Option<BandOutcome> {
 mod tests {
     use super::*;
 
-    /// load-per-core: yellow at 1, red at 3, must fall 0.5 below to leave,
+    /// load-per-core: amber at 1, red at 3, must fall 0.5 below to leave,
     /// two samples to confirm a drop.
     fn cpu() -> BandSpec {
         BandSpec::rising(1.0, 3.0, 0.5, 2)
     }
 
-    /// free bytes: yellow below 20 GB, red below 5 GB, 1 GB margin.
+    /// free bytes: amber below 20 GB, red below 5 GB, 1 GB margin.
     fn disk() -> BandSpec {
         BandSpec::falling(20e9, 5e9, 1e9, 2)
     }
@@ -231,14 +249,14 @@ mod tests {
     // ---- raw bands -------------------------------------------------------
 
     /// Boundaries are INCLUSIVE. Mutation-proof: change `>=` to `>` on the red
-    /// arm and a load of exactly 3.0 reports Yellow — one whole band of silence
+    /// arm and a load of exactly 3.0 reports Amber — one whole band of silence
     /// at precisely the number `perf-scan` calls SATURATED.
     #[test]
     fn thresholds_are_inclusive_at_the_boundary() {
         let s = cpu();
         assert_eq!(s.raw_band(0.999), Band::Green);
-        assert_eq!(s.raw_band(1.0), Band::Yellow, "exactly yellow is yellow");
-        assert_eq!(s.raw_band(2.999), Band::Yellow);
+        assert_eq!(s.raw_band(1.0), Band::Amber, "exactly amber is amber");
+        assert_eq!(s.raw_band(2.999), Band::Amber);
         assert_eq!(s.raw_band(3.0), Band::Red, "exactly red is red");
         assert_eq!(s.raw_band(76.0 / 8.0), Band::Red, "the 2026-08-04 load");
     }
@@ -249,8 +267,8 @@ mod tests {
     fn inverted_specs_get_worse_as_the_value_falls() {
         let s = disk();
         assert_eq!(s.raw_band(100e9), Band::Green);
-        assert_eq!(s.raw_band(20e9), Band::Yellow, "exactly yellow is yellow");
-        assert_eq!(s.raw_band(19e9), Band::Yellow);
+        assert_eq!(s.raw_band(20e9), Band::Amber, "exactly amber is amber");
+        assert_eq!(s.raw_band(19e9), Band::Amber);
         assert_eq!(s.raw_band(5e9), Band::Red, "exactly red is red");
         assert_eq!(s.raw_band(1.1e9), Band::Red, "the 2026-07-16 crisis");
     }
@@ -287,7 +305,7 @@ mod tests {
     }
 
     /// De-escalation requires clearing the threshold by the margin. Mutation-proof:
-    /// return `raw` unconditionally from `band_from` and 2.9 drops to Yellow
+    /// return `raw` unconditionally from `band_from` and 2.9 drops to Amber
     /// immediately, so a value oscillating around 3.0 alerts on every sample.
     #[test]
     fn a_value_just_below_the_threshold_does_not_de_escalate() {
@@ -301,35 +319,35 @@ mod tests {
     #[test]
     fn clearing_the_margin_for_long_enough_de_escalates() {
         let s = cpu();
-        // 2.4 clears red (3.0 - 0.5 = 2.5) and is still yellow.
+        // 2.4 clears red (3.0 - 0.5 = 2.5) and is still amber.
         let out = replay(&s, &[3.0, 2.4, 2.4]).unwrap();
-        assert_eq!(out.band, Band::Yellow);
+        assert_eq!(out.band, Band::Amber);
     }
 
     /// A drop must be CONFIRMED. One good sample in a bad stretch is noise, and
     /// acting on it produces a monitor that flickers. Mutation-proof: set the
-    /// needed run to 1 for de-escalation and this reports Yellow.
+    /// needed run to 1 for de-escalation and this reports Amber.
     #[test]
     fn a_single_good_sample_does_not_confirm_a_drop() {
         let s = cpu(); // confirm_samples = 2
         let out = replay(&s, &[3.0, 3.0, 2.0]).unwrap();
         assert_eq!(out.band, Band::Red, "one clearing sample is not enough");
-        assert_eq!(out.pending, Some(Band::Yellow), "but the drop is pending");
+        assert_eq!(out.pending, Some(Band::Amber), "but the drop is pending");
 
         let out = replay(&s, &[3.0, 3.0, 2.0, 2.0]).unwrap();
-        assert_eq!(out.band, Band::Yellow, "two confirms it");
+        assert_eq!(out.band, Band::Amber, "two confirms it");
         assert_eq!(out.pending, None);
     }
 
-    /// Red cannot skip Yellow on the way down unless it also clears Yellow's
+    /// Red cannot skip Amber on the way down unless it also clears Amber's
     /// margin. Mutation-proof: return `raw` for the Red arm and a value of 0.9
-    /// (which clears red but not yellow's margin of 0.5) jumps straight to Green.
+    /// (which clears red but not amber's margin of 0.5) jumps straight to Green.
     #[test]
     fn de_escalation_does_not_skip_a_band_it_has_not_cleared() {
         let s = cpu();
         // 0.9 is raw-Green (< 1.0) and clears red, but 0.9 > 1.0 - 0.5.
         let out = replay(&s, &[3.0, 0.9, 0.9, 0.9]).unwrap();
-        assert_eq!(out.band, Band::Yellow, "must land on Yellow, not Green");
+        assert_eq!(out.band, Band::Amber, "must land on Amber, not Green");
 
         // 0.4 clears both margins.
         let out = replay(&s, &[3.0, 0.4, 0.4, 0.4]).unwrap();
@@ -362,7 +380,7 @@ mod tests {
         assert_eq!(out.band, Band::Red, "5.5 GB < 5 GB + 1 GB margin");
 
         let out = replay(&s, &[4e9, 6.5e9, 6.5e9]).unwrap();
-        assert_eq!(out.band, Band::Yellow, "6.5 GB clears red's margin");
+        assert_eq!(out.band, Band::Amber, "6.5 GB clears red's margin");
     }
 
     // ---- seeding and empty input ----------------------------------------
@@ -387,7 +405,7 @@ mod tests {
     /// The replay SEEDS from the oldest value's raw band, not from Green.
     /// Otherwise a daemon restarting into an ongoing crisis would report Green
     /// until enough samples accumulated. Mutation-proof: seed with `Band::Green`
-    /// and this reports Yellow (the confirmed step up) instead of Red.
+    /// and this reports Amber (the confirmed step up) instead of Red.
     #[test]
     fn a_window_that_begins_in_crisis_does_not_start_from_green() {
         let s = cpu();
@@ -411,14 +429,14 @@ mod tests {
     fn a_zero_confirm_count_is_treated_as_one() {
         let s = BandSpec::rising(1.0, 3.0, 0.5, 0);
         let out = replay(&s, &[3.0, 2.0]).unwrap();
-        assert_eq!(out.band, Band::Yellow, "adopted at once");
+        assert_eq!(out.band, Band::Amber, "adopted at once");
     }
 
     #[test]
-    fn band_ordering_is_green_yellow_red() {
-        assert!(Band::Red > Band::Yellow);
-        assert!(Band::Yellow > Band::Green);
-        assert!(Band::Red.is_at_least(Band::Yellow));
-        assert!(!Band::Yellow.is_at_least(Band::Red));
+    fn band_ordering_is_green_amber_red() {
+        assert!(Band::Red > Band::Amber);
+        assert!(Band::Amber > Band::Green);
+        assert!(Band::Red.is_at_least(Band::Amber));
+        assert!(!Band::Amber.is_at_least(Band::Red));
     }
 }

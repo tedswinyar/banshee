@@ -1,0 +1,9 @@
+# The yellow->amber rename (banshee-v54.1): alert episodes are stored as JSON and
+# the store drops rows that fail to parse, so without the alias every episode
+# recorded under the old band word silently vanishes from the Alerts tab.
+file: rust/banshee-core/src/pressure/band.rs
+test: an_episode_stored_with_the_old_band_word_is_still_read
+---OLD---
+    #[serde(alias = "yellow")]
+---NEW---
+    // alias removed

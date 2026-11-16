@@ -1,0 +1,8 @@
+# The notification title core composes (banshee-v54.1) must say the reading's OWN
+# band; the fixture is an amber disk beside a green CPU so a hardcoded red fails.
+file: rust/banshee-core/src/pressure/mod.rs
+test: every_reading_carries_its_own_notification_title_in_cores_words
+---OLD---
+    format!("Banshee: {} is {}", dimension.label(), band.word())
+---NEW---
+    format!("Banshee: {} is {}", dimension.label(), Band::Red.word())

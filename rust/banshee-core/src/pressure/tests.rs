@@ -256,13 +256,13 @@ fn a_healthy_machine_reports_every_dimension_green() {
 }
 
 /// One unsupervised process burning a core is a finding in its own right
-/// (`banshee-87l.5`): the Runaways dimension goes yellow on a count of one, the
+/// (`banshee-87l.5`): the Runaways dimension goes amber on a count of one, the
 /// finding names the process the way a person would look for it (script label,
 /// pid, rate, age, parentage, directory), the who-line names it by rate, and
 /// the action is the runaway reap. Mutation-proof: drop the census-aware message
 /// and the pid vanishes; wire the action to ReapOrphans and the label changes.
 #[test]
-fn a_single_runaway_is_a_yellow_sprawl_finding_that_names_the_process() {
+fn a_single_runaway_is_an_amber_sprawl_finding_that_names_the_process() {
     let mut c = healthy_census(300);
     c.runaways.push(crate::census::Runaway {
         pid: 11275,
@@ -280,10 +280,10 @@ fn a_single_runaway_is_a_yellow_sprawl_finding_that_names_the_process() {
     let p = evaluate(at(300), &healthy(21, 300), &[c], &[], &cfg());
 
     let r = p.reading(Dimension::Runaways).expect("a runaways reading");
-    assert_eq!(r.band, Band::Yellow, "{r:?}");
+    assert_eq!(r.band, Band::Amber, "{r:?}");
     assert_eq!(r.value, 1.0);
     assert_eq!(r.detail, "1 runaway");
-    // One yellow is Stirring: a worklist item, not a menu-bar alarm.
+    // One amber is Stirring: a worklist item, not a menu-bar alarm.
     assert_eq!(p.level, Level::Stirring, "{p:?}");
 
     let f = p
@@ -516,7 +516,7 @@ fn kernel_pressure_is_banded_on_the_kernels_level_not_availability() {
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
 
     let kernel = p.reading(Dimension::KernelPressure).unwrap();
-    assert_eq!(kernel.band, Band::Yellow, "WARN is yellow: {kernel:?}");
+    assert_eq!(kernel.band, Band::Amber, "WARN is amber: {kernel:?}");
     assert!(kernel.detail.contains("warn"), "got {:?}", kernel.detail);
     let mem = p.reading(Dimension::Memory).unwrap();
     assert_eq!(
@@ -525,7 +525,7 @@ fn kernel_pressure_is_banded_on_the_kernels_level_not_availability() {
         "availability stays green — the kernel's verdict is its OWN dimension, \
          not an override of this one"
     );
-    // One yellow is Stirring — the point is that the verdict is no longer
+    // One amber is Stirring — the point is that the verdict is no longer
     // BLIND to the kernel's claim, not that a lone WARN is an emergency.
     assert_eq!(p.level, Level::Stirring, "the verdict is no longer blind");
 }
@@ -632,17 +632,17 @@ fn a_heavy_thermal_level_is_red_with_the_kernels_words_and_no_action() {
     assert_eq!(f.action, Action::None, "heat has no process to reap");
 }
 
-/// MODERATE (1) — Apple's "fair": fans audible — is yellow, and the yellow finding
+/// MODERATE (1) — Apple's "fair": fans audible — is amber, and the amber finding
 /// does NOT claim throttling (nothing is being slowed yet). Nominal (0) is green.
 #[test]
-fn a_moderate_thermal_level_is_yellow_without_the_throttling_claim() {
+fn a_moderate_thermal_level_is_amber_without_the_throttling_claim() {
     let mut samples = healthy(21, 300);
     for s in &mut samples {
         s.thermal_pressure_level = Some(1);
     }
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let t = p.reading(Dimension::Thermal).unwrap();
-    assert_eq!(t.band, Band::Yellow);
+    assert_eq!(t.band, Band::Amber);
     assert_eq!(t.detail, "kernel reports moderate");
     let f = p
         .findings
@@ -656,7 +656,7 @@ fn a_moderate_thermal_level_is_yellow_without_the_throttling_claim() {
     );
     assert!(
         !f.message.contains("throttled"),
-        "yellow must not claim throttling: {:?}",
+        "amber must not claim throttling: {:?}",
         f.message
     );
 
@@ -748,8 +748,8 @@ fn swap_is_banded_on_absolute_bytes_not_a_percentage() {
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let swap = p.reading(Dimension::Swap).unwrap();
 
-    // 10.66 GB is past the 4 GB yellow line and short of the 12 GB red one.
-    assert_eq!(swap.band, Band::Yellow);
+    // 10.66 GB is past the 4 GB amber line and short of the 12 GB red one.
+    assert_eq!(swap.band, Band::Amber);
     assert!(swap.band > Band::Green, "the machine is not calm");
 
     // The contrast that matters: `perf-scan` bands on swap PERCENT, and this same
@@ -760,7 +760,7 @@ fn swap_is_banded_on_absolute_bytes_not_a_percentage() {
         "a percentage rule would have called this calm at {pct:.0}%"
     );
 
-    // And the same absolute reading stays Yellow even if the total grows, which
+    // And the same absolute reading stays Amber even if the total grows, which
     // is the failure mode ADR-0007 describes: macOS growing the swap file makes
     // a percentage FALL while nothing improves.
     let mut bigger = samples.clone();
@@ -770,7 +770,7 @@ fn swap_is_banded_on_absolute_bytes_not_a_percentage() {
     let p2 = evaluate(at(300), &bigger, &[], &[], &cfg());
     assert_eq!(
         p2.reading(Dimension::Swap).unwrap().band,
-        Band::Yellow,
+        Band::Amber,
         "the verdict must not depend on the denominator"
     );
 }
@@ -1001,14 +1001,14 @@ fn a_reboot_inside_the_window_does_not_manufacture_a_thrash_spike() {
 fn disk_projects_a_time_to_full_when_space_is_falling() {
     let n = 21;
     let mut samples = healthy(n, 300);
-    // Falling 100 MB per sample (15s) from 45 GB: yellow, emptying slowly
+    // Falling 100 MB per sample (15s) from 45 GB: amber, emptying slowly
     // enough (~1.9 h to full) that time does not force it red.
     for (i, s) in samples.iter_mut().enumerate() {
         s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 100_000_000);
     }
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow);
+    assert_eq!(disk.band, Band::Amber);
     assert!(
         disk.trend_per_sec.is_some_and(|t| t < 0.0),
         "trend must be negative: {:?}",
@@ -1022,13 +1022,13 @@ fn disk_projects_a_time_to_full_when_space_is_falling() {
 }
 
 /// Pin (c) of `banshee-3sn`: a volume EMPTYING FAST is red on time alone, at a
-/// byte level where a flat volume is merely yellow. The 2026-09-15 descent spent
-/// 40 minutes in the yellow band at ~12 MB/s — indistinguishable, before this,
+/// byte level where a flat volume is merely amber. The 2026-09-15 descent spent
+/// 40 minutes in the amber band at ~12 MB/s — indistinguishable, before this,
 /// from a volume sitting still at the same reading. Mutation-proof: drop the
-/// `forced > outcome.band` arm in `evaluate` and the falling case reads Yellow.
+/// `forced > outcome.band` arm in `evaluate` and the falling case reads Amber.
 #[test]
-fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
-    // 40 GB free — mid-yellow — falling 250 MB per 15s tick: ~40 min to full.
+fn a_fast_emptying_disk_is_red_though_its_bytes_say_amber() {
+    // 40 GB free — mid-amber — falling 250 MB per 15s tick: ~40 min to full.
     let mut falling = healthy(21, 300);
     for (i, s) in falling.iter_mut().enumerate() {
         s.volumes[0].avail_bytes = 45_000_000_000 - (i as u64 * 250_000_000);
@@ -1043,14 +1043,14 @@ fn a_fast_emptying_disk_is_red_though_its_bytes_say_yellow() {
     );
 
     // The distinguishing contrast (the co-varying-fixture rule): the same
-    // newest reading, flat, stays yellow — so it is the slope, not the bytes,
+    // newest reading, flat, stays amber — so it is the slope, not the bytes,
     // that escalated above.
     let mut flat = healthy(21, 300);
     for s in flat.iter_mut() {
         s.volumes[0].avail_bytes = 40_000_000_000;
     }
     let p = evaluate(at(300), &flat, &[], &[], &cfg());
-    assert_eq!(p.reading(Dimension::Disk).unwrap().band, Band::Yellow);
+    assert_eq!(p.reading(Dimension::Disk).unwrap().band, Band::Amber);
 }
 
 /// `hours` rollup buckets for the data volume, hourly, ending at `end_t`.
@@ -1107,7 +1107,7 @@ fn dropping_samples(from_gb: f64, to_gb: f64, total_bytes: u64) -> Vec<Sample> {
     samples
 }
 
-/// The burst horizon (`banshee-636`): a dramatic drop forces yellow whatever
+/// The burst horizon (`banshee-636`): a dramatic drop forces amber whatever
 /// the absolute level — with the headroom gate off (`no_floor`; under the
 /// default gate the band is owned by bytes above 60 GB, `banshee-f77`, pinned
 /// separately below). 400 → 388 GB is deep green by bytes and flat across the
@@ -1116,7 +1116,7 @@ fn dropping_samples(from_gb: f64, to_gb: f64, total_bytes: u64) -> Vec<Sample> {
 /// timing, same flatness, under both triggers — so it is the drop's SIZE the
 /// band answered, not the shape of the fixture.
 #[test]
-fn a_dramatic_drop_forces_yellow_whatever_the_level() {
+fn a_dramatic_drop_forces_amber_whatever_the_level() {
     let p = evaluate(
         at(1800),
         &dropping_samples(400.0, 388.0, 494_384_795_648),
@@ -1125,7 +1125,7 @@ fn a_dramatic_drop_forces_yellow_whatever_the_level() {
         &no_floor(),
     );
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow, "detail: {}", disk.detail);
+    assert_eq!(disk.band, Band::Amber, "detail: {}", disk.detail);
     assert!(
         disk.detail.contains("in the last"),
         "the detail must name the drop: {}",
@@ -1178,7 +1178,7 @@ fn the_drop_trigger_is_judged_against_the_volume_total() {
     );
     assert_eq!(
         p.reading(Dimension::Disk).unwrap().band,
-        Band::Yellow,
+        Band::Amber,
         "2% of a small volume fires below the flat 10 GB trigger"
     );
 }
@@ -1186,17 +1186,17 @@ fn the_drop_trigger_is_judged_against_the_volume_total() {
 /// The hour of 2026-10-13 ~11:40 PT, replayed at the daemon's 15 s cadence
 /// (`banshee-f77`): free fell 91.0 → 78.8 GB in 3600 s on a 460 GB volume —
 /// two agents' worktrees plus swapfile growth — while memory was the real
-/// story (swap yellow and kernel WARN here stand in for compressor/swap/kernel;
-/// two yellows is Restless, the level that names a source). The drop rule
+/// story (swap amber and kernel WARN here stand in for compressor/swap/kernel;
+/// two ambers is Restless, the level that names a source). The drop rule
 /// fires (12.2 GB ≥ min(10 GB, 2% of 460 GB)), and before the headroom gate it
-/// forced Yellow, `takes_precedence` handed disk the glyph, and the detail said
+/// forced Amber, `takes_precedence` handed disk the glyph, and the detail said
 /// "full in 1.6 days". Ted's ruling: 78 GB free is plenty. The band must stay
 /// Green, the source must be memory, the glyph must not be the disk face — and
 /// the drop must still be SAID in the detail, while "full in" is not. The
 /// `no_floor` contrast is the co-varying-fixture rule: the same hour with the
-/// gate off goes Yellow and speaks the projection, so it is the gate that held
+/// gate off goes Amber and speaks the projection, so it is the gate that held
 /// the band, not the fixture. Mutation-proof: drop `gate_on_headroom` from the
-/// drop arm of `evaluate` and this reads Yellow with a disk source.
+/// drop arm of `evaluate` and this reads Amber with a disk source.
 #[test]
 fn todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted() {
     let n = 241; // one hour at 15 s
@@ -1205,8 +1205,8 @@ fn todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted()
         let avail = 91.0e9 - 12.2e9 * (i as f64 / (n - 1) as f64);
         s.volumes[0].avail_bytes = avail as u64;
         s.volumes[0].total_bytes = 460_000_000_000;
-        s.swap_used_bytes = 6_000_000_000; // swap yellow: the memory story
-        s.memory_pressure_level = 2; // the kernel says WARN: yellow
+        s.swap_used_bytes = 6_000_000_000; // swap amber: the memory story
+        s.memory_pressure_level = 2; // the kernel says WARN: amber
     }
     let p = evaluate(at(3600), &samples, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
@@ -1231,16 +1231,12 @@ fn todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted()
         "the slope itself is still measured: {:?}",
         disk.trend_per_sec
     );
-    assert_eq!(p.reading(Dimension::Swap).unwrap().band, Band::Yellow);
+    assert_eq!(p.reading(Dimension::Swap).unwrap().band, Band::Amber);
     assert_eq!(
         p.reading(Dimension::KernelPressure).unwrap().band,
-        Band::Yellow
+        Band::Amber
     );
-    assert_eq!(
-        p.level,
-        Level::Restless,
-        "two yellows, as on the screenshot"
-    );
+    assert_eq!(p.level, Level::Restless, "two ambers, as on the screenshot");
     assert_eq!(p.source, Some(Source::Memory), "memory is the story");
     assert!(
         !p.glyph.contains("💽"),
@@ -1253,17 +1249,17 @@ fn todays_hour_at_78_gb_free_stays_green_and_off_the_glyph_with_the_drop_noted()
     );
 
     // The gate is what held it: the same hour with the floor off is the
-    // pre-f77 behaviour — Yellow by burst, disk owns the yellow glyph, and the
+    // pre-f77 behaviour — Amber by burst, disk owns the amber glyph, and the
     // projection is spoken.
     let p = evaluate(at(3600), &samples, &[], &[], &no_floor());
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow, "{}", disk.detail);
+    assert_eq!(disk.band, Band::Amber, "{}", disk.detail);
     assert!(disk.detail.contains("full in"), "{}", disk.detail);
     assert_eq!(p.source, Some(Source::Disk), "the pre-f77 glyph owner");
 }
 
 /// A projection beyond the horizon is not put into words even BELOW the floor
-/// (`banshee-f77`, applying `banshee-wql`'s 48 h cap): 45 GB — yellow by
+/// (`banshee-f77`, applying `banshee-wql`'s 48 h cap): 45 GB — amber by
 /// bytes — draining at ~174 KB/s is "full in 3.0 days", a forecast off ten
 /// minutes of slope with nothing behind it. The band and the slope are
 /// untouched; only the clause is withheld. Contrast: the same fixture with the
@@ -1279,7 +1275,7 @@ fn a_projection_beyond_the_horizon_is_not_put_into_words_even_below_the_floor() 
     }
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow, "yellow by bytes, below the floor");
+    assert_eq!(disk.band, Band::Amber, "amber by bytes, below the floor");
     assert!(
         disk.trend_per_sec.is_some_and(|t| t < 0.0),
         "the slope is still measured: {:?}",
@@ -1306,11 +1302,11 @@ fn a_projection_beyond_the_horizon_is_not_put_into_words_even_below_the_floor() 
 
 /// The PROJECTION floor is gated the same way as the drop (`banshee-f77`): a
 /// volume with 85 GB in hand emptying at 1 GB/min — "full in 1.4 hours", which
-/// `forced_floor` alone calls Yellow — stays Green and says nothing about
+/// `forced_floor` alone calls Amber — stays Green and says nothing about
 /// filling until the bytes cross the floor, where
-/// `a_fast_emptying_disk_is_red_though_its_bytes_say_yellow` takes over. The
+/// `a_fast_emptying_disk_is_red_though_its_bytes_say_amber` takes over. The
 /// `no_floor` contrast shows the floor itself still works. Mutation-proof: drop
-/// `gate_on_headroom` from the forced arm of `evaluate` and this reads Yellow.
+/// `gate_on_headroom` from the forced arm of `evaluate` and this reads Amber.
 #[test]
 fn a_fast_projection_above_the_floor_moves_nothing_until_the_bytes_do() {
     let mut samples = healthy(21, 300);
@@ -1325,24 +1321,20 @@ fn a_fast_projection_above_the_floor_moves_nothing_until_the_bytes_do() {
 
     let p = evaluate(at(300), &samples, &[], &[], &no_floor());
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(
-        disk.band,
-        Band::Yellow,
-        "the floor still works when ungated"
-    );
+    assert_eq!(disk.band, Band::Amber, "the floor still works when ungated");
     assert!(disk.detail.contains("full in"), "{}", disk.detail);
 }
 
 /// The third disk horizon (`banshee-nio`): a genuine slow drain — 90 GB over
 /// 7 days, ~150 KB/s — is structurally invisible to the ten-minute slope (it
 /// projects "full in 7.8 days", which no burst window can say), so the week
-/// tier forces yellow and the detail tells the week story. The two contrasts
+/// tier forces amber and the detail tells the week story. The two contrasts
 /// are the co-varying-fixture rule: the same samples with a flat week stay
-/// green, so it is the ROLLUPS that forced yellow; and the same drain rate
+/// green, so it is the ROLLUPS that forced amber; and the same drain rate
 /// with two days of coverage stays green, so a thin series is never trusted
 /// as a week of evidence.
 #[test]
-fn a_multi_day_drain_forces_yellow_with_the_week_story() {
+fn a_multi_day_drain_forces_amber_with_the_week_story() {
     // Bytes green and flat: 100 GB free across the whole window — no burst,
     // no short projection, nothing the ten-minute window can see.
     let samples = healthy(21, 300);
@@ -1356,7 +1348,7 @@ fn a_multi_day_drain_forces_yellow_with_the_week_story() {
         &cfg(),
     );
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow, "detail: {}", disk.detail);
+    assert_eq!(disk.band, Band::Amber, "detail: {}", disk.detail);
     assert!(
         disk.detail.contains("at this rate"),
         "the detail must tell the week story: {}",
@@ -1392,14 +1384,14 @@ fn a_multi_day_drain_forces_yellow_with_the_week_story() {
     );
 }
 
-/// The week horizon caps at YELLOW and stays out of severity: full-in-two-weeks
+/// The week horizon caps at AMBER and stays out of severity: full-in-two-weeks
 /// is a standing debt to schedule, not an emergency, and red remains owned by
 /// bytes and the ten-minute projection (`banshee-nio`; the separation of
 /// horizons is `banshee-wql`'s warning). Even a week trend steep enough that
 /// the burst projection would call it red — ~2 days to full — forces no more
-/// than yellow and leaves severity where the bytes put it.
+/// than amber and leaves severity where the bytes put it.
 #[test]
-fn the_week_trend_caps_at_yellow_and_never_touches_severity() {
+fn the_week_trend_caps_at_amber_and_never_touches_severity() {
     let samples = healthy(21, 300); // 100 GB flat: green by bytes
     // ~1.9 GB/hour fitted over the week: full in ~2.2 days at 100 GB free.
     let steep = |hours_ago: usize| 100_000_000_000 + (hours_ago as u64) * 1_900_000_000;
@@ -1411,7 +1403,7 @@ fn the_week_trend_caps_at_yellow_and_never_touches_severity() {
         &cfg(),
     );
     let disk = p.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow, "never red on the week horizon");
+    assert_eq!(disk.band, Band::Amber, "never red on the week horizon");
     assert!(
         disk.severity < 1.0,
         "severity stays owned by bytes and the burst projection: {}",
@@ -1420,31 +1412,31 @@ fn the_week_trend_caps_at_yellow_and_never_touches_severity() {
 }
 
 /// The disk series reads the FULL slice the sampler hands over, not the
-/// ten-minute model window (`banshee-dok`): the disk yellow episode delay is
+/// ten-minute model window (`banshee-dok`): the disk amber episode delay is
 /// half an hour, and `held_secs` can only count what the series covers, so a
 /// ten-minute series caps every observable hold at ten minutes and the delay
-/// could never be met. Fifty minutes of flat yellow must read as ~50 minutes
+/// could never be met. Fifty minutes of flat amber must read as ~50 minutes
 /// held, and `assess` must open the episode the window alone structurally
 /// never could. Mutation-proof: hand disk the `window` slice like every other
 /// dimension and the hold saturates at ten minutes.
 #[test]
-fn a_long_disk_yellow_is_held_past_the_window_and_opens_an_episode() {
+fn a_long_disk_amber_is_held_past_the_window_and_opens_an_episode() {
     let n = 201; // 50 minutes at the 15s cadence
     let mut samples = healthy(n, 3000);
     for s in samples.iter_mut() {
-        s.volumes[0].avail_bytes = 45_000_000_000; // mid-yellow, flat
+        s.volumes[0].avail_bytes = 45_000_000_000; // mid-amber, flat
     }
     let a = assess(at(3000), &samples, &[], &[], &[], &cfg());
     let disk = a.pressure.reading(Dimension::Disk).unwrap();
-    assert_eq!(disk.band, Band::Yellow);
+    assert_eq!(disk.band, Band::Amber);
     assert!(
-        disk.held_secs >= cfg().disk_yellow_episode_up_secs,
+        disk.held_secs >= cfg().disk_amber_episode_up_secs,
         "the hold must span past the model window: {}",
         disk.held_secs
     );
     assert_eq!(a.episodes.len(), 1, "episodes: {:?}", a.episodes);
     assert_eq!(a.episodes[0].dimension, Dimension::Disk);
-    assert_eq!(a.episodes[0].peak.band, Band::Yellow);
+    assert_eq!(a.episodes[0].peak.band, Band::Amber);
 }
 
 /// Banshee never walks the filesystem, so the disk finding hands off to a disk-usage tool
@@ -1569,7 +1561,7 @@ fn a_mature_managed_agent_group_bands_on_growth() {
     ];
     let p = evaluate(at(300), &healthy(21, 300), &censuses, &[], &cfg());
     let corp = p.reading(Dimension::ManagedAgents).unwrap();
-    assert_eq!(corp.band, Band::Yellow, "70% is past the 60% line");
+    assert_eq!(corp.band, Band::Amber, "70% is past the 60% line");
     assert!(corp.detail.contains("of one core"));
 }
 
@@ -1685,7 +1677,7 @@ fn a_recovering_dimension_reports_a_pending_band() {
 }
 
 /// The CPU finding earns the word "saturated" only at red — measured utilization at
-/// or above the saturation line, the cores actually pegged (`banshee-87l.19`). Yellow
+/// or above the saturation line, the cores actually pegged (`banshee-87l.19`). Amber
 /// is "busy, keeping up". The claim follows the BAND, not the raw value — the third
 /// case is a hysteresis-held red whose newest interval has already recovered, so an
 /// implementation gating on the raw value gives the wrong answer there while agreeing
@@ -1701,16 +1693,16 @@ fn the_cpu_finding_claims_saturation_only_at_red() {
             .clone()
     };
 
-    // Yellow (88% busy): the factual sentence only.
+    // Amber (88% busy): the factual sentence only.
     let mut samples = healthy(21, 300);
     set_cpu(&mut samples, 0.88);
     let p = evaluate(at(300), &samples, &[], &[], &cfg());
-    assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Yellow);
+    assert_eq!(p.reading(Dimension::Cpu).unwrap().band, Band::Amber);
     let msg = cpu_message(&p);
     assert!(msg.contains("88% busy"), "{msg}");
     assert!(
         !msg.contains("saturated"),
-        "yellow must not claim saturation: {msg}"
+        "amber must not claim saturation: {msg}"
     );
 
     // Red (98% busy): the saturation sentence.
@@ -1728,7 +1720,7 @@ fn the_cpu_finding_claims_saturation_only_at_red() {
     let cpu = p.reading(Dimension::Cpu).unwrap();
     assert_eq!(cpu.band, Band::Red, "hysteresis must hold red");
     assert!(
-        cpu.value < cfg().cpu.yellow,
+        cpu.value < cfg().cpu.amber,
         "the raw value must have recovered"
     );
     assert!(
@@ -1829,7 +1821,7 @@ fn a_long_uptime_with_swap_pressure_does_produce_a_finding() {
     let mut samples = healthy(21, boot_30d_ago);
     for s in &mut samples {
         s.boot_time_secs = BOOT;
-        s.swap_used_bytes = 5_000_000_000; // yellow
+        s.swap_used_bytes = 5_000_000_000; // amber
     }
     let p = evaluate(at(boot_30d_ago), &samples, &[], &[], &cfg());
     assert!(
@@ -2072,11 +2064,13 @@ fn open_episode(d: Dimension, state: episode::EpisodeState, started: i64) -> epi
     episode::AlertEpisode {
         id: Uuid::new_v4(),
         dimension: d,
+        dimension_label: d.label().to_string(),
         started_at: at(started),
         ended_at: None,
         peak: episode::EpisodePeak {
             band: Band::Red,
             level: Level::Wailing,
+            level_name: Level::Wailing.name().to_string(),
             severity: 2.0,
             at: at(started),
             message: "was red".into(),
@@ -2538,13 +2532,13 @@ fn a_finding_without_a_census_names_nobody() {
     assert_eq!(swap.who_line, None);
 }
 
-/// Yellow findings name who too — yellow is where the cheap action still exists.
+/// Amber findings name who too — amber is where the cheap action still exists.
 /// Mutation-proof: gate attribution on `band == Red` and this fails.
 #[test]
-fn a_yellow_finding_names_who_too() {
+fn an_amber_finding_names_who_too() {
     let mut samples = healthy(21, 300);
     for s in &mut samples {
-        s.swap_used_bytes = 6_000_000_000; // past the 4 GB yellow line, under red
+        s.swap_used_bytes = 6_000_000_000; // past the 4 GB amber line, under red
     }
     let mut c = healthy_census(300);
     c.app_groups = vec![crate::census::AppGroup {
@@ -2558,7 +2552,7 @@ fn a_yellow_finding_names_who_too() {
         .iter()
         .find(|f| f.dimension == Dimension::Swap)
         .expect("a swap finding");
-    assert_eq!(swap.band, Band::Yellow);
+    assert_eq!(swap.band, Band::Amber);
     assert!(
         swap.who_line
             .as_deref()
@@ -2652,7 +2646,7 @@ fn decodes_the_shrieking_fixture_at_full_depth() {
     // silently drops unknown/renamed keys would still pass on the quiet fixture.
     let cpu = p.reading(Dimension::Cpu).expect("cpu reading");
     assert_eq!(cpu.band, Band::Red);
-    assert_eq!(cpu.pending, Some(Band::Yellow), "a pending de-escalation");
+    assert_eq!(cpu.pending, Some(Band::Amber), "a pending de-escalation");
     assert!(close(
         cpu.trend_per_sec.expect("cpu trend"),
         0.004_166_666_666_666_667
@@ -2801,6 +2795,7 @@ fn dr(dimension: Dimension, value: f64, trend: Option<f64>) -> DimensionReading 
         dimension,
         key: dimension.key().to_string(),
         label: dimension.label().to_string(),
+        alert_title: alert_title_for(dimension, Band::Red),
         band: Band::Red,
         value,
         unit: dimension.unit(),
@@ -3660,4 +3655,30 @@ fn the_trend_is_fitted_only_over_contiguous_observations() {
         "no time-to-full projection across a gap: {}",
         disk.detail
     );
+}
+
+/// The notification title is CORE's sentence (`banshee-v54.1`): product name, the
+/// dimension's label, the band as a word. Both halves are pinned against literals,
+/// on a reading whose band is NOT red and beside one whose label is NOT disk's, so
+/// neither a hardcoded band nor a hardcoded label can pass. Mutation-proof:
+/// `band.word()` -> `Band::Red.word()` in `alert_title_for` fails the amber line;
+/// `d.label()` -> `Dimension::Disk.label()` at the build site fails the CPU line.
+#[test]
+fn every_reading_carries_its_own_notification_title_in_cores_words() {
+    assert_eq!(
+        alert_title_for(Dimension::Disk, Band::Red),
+        "Banshee: Disk headroom is red"
+    );
+
+    let mut samples = healthy(21, 300);
+    for s in samples.iter_mut() {
+        s.volumes[0].avail_bytes = 45_000_000_000;
+    }
+    let p = evaluate(at(300), &samples, &[], &[], &cfg());
+    let disk = p.reading(Dimension::Disk).unwrap();
+    assert_eq!(disk.band, Band::Amber, "the fixture is an amber disk");
+    assert_eq!(disk.alert_title, "Banshee: Disk headroom is amber");
+    let cpu = p.reading(Dimension::Cpu).unwrap();
+    assert_eq!(cpu.band, Band::Green, "and a green CPU beside it");
+    assert_eq!(cpu.alert_title, "Banshee: CPU utilization is green");
 }

@@ -435,10 +435,14 @@ final class RecordWireFormatTests: XCTestCase {
             AlertEpisode.self, from: WireFormatTests.fixture("alert-episode.json")
         )
         XCTAssertEqual(e.dimension, "thrash")
+        XCTAssertEqual(e.dimensionLabel, "Swap thrash")
+        XCTAssertEqual(e.dimensionDisplay, "Swap thrash", "core's label, not the wire key")
         XCTAssertEqual(e.state, .closed)
         XCTAssertFalse(e.isOpen)
         XCTAssertEqual(e.peak.band, .red)
         XCTAssertEqual(e.peak.level, .shrieking)
+        XCTAssertEqual(e.peak.levelName, "Shrieking")
+        XCTAssertEqual(e.peakLevelDisplay, "Shrieking", "core's name, not the wire key")
         XCTAssertEqual(e.peak.severity, 3.494, accuracy: 1e-9)
         XCTAssertEqual(e.suppressed, 39)
         XCTAssertEqual(e.startedAt, WireDate.decode("2026-09-05T17:24:03.870112Z"))
@@ -463,6 +467,34 @@ final class RecordWireFormatTests: XCTestCase {
         XCTAssertEqual(peak.consumers[0].rssBytes, 8_900_000_000)
         XCTAssertEqual(peak.consumers[1].kind, .sessions)
         XCTAssertEqual(peak.consumers[2].kind, .rollup)
+    }
+
+    /// An episode from a daemon older than the display names (`banshee-v54.1`)
+    /// carries neither. It still decodes, the Alerts line falls back to the wire
+    /// keys, and both keys re-encode PRESENT as null. Starts from the fixture's raw
+    /// bytes with the two keys removed, so everything else is the real payload.
+    /// Mutation-proof: `decode` in place of `decodeIfPresent` for `levelName`
+    /// throws; swap the fallbacks and the display reads "shrieking" for a label.
+    func testAnEpisodeWithoutDisplayNamesFallsBackToTheWireKeys() throws {
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: WireFormatTests.fixture("alert-episode.json")) as? [String: Any])
+        XCTAssertNotNil(object.removeValue(forKey: "dimensionLabel"), "the fixture carries the label")
+        var peak = try XCTUnwrap(object["peak"] as? [String: Any])
+        XCTAssertNotNil(peak.removeValue(forKey: "levelName"), "the fixture carries the name")
+        object["peak"] = peak
+        let old = try JSONSerialization.data(withJSONObject: object)
+
+        let e = try Wire.decoder().decode(AlertEpisode.self, from: old)
+        XCTAssertNil(e.dimensionLabel)
+        XCTAssertNil(e.peak.levelName)
+        XCTAssertEqual(e.dimensionDisplay, "thrash")
+        XCTAssertEqual(e.peakLevelDisplay, "shrieking")
+
+        let encoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Wire.encoder().encode(e)) as? [String: Any])
+        XCTAssertTrue(encoded["dimensionLabel"] is NSNull, "present as null")
+        let encodedPeak = try XCTUnwrap(encoded["peak"] as? [String: Any])
+        XCTAssertTrue(encodedPeak["levelName"] is NSNull, "present as null")
     }
 
     /// An episode stored before deltas carries no `censusAtPeak`; it decodes as nil rather than
@@ -498,7 +530,7 @@ final class RecordWireFormatTests: XCTestCase {
         XCTAssertNil(peak.whoLine)
         let obj = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Wire.encoder().encode(peak)) as? [String: Any])
-        XCTAssertEqual(Set(obj.keys), ["band", "level", "severity", "at", "message", "whoLine"])
+        XCTAssertEqual(Set(obj.keys), ["band", "level", "levelName", "severity", "at", "message", "whoLine"])
         XCTAssertTrue(obj["whoLine"] is NSNull, "\(obj)")
     }
 
@@ -512,14 +544,14 @@ final class RecordWireFormatTests: XCTestCase {
         XCTAssertEqual(
             Set(obj.keys),
             [
-                "id", "dimension", "startedAt", "endedAt", "peak", "suppressed", "state",
-                "lastNotifiedAt", "recoveringSince", "censusAtPeak", "projectionBracketSecs",
+                "id", "dimension", "dimensionLabel", "startedAt", "endedAt", "peak", "suppressed",
+                "state", "lastNotifiedAt", "recoveringSince", "censusAtPeak", "projectionBracketSecs",
             ],
             "encode(to:) key set drifted — an AlertEpisode field was added without a matching encode line"
         )
         XCTAssertEqual(obj["id"] as? String, "3f9c1b2e-7a4d-4c8f-9e10-5b6a2d3c4e5f")
         let peak = try XCTUnwrap(obj["peak"] as? [String: Any])
-        XCTAssertEqual(Set(peak.keys), ["band", "level", "severity", "at", "message", "whoLine"])
+        XCTAssertEqual(Set(peak.keys), ["band", "level", "levelName", "severity", "at", "message", "whoLine"])
         let census = try XCTUnwrap(obj["censusAtPeak"] as? [String: Any])
         XCTAssertEqual(
             Set(census.keys),

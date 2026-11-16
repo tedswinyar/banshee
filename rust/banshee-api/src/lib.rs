@@ -104,7 +104,7 @@ pub struct OpsHealth {
     /// means the row count is no longer bounded — the DB is growing unswept.
     pub consecutive_sweep_failures: u64,
     /// The cheap tier's cadence RIGHT NOW (`banshee-y1k`): the configured interval
-    /// while disk is green, the faster low-disk cadence while it is yellow or red.
+    /// while disk is green, the faster low-disk cadence while it is amber or red.
     /// `None` until the loop has ticked once. Not on the wire (yet) — it exists so
     /// the sampler's cadence switch is observable from a test and from the log
     /// without inferring it from sample spacing under load.

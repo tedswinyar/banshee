@@ -279,6 +279,7 @@ extension DimensionReading {
     static func stub(
         key: String = "cpu",
         label: String = "CPU utilization",
+        alertTitle: String? = nil,
         band: Band = .green,
         value: Double = 0.53,
         unit: ReadingUnit = .ratio,
@@ -292,7 +293,7 @@ extension DimensionReading {
         recovering: Bool = false
     ) -> DimensionReading {
         DimensionReading(
-            dimension: key, key: key, label: label, band: band, value: value,
+            dimension: key, key: key, label: label, alertTitle: alertTitle, band: band, value: value,
             unit: unit, severity: severity, heldSecs: heldSecs,
             observationGapSecs: observationGapSecs, trendPerSec: trendPerSec,
             detail: detail, advisory: advisory, pending: pending, recovering: recovering

@@ -799,11 +799,13 @@ fn episode(dimension: Dimension, started: chrono::Duration, message: &str) -> Al
     AlertEpisode {
         id: uuid::Uuid::new_v4(),
         dimension,
+        dimension_label: dimension.label().to_string(),
         started_at,
         ended_at: Some(started_at + chrono::Duration::minutes(10)),
         peak: EpisodePeak {
             band: Band::Red,
             level: Level::Wailing,
+            level_name: Level::Wailing.name().to_string(),
             severity: 2.0,
             at: started_at,
             message: message.into(),

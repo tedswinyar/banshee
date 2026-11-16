@@ -128,7 +128,9 @@ struct AlertRow: View {
     /// Kept in the view (not the model) because it is presentation; the numbers
     /// and states came off the wire.
     static func detail(for e: AlertEpisode) -> String {
-        var parts = ["\(e.dimension) · peaked at \(e.peak.level.rawValue)"]
+        // Core's display names, with the wire keys as the fallback for a daemon
+        // older than the fields (`AlertEpisode.dimensionDisplay`).
+        var parts = ["\(e.dimensionDisplay) · peaked at \(e.peakLevelDisplay)"]
         switch (e.state, e.endedAt) {
         case (.closed, let end?):
             parts.append("ran \(DimensionRow.duration(UInt64(max(0, end.timeIntervalSince(e.startedAt)))))")

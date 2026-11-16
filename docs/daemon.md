@@ -141,11 +141,11 @@ re-fires swallowed inside that hour are counted on the episode and rendered as
 `./scripts/start.sh` too.
 
 While the disk is low the cheap tier samples faster (banshee-y1k): every 10 s at
-disk yellow, every 5 s at disk red, back to 15 s at green. The switch follows the
+disk amber, every 5 s at disk red, back to 15 s at green. The switch follows the
 hysteresis-replayed band of each verdict, so a single flapping reading cannot
 flap the cadence, and the low-disk cadences only ever speed the tier up — a
 `BANSHEE_SAMPLE_INTERVAL_MS` below them wins. Override them in milliseconds with
-`BANSHEE_DISK_YELLOW_INTERVAL_MS` and `BANSHEE_DISK_RED_INTERVAL_MS`; same
+`BANSHEE_DISK_AMBER_INTERVAL_MS` and `BANSHEE_DISK_RED_INTERVAL_MS`; same
 non-fatal rule as the other cadences. The daemon logs `sample cadence changed`
 with the old and new period at each switch.
 
@@ -156,11 +156,11 @@ below red before the episode closes; a red inside this window REOPENS the same
 episode) and `BANSHEE_EPISODE_REPEAT_SECS` (default 3600). Like the cadence
 overrides, a bad value is a warning and the default, never a crash.
 
-Disk is the one dimension whose YELLOW also opens an episode, behind its own much
-longer delay — `BANSHEE_DISK_YELLOW_EPISODE_UP_SECS` (default 1800: how long disk
-must hold yellow before the sustained drift is an episode). CPU and memory flap
-through yellow on every build; disk barely flaps and moves one way, so a sustained
-disk yellow is a standing debt, not noise. The episode then rides THROUGH yellow:
+Disk is the one dimension whose AMBER also opens an episode, behind its own much
+longer delay — `BANSHEE_DISK_AMBER_EPISODE_UP_SECS` (default 1800: how long disk
+must hold amber before the sustained drift is an episode). CPU and memory flap
+through amber on every build; disk barely flaps and moves one way, so a sustained
+disk amber is a standing debt, not noise. The episode then rides THROUGH amber:
 one excursion below the target range is one incident however many times it crosses
 the red line inside it, and it closes only once the volume is back in the green —
 which is also when the app's disk banner stops re-posting.

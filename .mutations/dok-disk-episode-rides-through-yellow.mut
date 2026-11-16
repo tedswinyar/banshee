@@ -1,11 +1,11 @@
-# A disk episode stays firing through yellow (banshee-dok): one excursion below
+# A disk episode stays firing through amber (banshee-dok): one excursion below
 # the target range is one incident, closed only on green — matching the app's
-# single-identifier disk banner, where red→yellow says nothing. Reverting the
+# single-identifier disk banner, where red→amber says nothing. Reverting the
 # firing condition to red-only starts recovery the moment red eases, and the
 # episode record and the banner tell two different stories again.
 file: rust/banshee-core/src/pressure/episode.rs
-test: a_disk_episode_rides_through_yellow_and_recovers_on_green
+test: a_disk_episode_rides_through_amber_and_recovers_on_green
 ---OLD---
-        r.band >= Band::Yellow
+        r.band >= Band::Amber
 ---NEW---
         r.band == Band::Red

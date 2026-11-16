@@ -291,8 +291,8 @@ impl Dimension {
     /// something, and at zero bytes builds, databases and agents fail at once,
     /// swap included (the swapfiles live on the same volume). So within a band,
     /// disk owns the glyph regardless of the other dimensions' severity: a red
-    /// disk beats any other red, a yellow disk beats any other yellow. It does
-    /// NOT beat a worse band — a yellow disk under a red thrash is still a memory
+    /// disk beats any other red, an amber disk beats any other amber. It does
+    /// NOT beat a worse band — an amber disk under a red thrash is still a memory
     /// story — and the rule touches only the source, never the level or the
     /// severity, which still drive `decide`'s ceiling and headroom.
     ///
@@ -335,14 +335,14 @@ pub struct PressureConfig {
     pub red_grace_secs: u64,
     /// How far past its red line one SUSTAINED dimension must be to ring the top
     /// bell (Shrieking) on its own, in severity units — red-band-widths past the
-    /// yellow threshold, so it is comparable across dimensions (`banshee-m5y`).
+    /// amber threshold, so it is comparable across dimensions (`banshee-m5y`).
     ///
     /// Before this, magnitude stopped mattering the instant a dimension went red:
     /// a swap reading tens of GB into the red escalated no further than one a hair
     /// past the line — both Wailing. The top level was reachable only by TWO
     /// sustained reds, so a single dimension in genuine runaway (swap 28 GB+,
     /// thrash orders of magnitude over) read the same as a marginal one. 3.0 is two
-    /// band-widths past red: swap ~28 GB, well above the yellow/red 4/12 GB line
+    /// band-widths past red: swap ~28 GB, well above the amber/red 4/12 GB line
     /// and below the 2026-08-04 incident's 35.6 GB.
     ///
     /// The SUSTAINED requirement is load-bearing: severity tracks the current
@@ -375,16 +375,16 @@ pub struct PressureConfig {
     /// per-dimension cooldown, kept at the same value so notification volume is
     /// unchanged; re-fires swallowed inside it are COUNTED (`suppressed`).
     pub episode_repeat_secs: u64,
-    /// How long DISK must have held yellow — continuously observed — before that
+    /// How long DISK must have held amber — continuously observed — before that
     /// alone opens an episode (`banshee-dok`). Disk is the one dimension whose
-    /// yellow opens anything: CPU and memory flap through yellow on every build,
-    /// but disk barely flaps and moves one way, so a SUSTAINED disk yellow is a
+    /// amber opens anything: CPU and memory flap through amber on every build,
+    /// but disk barely flaps and moves one way, so a SUSTAINED disk amber is a
     /// standing debt, not noise. Much longer than `episode_up_secs` on purpose —
     /// the fast delay answers "is this red real", this one answers "has the slow
     /// drift stopped being ignorable". Ted's ruling: held 30–60 minutes; the
-    /// default is the early edge, because the 30–60 GB yellow band is precisely
+    /// default is the early edge, because the 30–60 GB amber band is precisely
     /// "leaving the target floor while action is still cheap".
-    pub disk_yellow_episode_up_secs: u64,
+    pub disk_amber_episode_up_secs: u64,
     /// A `ManagedAgents` reading derived from a process younger than this is not
     /// banded. Measured: a log shipper restarted 109s earlier reported 14.6% off
     /// 16s of CPU, because the ratio's denominator was tiny.
@@ -402,10 +402,10 @@ pub struct PressureConfig {
     /// value on purpose, so the forced red and severity 1.0 cannot disagree
     /// about where "red by time" begins.
     pub disk_projection_red_secs: f64,
-    /// The disk projection at which time-to-full forces at least YELLOW. The
-    /// 2026-09-15 descent spent 40 minutes at "full in ~1 h" inside the yellow
+    /// The disk projection at which time-to-full forces at least AMBER. The
+    /// 2026-09-15 descent spent 40 minutes at "full in ~1 h" inside the amber
     /// byte band — this is the line that would have coloured it.
-    pub disk_projection_yellow_secs: f64,
+    pub disk_projection_amber_secs: f64,
     /// Projection thresholds that RE-NOTIFY an open disk episode when crossed,
     /// bypassing `episode_repeat_secs` (largest first). A projection collapsing
     /// from 5.8 hours to 22 minutes inside one episode is new news, the same way
@@ -419,14 +419,14 @@ pub struct PressureConfig {
     /// with per-bucket volume aggregates, so the week tier already exists;
     /// this is how far back the second projection looks.
     pub disk_trend_window_secs: u64,
-    /// The week-trend forecast at which disk is forced at least YELLOW: full
+    /// The week-trend forecast at which disk is forced at least AMBER: full
     /// within this long, at the fitted week rate. Never red and never severity —
     /// a two-week horizon is a standing debt to schedule, not an emergency, and
     /// red stays owned by bytes and the ten-minute projection.
     pub disk_trend_alert_secs: f64,
     /// The rolling window of the disk burst-drop rule (`banshee-636`): free
     /// space falling by `disk_drop_bytes` — or `disk_drop_fraction` of the
-    /// volume TOTAL — within this window forces at least yellow, whatever the
+    /// volume TOTAL — within this window forces at least amber, whatever the
     /// absolute level below `disk_time_axis_floor_bytes` (`banshee-f77`).
     /// Measured 2026-09-22: the data volume lost 79% of its
     /// remaining headroom in five hours and produced only short projection
@@ -452,13 +452,13 @@ pub struct PressureConfig {
     ///
     /// Measured 2026-10-13 ~11:40 PT: free fell 91.0 → 78.8 GB in an hour (two
     /// agents' worktrees and venvs plus 3 GB of swapfile growth), the drop rule
-    /// forced Yellow, `Dimension::takes_precedence` handed disk the menu-bar
+    /// forced Amber, `Dimension::takes_precedence` handed disk the menu-bar
     /// glyph at Restless, and the detail read "full in 1.6 days" — while the
     /// real story was memory (compressor red, swap and kernel pressure). Ted's
     /// ruling: 78 GB free is plenty and must not surface as the disk being the
     /// issue.
     ///
-    /// Default: the disk byte YELLOW line, read from the `disk` spec so the two
+    /// Default: the disk byte AMBER line, read from the `disk` spec so the two
     /// cannot drift apart. Both floors exist for the 2026-09-15 "full in 22
     /// min" shape, which cannot occur above that line at any burst measured so
     /// far — 37 GB in 50 minutes starting from 60 GB would still leave hours
@@ -482,7 +482,7 @@ pub struct PressureConfig {
     /// confident guess.
     pub disk_trend_min_span_secs: u64,
     /// Load-per-core above which the CPU detail names SCHEDULING CONTENTION when
-    /// measured utilization is still below its yellow line (`banshee-87l.19`). A
+    /// measured utilization is still below its amber line (`banshee-87l.19`). A
     /// run queue this deep over cores that are not busy is threads queueing for a
     /// lock or a churning background/security agent, not compute the user asked
     /// for — so the detail says so, in different words and with no fire glyph,
@@ -574,14 +574,14 @@ pub struct PressureConfig {
 
 impl Default for PressureConfig {
     fn default() -> Self {
-        // Bound once so `disk_time_axis_floor_bytes` can read the yellow line
+        // Bound once so `disk_time_axis_floor_bytes` can read the amber line
         // instead of carrying a second copy of the number (`banshee-f77`).
         let disk = BandSpec::falling(60e9, 30e9, 5e9, 2);
         Self {
             // MEASURED utilization, a fraction 0.0..=1.0 (`banshee-87l.19`). 85%
-            // busy sustained is yellow — the machine is working hard but keeping
+            // busy sustained is amber — the machine is working hard but keeping
             // up; 95% is red, genuine saturation where cores are pegged. The 0.05
-            // margin means utilization must fall back below 80% to leave yellow.
+            // margin means utilization must fall back below 80% to leave amber.
             // This is what makes the false red impossible: idle cores read idle no
             // matter how long the run queue is. Load-per-core, which used to band
             // here at rising(1.0, 3.0, …), is now the labeled secondary in the
@@ -590,11 +590,11 @@ impl Default for PressureConfig {
             cpu: BandSpec::rising(0.85, 0.95, 0.05, 2),
 
             // The kernel's thermal enum on its own scale: MODERATE (1, Apple's
-            // "fair": fans audible, corrective action begun) is yellow; HEAVY (2,
+            // "fair": fans audible, corrective action begun) is amber; HEAVY (2,
             // Apple's "serious": fans at maximum, performance impacted) and above
             // is red. Hot turns its menu bar orange the moment the level leaves
             // nominal; MacThrottle notifies at heavy. The 0.5 margin means the
-            // level must actually drop back to nominal to leave yellow.
+            // level must actually drop back to nominal to leave amber.
             thermal: BandSpec::rising(1.0, 2.0, 0.5, 2),
 
             // AVAILABLE RAM: free + speculative + purgeable + file cache
@@ -609,7 +609,7 @@ impl Default for PressureConfig {
             memory: BandSpec::falling(2e9, 512e6, 256e6, 2),
 
             // The kernel's own verdict, on the kernel's own scale: WARN (2) is
-            // yellow, CRITICAL (4) is red. NOT tuning knobs in the usual sense —
+            // amber, CRITICAL (4) is red. NOT tuning knobs in the usual sense —
             // the values are the sysctl's contract — but config like everything
             // else, so what the daemon is using is visible. The 0.5 margin
             // means a level must actually LEAVE 2 (i.e. read 1) to de-escalate,
@@ -636,7 +636,7 @@ impl Default for PressureConfig {
 
             // Runaways are a count where ONE is already a problem: a single
             // orphaned build-tool burned a core for 33 hours (2026-10-11). One
-            // is yellow, two is red; no margin, since the count is integral and
+            // is amber, two is red; no margin, since the count is integral and
             // the process is either there or gone. One census confirms it
             // because the rule itself already demands a 30-minute life and a
             // sustained rate.
@@ -663,7 +663,7 @@ impl Default for PressureConfig {
             // The kernel's reclaimability percentage, falling-is-worse. Advisory:
             // banded only to COLOUR the informational reading, never to drive the
             // level. Measured 39% while the pressure level read WARN (2026-09-09),
-            // so ≤30% is yellow and ≤15% is red — below the observed under-pressure
+            // so ≤30% is amber and ≤15% is red — below the observed under-pressure
             // reading, so the colour tracks genuine scarcity, not the target macOS
             // holds it near.
             kernel_free: BandSpec::falling(30.0, 15.0, 5.0, 2),
@@ -671,14 +671,14 @@ impl Default for PressureConfig {
             // Compressed-pool occupancy in bytes, rising-is-worse. Advisory: it
             // backs the reboot finding (`banshee-xlw`) and colours its own reading,
             // it does not escalate the level. On a 24 GB machine several GB held
-            // compressed is the "saturated pool" the finding describes; yellow at
+            // compressed is the "saturated pool" the finding describes; amber at
             // 4 GB, red at 8 GB.
             compressor: BandSpec::rising(4e9, 8e9, 512e6, 2),
 
             // Jetsam kills in the window. ANY kill is red, confirmed in a single
             // sample (confirm 1): a kill is a logged fact, not a flapping threshold,
             // so it needs no smoothing and — via the `decide` branch — no sustain
-            // grace. The 0.5 yellow line is unreachable in practice (kills are
+            // grace. The 0.5 amber line is unreachable in practice (kills are
             // integers); the red line at 1.0 is the one that matters.
             jetsam: BandSpec::rising(0.5, 1.0, 0.5, 1),
 
@@ -694,11 +694,11 @@ impl Default for PressureConfig {
             episode_up_secs: 120,
             episode_down_secs: 600,
             episode_repeat_secs: 3600,
-            disk_yellow_episode_up_secs: 1800,
+            disk_amber_episode_up_secs: 1800,
             managed_agents_min_life_secs: 600,
             who_limit: 3,
             disk_projection_red_secs: 3600.0,
-            disk_projection_yellow_secs: 7200.0,
+            disk_projection_amber_secs: 7200.0,
             disk_projection_notify_secs: vec![3600, 1800, 600],
             // The week tier (banshee-nio), per Ted's ruling: a projection over
             // 7 days of rollups, alerting when it forecasts full within ~14
@@ -714,9 +714,9 @@ impl Default for PressureConfig {
             disk_drop_bytes: 10e9,
             disk_drop_fraction: 0.02,
             // The headroom gate on both short horizons (banshee-f77): the byte
-            // yellow line itself. 2026-10-13, 78.8 GB free after a 12.2 GB hour,
+            // amber line itself. 2026-10-13, 78.8 GB free after a 12.2 GB hour,
             // must stay green and off the glyph.
-            disk_time_axis_floor_bytes: disk.yellow,
+            disk_time_axis_floor_bytes: disk.amber,
             // banshee-wql's research cap on how far ahead a ten-minute slope may
             // be put into words.
             disk_projection_horizon_secs: 48.0 * 3600.0,
@@ -775,17 +775,17 @@ impl PressureConfig {
     ///
     /// The model WINDOW stays `window_samples` — bands, slopes and the level all
     /// read the last ten minutes exactly as before. The extra history exists for
-    /// the disk dimension only (`banshee-dok`): its yellow up-delay is minutes
+    /// the disk dimension only (`banshee-dok`): its amber up-delay is minutes
     /// long, and `held_secs` can only count what the series covers, so a window
     /// that spans ten minutes caps every observable hold at ten minutes and the
     /// delay would never be met. Twice the delay, so a hold well past the line is
     /// still measured rather than saturated.
     pub fn history_samples(&self) -> usize {
-        // Enough to measure the yellow up-delay with room to spare, PLUS the
-        // burst-drop window: judging whether a drop-forced yellow has held for
+        // Enough to measure the amber up-delay with room to spare, PLUS the
+        // burst-drop window: judging whether a drop-forced amber has held for
         // the delay means every recent sample must still see a full drop
         // window behind it (`banshee-636`).
-        let span = self.disk_drop_window_secs + self.disk_yellow_episode_up_secs * 2;
+        let span = self.disk_drop_window_secs + self.disk_amber_episode_up_secs * 2;
         let interval = self.sample_interval_secs.max(1);
         self.window_samples.max(span.div_ceil(interval) as usize)
     }
@@ -935,7 +935,7 @@ mod tests {
         // KernelFree (falling): 39% while WARN was the observed under-pressure
         // reading, so it must be green — the alarm is genuine scarcity below it.
         assert_eq!(c.kernel_free.raw_band(39.0), Band::Green);
-        assert_eq!(c.kernel_free.raw_band(25.0), Band::Yellow);
+        assert_eq!(c.kernel_free.raw_band(25.0), Band::Amber);
         assert_eq!(c.kernel_free.raw_band(10.0), Band::Red);
         // Compressor (rising, bytes): a few hundred MB is green, several GB red.
         assert_eq!(c.compressor.raw_band(300e6), Band::Green);
@@ -981,8 +981,8 @@ mod tests {
         // utilization now (`banshee-87l.19`), so red means the cores really are
         // pegged — not that the run queue is long. 95%+ sustained is red.
         assert_eq!(c.cpu.raw_band(0.98), Band::Red);
-        // …and 88% busy is yellow: working hard, keeping up, nothing pegged.
-        assert_eq!(c.cpu.raw_band(0.88), Band::Yellow);
+        // …and 88% busy is amber: working hard, keeping up, nothing pegged.
+        assert_eq!(c.cpu.raw_band(0.88), Band::Amber);
         // 2026-08-04: swap 35.6 GB used.
         assert_eq!(c.swap.raw_band(35.6e9), Band::Red);
         // 2026-08-31: availability collapsed during the swap crisis (the free
@@ -999,24 +999,24 @@ mod tests {
         assert_eq!(c.thrash.raw_band(9300.0), Band::Red);
         // The kernel's scale IS the spec: CRITICAL (4) is red, WARN (2) —
         // the level measured during the banshee-10w parity run while
-        // availability read green — is yellow, not a shrug.
+        // availability read green — is amber, not a shrug.
         assert_eq!(c.kernel_pressure.raw_band(4.0), Band::Red);
-        assert_eq!(c.kernel_pressure.raw_band(2.0), Band::Yellow);
+        assert_eq!(c.kernel_pressure.raw_band(2.0), Band::Amber);
         // 2026-08-04: ~45 orphaned helper processes.
         assert_eq!(c.orphans.raw_band(45.0), Band::Red);
         // 2026-07-16: 1.1 GB free on the data volume.
         assert_eq!(c.disk.raw_band(1.1e9), Band::Red);
     }
 
-    /// `banshee-f77`: the time-axis floor IS the disk byte yellow line, so the
+    /// `banshee-f77`: the time-axis floor IS the disk byte amber line, so the
     /// two cannot drift apart silently — retuning either is a decision that
     /// should break this and be argued for. Today's reading (78.4 GB free,
     /// 2026-10-13) sits above it; the 2026-09-15 descent (≤ 45 GB) sat below.
     /// The horizon cap is `banshee-wql`'s 48 h.
     #[test]
-    fn the_disk_time_axis_floor_is_the_disk_yellow_line() {
+    fn the_disk_time_axis_floor_is_the_disk_amber_line() {
         let c = PressureConfig::default();
-        assert_eq!(c.disk_time_axis_floor_bytes, c.disk.yellow);
+        assert_eq!(c.disk_time_axis_floor_bytes, c.disk.amber);
         assert_eq!(
             c.disk_time_axis_floor_bytes, 60e9,
             "Ted's line, from the bead"
@@ -1033,7 +1033,7 @@ mod tests {
     }
 
     /// …and would NOT be firing on a currently-healthy machine. A monitor that is
-    /// permanently yellow is a monitor nobody reads.
+    /// permanently amber is a monitor nobody reads.
     #[test]
     fn the_defaults_are_quiet_on_a_healthy_machine() {
         let c = PressureConfig::default();
@@ -1056,7 +1056,7 @@ mod tests {
         );
         assert_eq!(
             c.managed_agents.raw_band(65.0),
-            Band::Yellow,
+            Band::Amber,
             "but growth trips"
         );
     }
@@ -1094,28 +1094,27 @@ mod tests {
         assert_eq!(c.disk_trend_window_secs, 7 * 86_400);
         assert_eq!(c.disk_trend_alert_secs, 14.0 * 86_400.0);
         assert!(c.disk_trend_min_span_secs * 2 == c.disk_trend_window_secs);
-        // The slow delay must be much longer than the fast one — a disk yellow
+        // The slow delay must be much longer than the fast one — a disk amber
         // that opened as fast as a red would re-import the muting problem the
         // red-only policy existed to avoid — and inside Ted's 30–60 min ruling.
-        assert!(c.disk_yellow_episode_up_secs >= c.episode_up_secs * 10);
-        assert!((1800..=3600).contains(&c.disk_yellow_episode_up_secs));
-        // The yellow up-delay must be OBSERVABLE: `held_secs` can only count what
+        assert!(c.disk_amber_episode_up_secs >= c.episode_up_secs * 10);
+        assert!((1800..=3600).contains(&c.disk_amber_episode_up_secs));
+        // The amber up-delay must be OBSERVABLE: `held_secs` can only count what
         // the evaluation window covers, so the history the sampler feeds the
         // model has to span the delay with room to spare.
         assert!(
-            c.history_samples() as u64 * c.sample_interval_secs
-                >= c.disk_yellow_episode_up_secs * 2
+            c.history_samples() as u64 * c.sample_interval_secs >= c.disk_amber_episode_up_secs * 2
         );
         // The burst rule, at Ted's calibration (banshee-636): >= 10 GB or
         // >= 2% of the VOLUME TOTAL within a rolling hour — and the history
-        // must let a drop-forced yellow both see its window and meet the
+        // must let a drop-forced amber both see its window and meet the
         // episode delay.
         assert_eq!(c.disk_drop_window_secs, 3600);
         assert_eq!(c.disk_drop_bytes, 10e9);
         assert_eq!(c.disk_drop_fraction, 0.02);
         assert!(
             c.history_samples() as u64 * c.sample_interval_secs
-                >= c.disk_drop_window_secs + c.disk_yellow_episode_up_secs
+                >= c.disk_drop_window_secs + c.disk_amber_episode_up_secs
         );
     }
 

@@ -99,13 +99,13 @@ public final class NotificationCoordinator {
     /// rather than stack.
     public static let diskRedRepeat: TimeInterval = 15 * 60
 
-    /// A yellow disk speaks on ENTRY, then at most this often while it holds.
+    /// An amber disk speaks on ENTRY, then at most this often while it holds.
     ///
-    /// Six hours. Yellow (30–60 GB) is "drifting down, still cheap to fix", and the
+    /// Six hours. Amber (30–60 GB) is "drifting down, still cheap to fix", and the
     /// maintainer may sit in it for a whole day once build targets regrow; a
     /// monitor that nags hourly about that is a monitor that gets its notifications
     /// turned off. Twice a working day is a reminder, not a nag. Ruled 2026-09-22.
-    public static let diskYellowRepeat: TimeInterval = 6 * 3600
+    public static let diskAmberRepeat: TimeInterval = 6 * 3600
 
     /// The one dimension that gets a banner on its own account, whatever the
     /// overall verdict says. Matched against `DimensionReading.key`, which is
@@ -184,12 +184,12 @@ public final class NotificationCoordinator {
     /// The disk channel: a banner for the disk band alone.
     ///
     /// - Red: on entry, then every `diskRedRepeat` while it holds. Time-sensitive.
-    /// - Yellow: on entry, then every `diskYellowRepeat` while it holds.
-    /// - Falling from red to yellow says nothing — getting better is not an
-    ///   interruption — but restarts the yellow clock, or the next evaluation would
-    ///   re-post a stale yellow fifteen seconds into a recovery.
+    /// - Amber: on entry, then every `diskAmberRepeat` while it holds.
+    /// - Falling from red to amber says nothing — getting better is not an
+    ///   interruption — but restarts the amber clock, or the next evaluation would
+    ///   re-post a stale amber fifteen seconds into a recovery.
     /// - The first verdict this coordinator sees counts as entry. The app has just
-    ///   started; if the disk is already yellow, that is exactly the thing the user
+    ///   started; if the disk is already amber, that is exactly the thing the user
     ///   has not been told.
     private func considerDisk(_ pressure: Pressure, now: Date) -> PendingNotification? {
         let reading = Self.diskReading(in: pressure)
@@ -204,7 +204,7 @@ public final class NotificationCoordinator {
             return nil
         }
         let entered = previous.map { $0 < band } ?? true
-        let repeatAfter = band == .red ? Self.diskRedRepeat : Self.diskYellowRepeat
+        let repeatAfter = band == .red ? Self.diskRedRepeat : Self.diskAmberRepeat
         if !entered, let last = lastDiskPosted[band], now.timeIntervalSince(last) < repeatAfter {
             return nil
         }
@@ -269,9 +269,9 @@ public final class NotificationCoordinator {
     /// and the band core decided; the body is the disk finding when there is one
     /// (message, who-line, action — the same shape as every other banner) and the
     /// reading's core-composed detail line ("41.6 GB free; full in 2.6 hours") when
-    /// there is not, so a yellow with no finding still says what is true.
+    /// there is not, so an amber with no finding still says what is true.
     ///
-    /// ONE identifier for both bands, so the red banner REPLACES the yellow one in
+    /// ONE identifier for both bands, so the red banner REPLACES the amber one in
     /// Notification Center rather than sitting under it — the newest word on the
     /// disk is the only one worth keeping.
     static func composeDisk(_ reading: DimensionReading, in pressure: Pressure) -> PendingNotification {
@@ -285,7 +285,9 @@ public final class NotificationCoordinator {
             body = reading.detail
         }
         return PendingNotification(
-            title: "Banshee: \(reading.label) is \(reading.band.rawValue)",
+            // Core's sentence. A daemon older than the field sends none, and the
+            // overall label (also core's) stands in rather than a title composed here.
+            title: reading.alertTitle ?? pressure.accessibilityLabel,
             body: body,
             identifier: "banshee.\(reading.key)",
             interruption: reading.band == .red ? .timeSensitive : .active

@@ -1,0 +1,8 @@
+# Episode display names (banshee-v54.1) are derived on read, not trusted from the
+# stored row: an old row has none and a reworded label must not leave stale words.
+file: rust/banshee-core/src/sample_store.rs
+test: display_names_are_refreshed_on_read_for_old_and_stale_rows
+---OLD---
+            .map(AlertEpisode::with_display_names)
+---NEW---
+            .map(std::convert::identity)

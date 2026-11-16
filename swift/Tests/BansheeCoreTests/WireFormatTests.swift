@@ -104,7 +104,7 @@ final class WireFormatTests: XCTestCase {
 
         let cpu = try XCTUnwrap(p.dimensions.first { $0.key == "cpu" })
         XCTAssertEqual(cpu.band, .red)
-        XCTAssertEqual(cpu.pending, .yellow, "a pending de-escalation")
+        XCTAssertEqual(cpu.pending, .amber, "a pending de-escalation")
         XCTAssertEqual(cpu.heldSecs, 3600)
         // A hole in the observations before the run. The client must be able to say
         // so rather than presenting held time as unbroken watching.
@@ -326,7 +326,7 @@ final class WireFormatTests: XCTestCase {
         XCTAssertEqual(
             Set(obj.keys),
             [
-                "dimension", "key", "label", "band", "value", "unit", "severity",
+                "dimension", "key", "label", "alertTitle", "band", "value", "unit", "severity",
                 "heldSecs", "observationGapSecs", "trendPerSec", "detail",
                 "advisory", "pending", "recovering",
             ],
@@ -577,6 +577,17 @@ final class WireFormatTests: XCTestCase {
     func testUnknownLevelAndBandStillThrow() {
         XCTAssertThrowsError(try Wire.decoder().decode(Level.self, from: Data(#""screaming""#.utf8)))
         XCTAssertThrowsError(try Wire.decoder().decode(Band.self, from: Data(#""purple""#.utf8)))
+    }
+
+    /// A new app reading an OLD daemon sees the middle band under its former name
+    /// (`banshee-v54.1`); it is the same band, so it must decode rather than blank
+    /// the menu bar. And the app never says the old word back: it encodes `amber`.
+    /// Mutation-proof: drop the `yellow` branch in `Band.init(from:)` and the first
+    /// assertion throws.
+    func testTheOldBandWordDecodesAsAmberAndIsNeverWritten() throws {
+        XCTAssertEqual(try Wire.decoder().decode(Band.self, from: Data(#""yellow""#.utf8)), .amber)
+        let written = try XCTUnwrap(String(data: Wire.encoder().encode(Band.amber), encoding: .utf8))
+        XCTAssertEqual(written, #""amber""#)
     }
 
     func testAnnouncementLineParses() {

@@ -19,7 +19,7 @@ Banshee's role: the thing that watches continuously and says *before* the machin
 The verdict's severity, one of six: Checking, Quiet, Stirring, Restless, Wailing, Shrieking. `Checking` means "not enough data yet" and is deliberately not `Quiet`. At Restless and above the glyph gains the dominant source: worst band first, then disk over everything else in that band (the one dimension that cannot recover on its own), then severity, then declaration order. Decided once, in core, and served whole. See: [adr/0005-pressure-model-in-core.md](adr/0005-pressure-model-in-core.md)
 
 ### Band
-A dimension's colour after hysteresis: green, yellow or red. `band` is not a function of `severity` — a dimension recovering from red keeps its red band until it clears the hysteresis margin. Clients branch on `band`.
+A dimension's colour after hysteresis: green, amber or red. `band` is not a function of `severity` — a dimension recovering from red keeps its red band until it clears the hysteresis margin. Clients branch on `band`.
 
 ### Hysteresis
 A band changes only when the value crosses the threshold by a margin, and a red band is held until the value has cleared it. Without it a value oscillating around a threshold flaps the glyph; with it a raw value can already have recovered while the band is still red, which is the case several tests exist to distinguish.

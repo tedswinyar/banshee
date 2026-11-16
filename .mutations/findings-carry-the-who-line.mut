@@ -2,7 +2,7 @@
 # finding with consumers and no line would leave every surface to word it
 # itself. WS2a.
 file: rust/banshee-core/src/pressure/mod.rs
-test: a_yellow_finding_names_who_too
+test: an_amber_finding_names_who_too
 ---OLD---
                 who_line: who::who_line(&who),
 ---NEW---

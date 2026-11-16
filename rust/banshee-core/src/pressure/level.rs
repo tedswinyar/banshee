@@ -84,7 +84,7 @@ pub struct Contribution {
     pub band: Band,
     /// Seconds this dimension has continuously held its band.
     pub held_secs: u64,
-    /// How far past the line it is: 0.0 at the yellow threshold, 1.0 at red,
+    /// How far past the line it is: 0.0 at the amber threshold, 1.0 at red,
     /// above 1.0 beyond red. Comparable ACROSS dimensions, which is what makes
     /// "which source is winning" answerable at all.
     pub severity: f64,
@@ -159,7 +159,7 @@ pub fn decide(
         };
     }
 
-    let yellows = scoring.iter().filter(|c| c.band == Band::Yellow).count();
+    let ambers = scoring.iter().filter(|c| c.band == Band::Amber).count();
     let reds: Vec<&&Contribution> = scoring.iter().filter(|c| c.band == Band::Red).collect();
     let sustained_reds = reds.iter().filter(|c| c.is_sustained_red(grace_secs));
     let sustained = sustained_reds.clone().count();
@@ -202,10 +202,10 @@ pub fn decide(
         } else {
             Level::Wailing
         }
-    } else if !reds.is_empty() || yellows >= 2 {
+    } else if !reds.is_empty() || ambers >= 2 {
         // A red inside its grace period, or several dimensions merely uneasy.
         Level::Restless
-    } else if yellows == 1 {
+    } else if ambers == 1 {
         Level::Stirring
     } else {
         Level::Quiet
@@ -226,7 +226,7 @@ pub fn decide(
 /// identical data must name the same source, or the menu bar suffix flickers
 /// between equals.
 ///
-/// Precedence sits BETWEEN band and severity on purpose. Below band, so a yellow
+/// Precedence sits BETWEEN band and severity on purpose. Below band, so an amber
 /// disk never displaces a red thrash — the band is the judgement about how bad,
 /// and a worse band is a worse problem. Above severity, because severities are
 /// not comparable across dimensions in consequence: a thrash storm at 6.77 is
@@ -350,13 +350,13 @@ mod tests {
 
     /// A jetsam reading that is NOT red must not escalate — the branch keys on the
     /// red band, not merely on the dimension being present. A green jetsam (no
-    /// kills this window) beside one yellow is Stirring, exactly as without it.
+    /// kills this window) beside one amber is Stirring, exactly as without it.
     #[test]
     fn a_green_jetsam_does_not_ring_the_bell() {
         let v = decide(
             &[
                 c(Dimension::Jetsam, Band::Green, 600, -1.0),
-                c(Dimension::Swap, Band::Yellow, 600, 0.5),
+                c(Dimension::Swap, Band::Amber, 600, 0.5),
             ],
             GRACE,
             CATASTROPHIC,
@@ -378,10 +378,10 @@ mod tests {
     }
 
     #[test]
-    fn one_yellow_is_stirring() {
+    fn one_amber_is_stirring() {
         let v = decide(
             &[
-                c(Dimension::Cpu, Band::Yellow, 60, 0.3),
+                c(Dimension::Cpu, Band::Amber, 60, 0.3),
                 green(Dimension::Disk),
             ],
             GRACE,
@@ -393,13 +393,13 @@ mod tests {
     }
 
     /// Two uneasy dimensions is worse than one, even with no red anywhere.
-    /// Mutation-proof: require `yellows >= 3` and this reports Stirring.
+    /// Mutation-proof: require `ambers >= 3` and this reports Stirring.
     #[test]
-    fn two_yellows_is_restless() {
+    fn two_ambers_is_restless() {
         let v = decide(
             &[
-                c(Dimension::Cpu, Band::Yellow, 60, 0.3),
-                c(Dimension::Swap, Band::Yellow, 60, 0.2),
+                c(Dimension::Cpu, Band::Amber, 60, 0.3),
+                c(Dimension::Swap, Band::Amber, 60, 0.2),
             ],
             GRACE,
             CATASTROPHIC,
@@ -589,7 +589,7 @@ mod tests {
     /// They come apart exactly when hysteresis holds a band the raw value has
     /// already left: a dimension recovering from Red (severity 0.80, still banded
     /// Red because it has not cleared the margin) must still outrank one climbing
-    /// through Yellow (severity 0.90). The band encodes a judgement about
+    /// through Amber (severity 0.90). The band encodes a judgement about
     /// PERSISTENCE that the instantaneous number does not.
     ///
     /// Mutation-proof, verified: compare severity before band and this names Cpu.
@@ -597,8 +597,8 @@ mod tests {
     fn a_worse_band_wins_over_a_higher_severity() {
         let v = decide(
             &[
-                // Climbing, but only Yellow — and the higher raw severity.
-                c(Dimension::Cpu, Band::Yellow, 600, 0.90),
+                // Climbing, but only Amber — and the higher raw severity.
+                c(Dimension::Cpu, Band::Amber, 600, 0.90),
                 // Recovering, still held Red by the margin — lower raw severity.
                 c(Dimension::Disk, Band::Red, 600, 0.80),
             ],
@@ -609,7 +609,7 @@ mod tests {
         assert_eq!(
             v.source,
             Some(Source::Disk),
-            "the held Red must outrank the higher-severity Yellow"
+            "the held Red must outrank the higher-severity Amber"
         );
     }
 
@@ -695,34 +695,34 @@ mod tests {
         assert_eq!(v.level, Level::Shrieking);
     }
 
-    /// At yellow, disk wins against other yellows whatever their severity —
-    /// swap at 0.90 (nearly red) still yields to disk at 0.10 (barely yellow).
+    /// At amber, disk wins against other ambers whatever their severity —
+    /// swap at 0.90 (nearly red) still yields to disk at 0.10 (barely amber).
     /// Mutation-proof: compare severity before precedence and this names Memory.
     #[test]
-    fn a_yellow_disk_wins_ties_against_a_more_severe_yellow() {
+    fn an_amber_disk_wins_ties_against_a_more_severe_amber() {
         let v = decide(
             &[
-                c(Dimension::Swap, Band::Yellow, 600, 0.90),
-                c(Dimension::Disk, Band::Yellow, 600, 0.10),
+                c(Dimension::Swap, Band::Amber, 600, 0.90),
+                c(Dimension::Disk, Band::Amber, 600, 0.10),
             ],
             GRACE,
             CATASTROPHIC,
             true,
         );
-        assert_eq!(v.level, Level::Restless, "two yellows");
+        assert_eq!(v.level, Level::Restless, "two ambers");
         assert_eq!(v.source, Some(Source::Disk));
     }
 
-    /// Precedence does NOT beat a worse band: a yellow disk under a red thrash is
+    /// Precedence does NOT beat a worse band: an amber disk under a red thrash is
     /// still a memory story. This is the fixture that separates "disk ranks above
     /// the others within a band" from "disk always wins" — with it, moving the
     /// precedence term ahead of the band comparison fails here.
     #[test]
-    fn a_yellow_disk_does_not_displace_a_red_elsewhere() {
+    fn an_amber_disk_does_not_displace_a_red_elsewhere() {
         let v = decide(
             &[
                 c(Dimension::Thrash, Band::Red, 600, 1.20),
-                c(Dimension::Disk, Band::Yellow, 600, 0.95),
+                c(Dimension::Disk, Band::Amber, 600, 0.95),
             ],
             GRACE,
             CATASTROPHIC,
@@ -770,7 +770,7 @@ mod tests {
         let v = decide(
             &[
                 c(Dimension::Uptime, Band::Red, 99999, 9.0),
-                c(Dimension::Cpu, Band::Yellow, 600, 0.2),
+                c(Dimension::Cpu, Band::Amber, 600, 0.2),
             ],
             GRACE,
             CATASTROPHIC,
@@ -882,12 +882,12 @@ mod tests {
     fn sustained_red_requires_both_the_band_and_the_duration() {
         let fresh = c(Dimension::Cpu, Band::Red, 10, 1.0);
         let old = c(Dimension::Cpu, Band::Red, 500, 1.0);
-        let yellow_old = c(Dimension::Cpu, Band::Yellow, 500, 0.5);
+        let amber_old = c(Dimension::Cpu, Band::Amber, 500, 0.5);
         assert!(!fresh.is_sustained_red(GRACE));
         assert!(old.is_sustained_red(GRACE));
         assert!(
-            !yellow_old.is_sustained_red(GRACE),
-            "yellow is never sustained red"
+            !amber_old.is_sustained_red(GRACE),
+            "amber is never sustained red"
         );
     }
 }

@@ -303,12 +303,71 @@ final class NotificationTests: XCTestCase {
     // while all three still drop it, so these assert on delivery to the sink AND on
     // the content naming disk AND on the interruption level.
 
-    private func disk(_ band: Band, free: String = "27.4 GB") -> DimensionReading {
-        .stub(
-            key: "disk", label: "Disk headroom", band: band, value: 27.4e9, unit: .bytes,
+    /// What core sends as the disk reading's notification title.
+    private enum CoreTitle {
+        /// The sentence core composes for that band, so the lifecycle tests below
+        /// read like the real thing.
+        case usual
+        /// Words no client could have composed — proves the app shows what it was sent.
+        case exactly(String)
+        /// A daemon older than the field sends none.
+        case absent
+    }
+
+    private func disk(_ band: Band, free: String = "27.4 GB", title: CoreTitle = .usual) -> DimensionReading {
+        let alertTitle: String?
+        switch title {
+        case .usual: alertTitle = "Banshee: Disk headroom is \(band.rawValue)"
+        case .exactly(let words): alertTitle = words
+        case .absent: alertTitle = nil
+        }
+        return .stub(
+            key: "disk", label: "Disk headroom", alertTitle: alertTitle,
+            band: band, value: 27.4e9, unit: .bytes,
             severity: band == .red ? 1.2 : 0.5, trendPerSec: -4_510_195,
             detail: "\(free) free; full in 1.7 hours"
         )
+    }
+
+    /// A red disk with nothing else out of band, so the only banner is the disk's.
+    private func loneRedDisk(title: CoreTitle) -> Pressure {
+        .stub(
+            level: .restless, source: .disk, glyph: "😟💽",
+            accessibilityLabel: "Banshee: Restless, disk",
+            dimensions: [disk(.red, title: title)],
+            findings: [diskFinding()]
+        )
+    }
+
+    /// The disk banner's title is CORE's sentence, shown verbatim (`banshee-v54.1`,
+    /// ADR-0005). The fixture sends words the app could not have composed from the
+    /// label and band, because a title that merely EQUALS what Swift used to build
+    /// ("Banshee: Disk headroom is red") cannot tell the two implementations apart.
+    /// Mutation-proof: restore the old interpolation in `composeDisk` and this
+    /// reads "Banshee: Disk headroom is red".
+    func testTheDiskTitleIsCoresWordsVerbatim() async throws {
+        let sink = RecordingSink()
+        let c = NotificationCoordinator(sink: sink)
+
+        await c.consider(
+            loneRedDisk(title: .exactly("Core wrote this, not the app")),
+            now: Date(timeIntervalSince1970: 1_788_100_000))
+
+        let recorded = await sink.posted
+        XCTAssertEqual(recorded.map(\.title), ["Core wrote this, not the app"])
+    }
+
+    /// A daemon older than the title field sends none. The banner still goes out,
+    /// under core's overall label — never under a title composed in the app.
+    /// Mutation-proof: make the fallback an empty string and the title is blank.
+    func testAnOlderDaemonsDiskBannerFallsBackToCoresOverallLabel() async throws {
+        let sink = RecordingSink()
+        let c = NotificationCoordinator(sink: sink)
+
+        await c.consider(loneRedDisk(title: .absent), now: Date(timeIntervalSince1970: 1_788_100_000))
+
+        let recorded = await sink.posted
+        XCTAssertEqual(recorded.map(\.title), ["Banshee: Restless, disk"])
     }
 
     private func diskFinding(_ band: Band = .red) -> Finding {
@@ -405,58 +464,58 @@ final class NotificationTests: XCTestCase {
         ])
     }
 
-    /// **Tier one, the yellow line (below 60 GB): the disk speaks on ENTRY even
-    /// though the overall level is far below Wailing, then rarely.** Yellow is
+    /// **Tier one, the amber line (below 60 GB): the disk speaks on ENTRY even
+    /// though the overall level is far below Wailing, then rarely.** Amber is
     /// "leaving the range the maintainer wants to hold and can still act", and
     /// before this the 30–60 GB window produced no notification at all.
     ///
     /// Mutation-proof, verified: gate the disk channel on `warrantsNotification`
     /// and the first assertion fails; drop the repeat check and the +60 s step posts.
-    func testDiskYellowNotifiesOnEntryThenRarely() async throws {
+    func testDiskAmberNotifiesOnEntryThenRarely() async throws {
         let sink = RecordingSink()
         let c = NotificationCoordinator(sink: sink)
         let now = Date(timeIntervalSince1970: 1_788_100_000)
         // A calm machine apart from the disk: Restless, driven by CPU, no findings
-        // for disk at all (the daemon opens no episode on yellow — banshee-dok).
-        let yellow = Pressure.stub(
+        // for disk at all (the daemon opens no episode on amber — banshee-dok).
+        let amber = Pressure.stub(
             level: .restless, source: .cpu, accessibilityLabel: "Banshee: Restless, CPU",
-            dimensions: [.stub(key: "cpu", band: .yellow), disk(.yellow, free: "48.2 GB")]
+            dimensions: [.stub(key: "cpu", band: .amber), disk(.amber, free: "48.2 GB")]
         )
 
-        let entered = await c.consider(yellow, now: now)
-        let entry = try XCTUnwrap(entered, "yellow must notify on entry")
-        XCTAssertEqual(entry.title, "Banshee: Disk headroom is yellow")
+        let entered = await c.consider(amber, now: now)
+        let entry = try XCTUnwrap(entered, "amber must notify on entry")
+        XCTAssertEqual(entry.title, "Banshee: Disk headroom is amber")
         XCTAssertEqual(entry.body, "48.2 GB free; full in 1.7 hours", "no finding → the reading's detail")
-        XCTAssertEqual(entry.interruption, .active, "yellow informs; it does not break through Focus")
+        XCTAssertEqual(entry.interruption, .active, "amber informs; it does not break through Focus")
 
-        let soon = await c.consider(yellow, now: now.addingTimeInterval(60))
-        XCTAssertNil(soon, "a minute later is the same yellow")
-        let hourLater = await c.consider(yellow, now: now.addingTimeInterval(3600))
-        XCTAssertNil(hourLater, "the overall hour cooldown is not the yellow rhythm")
+        let soon = await c.consider(amber, now: now.addingTimeInterval(60))
+        XCTAssertNil(soon, "a minute later is the same amber")
+        let hourLater = await c.consider(amber, now: now.addingTimeInterval(3600))
+        XCTAssertNil(hourLater, "the overall hour cooldown is not the amber rhythm")
         let rarely = await c.consider(
-            yellow, now: now.addingTimeInterval(NotificationCoordinator.diskYellowRepeat + 1)
+            amber, now: now.addingTimeInterval(NotificationCoordinator.diskAmberRepeat + 1)
         )
-        XCTAssertNotNil(rarely, "still yellow after the repeat interval is worth one more line")
+        XCTAssertNotNil(rarely, "still amber after the repeat interval is worth one more line")
 
         let recorded = await sink.posted
         XCTAssertEqual(recorded.count, 2)
         XCTAssertEqual(Set(recorded.map(\.identifier)), ["banshee.disk"])
     }
 
-    /// Entering red from yellow breaks the yellow clock at once — the yellow banner
+    /// Entering red from amber breaks the amber clock at once — the amber banner
     /// a minute ago does not buy the red one any silence — and the red REPLACES it
     /// (same identifier) rather than stacking under it.
     ///
     /// Mutation-proof, verified: key `lastDiskPosted` on the dimension alone and the
-    /// red is suppressed by the fresh yellow timestamp.
-    func testEnteringRedBreaksTheYellowClock() async throws {
+    /// red is suppressed by the fresh amber timestamp.
+    func testEnteringRedBreaksTheAmberClock() async throws {
         let sink = RecordingSink()
         let c = NotificationCoordinator(sink: sink)
         let now = Date(timeIntervalSince1970: 1_788_100_000)
-        let yellow = Pressure.stub(
-            level: .restless, source: .cpu, dimensions: [disk(.yellow, free: "31.0 GB")]
+        let amber = Pressure.stub(
+            level: .restless, source: .cpu, dimensions: [disk(.amber, free: "31.0 GB")]
         )
-        await c.consider(yellow, now: now)
+        await c.consider(amber, now: now)
         let escalated = await c.consider(redderCPU(), now: now.addingTimeInterval(60))
         let red = try XCTUnwrap(escalated)
         XCTAssertEqual(red.title, "Banshee: Disk headroom is red")
@@ -464,31 +523,31 @@ final class NotificationTests: XCTestCase {
 
         let recorded = await sink.posted
         XCTAssertEqual(recorded.count, 2)
-        XCTAssertEqual(Set(recorded.map(\.identifier)).count, 1, "red replaces yellow: one identifier")
+        XCTAssertEqual(Set(recorded.map(\.identifier)).count, 1, "red replaces amber: one identifier")
     }
 
-    /// Getting better is not an interruption: red → yellow says nothing, and the
-    /// yellow clock restarts from the recovery, so the NEXT evaluation does not
-    /// re-post a stale yellow fifteen seconds into feeling better.
+    /// Getting better is not an interruption: red → amber says nothing, and the
+    /// amber clock restarts from the recovery, so the NEXT evaluation does not
+    /// re-post a stale amber fifteen seconds into feeling better.
     ///
     /// Mutation-proof, verified: remove the `previous > band` branch and the
-    /// recovery step posts a yellow.
+    /// recovery step posts an amber.
     func testDiskRecoveryIsNotNews() async {
         let sink = RecordingSink()
         let c = NotificationCoordinator(sink: sink)
         let now = Date(timeIntervalSince1970: 1_788_100_000)
-        let yellow = Pressure.stub(
-            level: .restless, source: .cpu, dimensions: [disk(.yellow, free: "44.0 GB")]
+        let amber = Pressure.stub(
+            level: .restless, source: .cpu, dimensions: [disk(.amber, free: "44.0 GB")]
         )
-        await c.consider(yellow, now: now)                              // yellow entry
+        await c.consider(amber, now: now)                              // amber entry
         await c.consider(redderCPU(), now: now.addingTimeInterval(600)) // red entry
-        // Space freed: back to yellow, well past the yellow repeat since the entry
-        // banner — and still nothing, because falling INTO yellow is recovery.
-        let recoveredAt = now.addingTimeInterval(NotificationCoordinator.diskYellowRepeat + 600)
-        let recovered = await c.consider(yellow, now: recoveredAt)
-        XCTAssertNil(recovered, "red → yellow is getting better")
-        let justAfter = await c.consider(yellow, now: recoveredAt.addingTimeInterval(15))
-        XCTAssertNil(justAfter, "the yellow clock restarted at recovery")
+        // Space freed: back to amber, well past the amber repeat since the entry
+        // banner — and still nothing, because falling INTO amber is recovery.
+        let recoveredAt = now.addingTimeInterval(NotificationCoordinator.diskAmberRepeat + 600)
+        let recovered = await c.consider(amber, now: recoveredAt)
+        XCTAssertNil(recovered, "red → amber is getting better")
+        let justAfter = await c.consider(amber, now: recoveredAt.addingTimeInterval(15))
+        XCTAssertNil(justAfter, "the amber clock restarted at recovery")
         let green = await c.consider(
             Pressure.stub(level: .quiet, dimensions: [disk(.green, free: "88.0 GB")]),
             now: recoveredAt.addingTimeInterval(30)
@@ -497,7 +556,7 @@ final class NotificationTests: XCTestCase {
 
         let recorded = await sink.posted
         XCTAssertEqual(recorded.map(\.title), [
-            "Banshee: Disk headroom is yellow",
+            "Banshee: Disk headroom is amber",
             "Banshee: Disk headroom is red",
         ])
     }
@@ -526,7 +585,7 @@ final class NotificationTests: XCTestCase {
     }
 
     /// ONLY disk has a standalone channel. Every other dimension goes through the
-    /// overall verdict, or a yellow swap would interrupt at Restless — the noise this
+    /// overall verdict, or an amber swap would interrupt at Restless — the noise this
     /// coordinator exists to prevent.
     ///
     /// Mutation-proof, verified: match any non-green dimension instead of the disk

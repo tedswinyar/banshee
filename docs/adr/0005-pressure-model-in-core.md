@@ -29,7 +29,7 @@ We will compute the entire pressure model in `banshee-core` and serve the result
 over the API. Specifically, `banshee-core` owns:
 
 - the dimension definitions (`cpu`, `memory`, `agents`, `orphans`, `managedAgents`,
-  `disk`, `uptime`) and their yellow/red bands,
+  `disk`, `uptime`) and their amber/red bands,
 - hysteresis — enter at threshold, leave at threshold − margin, require N
   consecutive samples,
 - the severity level (`Quiet` / `Stirring` / `Restless` / `Wailing` / `Shrieking`),

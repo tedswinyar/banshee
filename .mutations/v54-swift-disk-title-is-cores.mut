@@ -1,0 +1,9 @@
+# The disk banner title is core's sentence shown verbatim (banshee-v54.1). The
+# reverting mutation restores the old Swift interpolation, which only a fixture
+# with words the app could not compose can tell apart.
+file: swift/Sources/BansheeCore/Notifications.swift
+test: NotificationTests/testTheDiskTitleIsCoresWordsVerbatim
+---OLD---
+            title: reading.alertTitle ?? pressure.accessibilityLabel,
+---NEW---
+            title: "Banshee: \(reading.label) is \(reading.band.rawValue)",

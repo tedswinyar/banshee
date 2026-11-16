@@ -64,7 +64,7 @@ public enum Palette {
     /// a colour-only signal is invisible to VoiceOver and unreliable for the
     /// roughly one man in twelve who cannot separate the green from the red.
     public static let bandGreen = success
-    public static let bandYellow = warning
+    public static let bandAmber = warning
     public static let bandRed = error
 }
 

@@ -514,7 +514,7 @@ fn emit_json(body: &Body) {
 fn band_marker(band: Band) -> &'static str {
     match band {
         Band::Green => "  ",
-        Band::Yellow => "! ",
+        Band::Amber => "! ",
         Band::Red => "!!",
     }
 }
@@ -814,7 +814,7 @@ fn print_samples(samples: &[Sample]) {
 fn print_rollups(rollups: &[Rollup]) {
     if rollups.is_empty() {
         println!(
-            "no rollups yet (the first appears within five minutes of the daemon starting; each bucket is summarised as it closes)"
+            "no rollups yet (the first appears within five minutes of the daemon starting; each bucket is summarized as it closes)"
         );
         return;
     }
@@ -1774,12 +1774,12 @@ mod tests {
 
     /// The three bands must be visually DISTINCT in a plain-text table, and the
     /// markers must be the same width so the columns line up. Mutation-proof: give
-    /// Yellow and Red the same marker and this fails.
+    /// Amber and Red the same marker and this fails.
     #[test]
     fn band_markers_are_distinct_and_column_aligned() {
         let markers = [
             band_marker(Band::Green),
-            band_marker(Band::Yellow),
+            band_marker(Band::Amber),
             band_marker(Band::Red),
         ];
         let mut sorted = markers;

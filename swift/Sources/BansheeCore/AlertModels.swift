@@ -29,6 +29,10 @@ public struct EpisodePeak: Codable, Equatable, Sendable {
     public let band: Band
     /// The whole-machine level at the peak, which is what routed delivery.
     public let level: Level
+    /// The level's display name ("Wailing") in core's words, so the Alerts line
+    /// reads like the header instead of printing the wire key (`banshee-v54.1`).
+    /// Nil only from a daemon older than the field.
+    public let levelName: String?
     public let severity: Double
     public let at: Date
     /// The finding's wording at that moment, rendered verbatim.
@@ -39,11 +43,12 @@ public struct EpisodePeak: Codable, Equatable, Sendable {
     public let whoLine: String?
 
     public init(
-        band: Band, level: Level, severity: Double, at: Date, message: String,
-        whoLine: String? = nil
+        band: Band, level: Level, levelName: String? = nil, severity: Double, at: Date,
+        message: String, whoLine: String? = nil
     ) {
         self.band = band
         self.level = level
+        self.levelName = levelName
         self.severity = severity
         self.at = at
         self.message = message
@@ -51,7 +56,7 @@ public struct EpisodePeak: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case band, level, severity, at, message, whoLine
+        case band, level, levelName, severity, at, message, whoLine
     }
 
     // Hand-written: a daemon from before the who-line (or a stored older peak) sends no
@@ -60,6 +65,7 @@ public struct EpisodePeak: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         band = try c.decode(Band.self, forKey: .band)
         level = try c.decode(Level.self, forKey: .level)
+        levelName = try c.decodeIfPresent(String.self, forKey: .levelName)
         severity = try c.decode(Double.self, forKey: .severity)
         at = try c.decode(Date.self, forKey: .at)
         message = try c.decode(String.self, forKey: .message)
@@ -71,6 +77,11 @@ public struct EpisodePeak: Codable, Equatable, Sendable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(band, forKey: .band)
         try c.encode(level, forKey: .level)
+        if let levelName {
+            try c.encode(levelName, forKey: .levelName)
+        } else {
+            try c.encodeNil(forKey: .levelName)
+        }
         try c.encode(severity, forKey: .severity)
         try c.encode(at, forKey: .at)
         try c.encode(message, forKey: .message)
@@ -88,6 +99,10 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
     /// Which dimension. A string, like `DimensionReading.dimension`, so a
     /// dimension added to the wire cannot make old episodes undecodable.
     public let dimension: String
+    /// The dimension's display label ("CPU utilization") in core's words — what
+    /// the verdict's rows say, where this line used to print the wire key
+    /// (`banshee-v54.1`). Nil only from a daemon older than the field.
+    public let dimensionLabel: String?
     /// When the red run began — not when the up delay was crossed.
     public let startedAt: Date
     /// Nullable on the wire: null means STILL OPEN, which is the most important
@@ -114,13 +129,14 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
     public let projectionBracketSecs: UInt64?
 
     public init(
-        id: UUID, dimension: String, startedAt: Date, endedAt: Date?,
+        id: UUID, dimension: String, dimensionLabel: String? = nil, startedAt: Date, endedAt: Date?,
         peak: EpisodePeak, suppressed: Int, state: EpisodeState,
         lastNotifiedAt: Date?, recoveringSince: Date?,
         censusAtPeak: CensusSummary? = nil, projectionBracketSecs: UInt64? = nil
     ) {
         self.id = id
         self.dimension = dimension
+        self.dimensionLabel = dimensionLabel
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.peak = peak
@@ -134,8 +150,18 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
 
     public var isOpen: Bool { endedAt == nil }
 
+    /// What to call the dimension on screen: core's label, or the wire key from a
+    /// daemon older than the label. Here rather than in the view so it can be
+    /// tested — the app target has no test suite.
+    public var dimensionDisplay: String { dimensionLabel ?? dimension }
+
+    /// What to call the peak level on screen: core's name ("Wailing"), or the wire
+    /// key from a daemon older than the name. Terse in that case, but never a
+    /// capitalization invented in the client.
+    public var peakLevelDisplay: String { peak.levelName ?? peak.level.rawValue }
+
     enum CodingKeys: String, CodingKey {
-        case id, dimension, startedAt, endedAt, peak, suppressed, state
+        case id, dimension, dimensionLabel, startedAt, endedAt, peak, suppressed, state
         case lastNotifiedAt, recoveringSince, censusAtPeak, projectionBracketSecs
     }
 
@@ -146,6 +172,11 @@ public struct AlertEpisode: Codable, Identifiable, Equatable, Sendable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id.uuidString.lowercased(), forKey: .id)
         try c.encode(dimension, forKey: .dimension)
+        if let dimensionLabel {
+            try c.encode(dimensionLabel, forKey: .dimensionLabel)
+        } else {
+            try c.encodeNil(forKey: .dimensionLabel)
+        }
         try c.encode(startedAt, forKey: .startedAt)
         if let endedAt {
             try c.encode(endedAt, forKey: .endedAt)
