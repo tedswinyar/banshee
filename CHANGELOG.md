@@ -42,6 +42,8 @@ All notable changes to Banshee. The format follows
   held 1h". The History chart's max line is neutral grey instead of the amber
   band's orange, and the reap preview marks "will be reaped" and "spared" by
   shape (filled dot, hollow ring) rather than by a band colour.
+- **The update badge has a gap around it** (banshee-v54.8), so the purple dot
+  reads as a badge instead of blending into the pink brain or the white skull.
 
 ### Added
 

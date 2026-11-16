@@ -1,0 +1,8 @@
+# The compositing mode is restored before the dot is filled (banshee-v54.8); left
+# on .clear, the dot erases itself and the reminder disappears.
+file: swift/Sources/DesignKit/MenuBarGlyph.swift
+test: MenuBarGlyphTests/testTheBadgeDotSurvivesItsOwnRing
+---OLD---
+                context.compositingOperation = previous
+---NEW---
+                context.compositingOperation = .clear

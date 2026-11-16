@@ -1,0 +1,8 @@
+# The update badge's ring is CLEARED to transparent (banshee-v54.8) so the dot
+# reads as separate from whichever emoji is under it, on any menu bar.
+file: swift/Sources/DesignKit/MenuBarGlyph.swift
+test: MenuBarGlyphTests/testTheBadgeRingIsKnockedOutOfTheEmoji
+---OLD---
+                context.compositingOperation = .clear
+---NEW---
+                context.compositingOperation = .sourceOver

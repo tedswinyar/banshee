@@ -66,6 +66,63 @@ final class MenuBarGlyphTests: XCTestCase {
             "the badge must change what is drawn, or it is not a reminder")
     }
 
+    // ---- the knockout ring (banshee-v54.8) -----------------------------------
+
+    /// The image's pixels as RGBA, with the scale between points and pixels.
+    private func bitmap(_ image: NSImage) throws -> (rep: NSBitmapImageRep, scale: CGFloat) {
+        let data = try XCTUnwrap(image.tiffRepresentation)
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: data))
+        return (rep, CGFloat(rep.pixelsWide) / image.size.width)
+    }
+
+    /// Alpha at a point given in the image's own coordinates (origin bottom-left,
+    /// as the drawing code uses); the bitmap's rows run top-down.
+    private func alpha(_ b: (rep: NSBitmapImageRep, scale: CGFloat), x: CGFloat, y: CGFloat) -> CGFloat {
+        let px = Int((x * b.scale).rounded(.down))
+        let py = b.rep.pixelsHigh - 1 - Int((y * b.scale).rounded(.down))
+        guard px >= 0, py >= 0, px < b.rep.pixelsWide, py < b.rep.pixelsHigh else { return 0 }
+        return b.rep.colorAt(x: px, y: py)?.alphaComponent ?? 0
+    }
+
+    /// Points on the middle of the ring (between the dot's edge and the ring's
+    /// outer edge), every 10 degrees, that fall inside the image.
+    private func ringPoints(in size: NSSize) -> [(x: CGFloat, y: CGFloat)] {
+        let r = MenuBarGlyph.badgeDiameter / 2
+        let cx = size.width - r, cy = size.height - r
+        let radius = r + MenuBarGlyph.badgeRing / 2
+        return stride(from: 0.0, to: 360.0, by: 10.0).compactMap { degrees in
+            let a = degrees * .pi / 180
+            let x = cx + radius * CGFloat(cos(a)), y = cy + radius * CGFloat(sin(a))
+            return (x >= 0.5 && y >= 0.5 && x <= size.width - 0.5 && y <= size.height - 0.5) ? (x, y) : nil
+        }
+    }
+
+    /// The ring is TRANSPARENT where the emoji used to be. 🟥 is the glyph on
+    /// purpose: it is opaque right into its corner, so there are ring points with
+    /// real emoji under them. A round face would leave that corner empty and this
+    /// would pass with no ring at all — which the first assertion rules out.
+    /// Mutation-proof: delete the `.clear` fill and the covered points stay opaque.
+    func testTheBadgeRingIsKnockedOutOfTheEmoji() throws {
+        let plain = try bitmap(try XCTUnwrap(MenuBarGlyph.image(for: "🟥")))
+        let badgedImage = try XCTUnwrap(MenuBarGlyph.image(for: "🟥", badged: true))
+        let badged = try bitmap(badgedImage)
+
+        let covered = ringPoints(in: badgedImage.size).filter { alpha(plain, x: $0.x, y: $0.y) > 0.9 }
+        XCTAssertGreaterThanOrEqual(
+            covered.count, 3, "the fixture must have emoji under the ring, or this proves nothing")
+        let stillOpaque = covered.filter { alpha(badged, x: $0.x, y: $0.y) > 0.2 }
+        XCTAssertEqual(stillOpaque.count, 0, "ring points left with emoji under them: \(stillOpaque)")
+    }
+
+    /// And the dot itself is still drawn, opaque, in the hole: clearing after the
+    /// dot instead of before would erase the badge. Mutation-proof: move the dot's
+    /// fill above the `.clear` block and the centre is transparent.
+    func testTheBadgeDotSurvivesItsOwnRing() throws {
+        let image = try XCTUnwrap(MenuBarGlyph.image(for: "🟥", badged: true))
+        let r = MenuBarGlyph.badgeDiameter / 2
+        XCTAssertGreaterThan(alpha(try bitmap(image), x: image.size.width - r, y: image.size.height - r), 0.9)
+    }
+
     /// The badge is an overlay: the image keeps its size, so the status item does not
     /// jump when a reminder appears or clears.
     func testTheBadgeDoesNotChangeTheImageSize() throws {

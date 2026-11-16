@@ -31,6 +31,12 @@ public enum MenuBarGlyph {
     /// is drawn with AppKit. Sized to read as a badge, not as a third emoji.
     public static let badgeDiameter: CGFloat = 6
     public static let badgeColor = NSColor.systemPurple
+    /// The gap punched out around the badge (`banshee-v54.8`). The dot sits ON the
+    /// emoji, and over 🧠 (pink) it nearly vanished while over 💀 (white) its edge
+    /// was ragged. A ring "in the menu bar's colour" is what iOS badges appear to
+    /// have, but an image cannot know the bar's colour — so the ring is CLEARED to
+    /// transparent, which is the bar's colour on any bar and any wallpaper.
+    public static let badgeRing: CGFloat = 1.5
 
     /// Render `glyph` as a full-colour image suitable for `NSStatusItem.button.image`.
     /// `badged` overlays the update dot; it never changes the image's size, so the
@@ -62,6 +68,15 @@ public enum MenuBarGlyph {
             let dot = NSRect(
                 x: size.width - badgeDiameter, y: size.height - badgeDiameter,
                 width: badgeDiameter, height: badgeDiameter)
+            // Knock the ring out of the emoji first, then draw the dot into the
+            // hole. `.clear` erases to transparent whatever is under the path; the
+            // part of the ring that falls outside the image is simply clipped.
+            if let context = NSGraphicsContext.current {
+                let previous = context.compositingOperation
+                context.compositingOperation = .clear
+                NSBezierPath(ovalIn: dot.insetBy(dx: -badgeRing, dy: -badgeRing)).fill()
+                context.compositingOperation = previous
+            }
             badgeColor.setFill()
             NSBezierPath(ovalIn: dot).fill()
         }
