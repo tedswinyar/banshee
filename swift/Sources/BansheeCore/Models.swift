@@ -335,6 +335,12 @@ public struct Finding: Codable, Identifiable, Equatable, Sendable {
     /// it (an icon, a keyboard shortcut, eventually a button that does the thing);
     /// what it must not do is invent the words.
     public let actionLabel: String
+    /// The action as ADVICE: core's words behind an arrow. Every surface that
+    /// shows an action it cannot perform — the window, the popover, a banner's
+    /// last line — shows this, so advice looks like a sentence everywhere and
+    /// never like a link (`banshee-v54.2`). The arrow is styling; the words are
+    /// still core's, verbatim.
+    public var adviceLine: String { "→ \(actionLabel)" }
     /// The top consumers behind this finding, biggest first, from the daemon's
     /// own census. Empty when nothing is attributable (disk, uptime, no census).
     public let who: [Consumer]

@@ -173,9 +173,10 @@ struct MenuBarPanel: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens the disk visualizer to see what is using the volume")
             } else {
-                Text(finding.actionLabel)
+                // Advice the popover cannot act on: a sentence, not a link.
+                Text(finding.adviceLine)
                     .font(Typography.caption)
-                    .foregroundStyle(Palette.accent)
+                    .foregroundStyle(Palette.textSecondary)
             }
         }
         .accessibilityElement(children: .contain)

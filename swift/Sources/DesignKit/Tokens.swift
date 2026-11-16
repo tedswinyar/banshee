@@ -2,6 +2,7 @@
 // tokens; raw literals for spacing, radius, or color roles in view code
 // are a review finding (skills/swift-conventions.md).
 
+import AppKit
 import SwiftUI
 
 public enum Spacing {
@@ -34,9 +35,27 @@ public enum Radius {
 /// swap is a one-file change. Every color used in a view must have a role
 /// here — a raw `.red` in view code is a review finding (design M5).
 public enum Palette {
-    /// The brand accent. Applied at the app root via `.tint(Palette.accent)`
-    /// so prominent controls use it (design H4 — it was dead code before).
-    public static let accent = Color.purple
+    /// The brand accent, and it has ONE job: "you can click this" (`banshee-v54.2`).
+    /// Controls take it from `.tint(Palette.accent)` at each of the three roots —
+    /// the detail window, Settings, and the AppKit-hosted popover, which does not
+    /// inherit a SwiftUI scene's tint. Text that is advice rather than an action is
+    /// `textSecondary`, never this: a purple line reads as a link.
+    ///
+    /// This comment said "applied at the app root" for months while no `.tint(`
+    /// call existed anywhere (found by an outside review). The scripts suite's
+    /// `test-accent-applied.sh` now holds the claim to the source.
+    ///
+    /// Purple in dark appearance is the system's. In light appearance it is a
+    /// darker value, because the accent is also TEXT here (link-style actions on
+    /// a light card) and system purple on white is about 4.2:1; `TokenTests` pins
+    /// the ratio rather than trusting this sentence.
+    public static let accent = Color(nsColor: accentNSColor)
+    public static let accentNSColor = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .systemPurple : accentLight
+    }
+    /// #9B25AE.
+    public static let accentLight = NSColor(
+        srgbRed: 0x9B / 255.0, green: 0x25 / 255.0, blue: 0xAE / 255.0, alpha: 1)
     public static let background = Color(nsColor: .windowBackgroundColor)
     public static let cardBackground = Color(nsColor: .controlBackgroundColor)
     public static let textPrimary = Color.primary
@@ -63,9 +82,16 @@ public enum Palette {
     /// band dot also composes the band name into its accessibility label, because
     /// a colour-only signal is invisible to VoiceOver and unreliable for the
     /// roughly one man in twelve who cannot separate the green from the red.
-    public static let bandGreen = success
-    public static let bandAmber = warning
-    public static let bandRed = error
+    ///
+    /// Their OWN values, not aliases of `success`/`warning`/`error`
+    /// (`banshee-v54.2`). They were aliases, which meant retuning a band for
+    /// light appearance would also have moved the lockout notice, the
+    /// daemon-mismatch row and every error message — things that are orange or
+    /// red because something is wrong with the APP, not because a dimension is
+    /// in that band.
+    public static let bandGreen = Color.green
+    public static let bandAmber = Color.orange
+    public static let bandRed = Color.red
 }
 
 public enum Typography {

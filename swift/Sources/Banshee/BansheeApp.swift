@@ -30,6 +30,7 @@ struct BansheeApp: App {
         Window("Banshee", id: WindowID.detail) {
             DetailWindow()
                 .environment(model)
+                .tint(Palette.accent)
         }
         .defaultSize(width: 560, height: 460)
 
@@ -39,6 +40,7 @@ struct BansheeApp: App {
             // to be `Sendable` — and `UserDefaults` is not, so the environment route
             // costs an `@unchecked Sendable` claim to serve exactly one consumer.
             SettingsView(preferences: preferences)
+                .tint(Palette.accent)
         }
     }
 }

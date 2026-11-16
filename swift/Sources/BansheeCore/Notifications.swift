@@ -298,6 +298,6 @@ public final class NotificationCoordinator {
     /// named nobody), then the action.
     private static func body(for finding: Finding) -> String {
         let who = finding.whoLine.map { "\n\($0)" } ?? ""
-        return "\(finding.message)\(who)\n→ \(finding.actionLabel)"
+        return "\(finding.message)\(who)\n\(finding.adviceLine)"
     }
 }

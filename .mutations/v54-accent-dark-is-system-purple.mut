@@ -1,0 +1,9 @@
+# Dark appearance keeps the system purple the sibling apps use (banshee-v54.2);
+# an accent that ignored the appearance would pass the light test by being dark
+# everywhere.
+file: swift/Sources/DesignKit/Tokens.swift
+test: TokenTests/testTheAccentIsSystemPurpleInDarkAppearance
+---OLD---
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .systemPurple : accentLight
+---NEW---
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? accentLight : accentLight

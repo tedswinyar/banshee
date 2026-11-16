@@ -1,0 +1,8 @@
+# The accent is text in this app, and system purple on a light ground is under
+# 4.5:1 (banshee-v54.2). The light value must be its own.
+file: swift/Sources/DesignKit/Tokens.swift
+test: TokenTests/testTheAccentIsLegibleAsTextInLightAppearance
+---OLD---
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .systemPurple : accentLight
+---NEW---
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .systemPurple : .systemPurple

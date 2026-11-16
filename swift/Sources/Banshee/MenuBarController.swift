@@ -72,7 +72,9 @@ final class MenuBarController: NSObject {
         popover.behavior = .transient
         popover.animates = true
         popover.contentViewController = NSHostingController(
-            rootView: MenuBarPanel().environment(model)
+            // The popover is hosted by AppKit, so it inherits no SwiftUI scene's
+            // tint: without this its controls draw in the system accent.
+            rootView: MenuBarPanel().environment(model).tint(Palette.accent)
         )
     }
 

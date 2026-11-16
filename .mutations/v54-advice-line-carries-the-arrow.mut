@@ -1,0 +1,8 @@
+# Advice is core's words behind an arrow, from ONE definition shared by the
+# window, the popover and the banner body (banshee-v54.2).
+file: swift/Sources/BansheeCore/Models.swift
+test: NotificationTests/testTheBannerUsesTheServersWords
+---OLD---
+    public var adviceLine: String { "→ \(actionLabel)" }
+---NEW---
+    public var adviceLine: String { actionLabel }

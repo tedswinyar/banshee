@@ -464,7 +464,8 @@ struct FindingList: View {
             } label: {
                 Label(finding.actionLabel, systemImage: "scissors")
             }
-            .buttonStyle(.link)
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.accent)
             .font(Typography.caption)
             .accessibilityHint("Opens a dry run you can review before anything is reaped")
         } else if finding.action == .openDiskTool, DiskTool.installedURL != nil {
@@ -478,13 +479,17 @@ struct FindingList: View {
             } label: {
                 Label(finding.actionLabel, systemImage: "externaldrive")
             }
-            .buttonStyle(.link)
+            .buttonStyle(.plain)
+            .foregroundStyle(Palette.accent)
             .font(Typography.caption)
             .accessibilityHint("Opens the disk visualizer to see what is using the volume")
         } else if finding.action != .none {
-            Text(finding.actionLabel)
+            // Advice, not an action: nothing here can be clicked, so it is a
+            // sentence in secondary text. The accent means "click this" and only
+            // that (`Palette.accent`).
+            Text(finding.adviceLine)
                 .font(Typography.caption)
-                .foregroundStyle(Palette.accent)
+                .foregroundStyle(Palette.textSecondary)
         }
     }
 }

@@ -29,6 +29,13 @@ All notable changes to Banshee. The format follows
   peaked at wailing"). Episodes carry `dimensionLabel` and `peak.levelName`,
   refreshed on read, so episodes recorded before the fields existed show them too.
 - On-screen text uses American spelling ("summarized", "canceled").
+- **Purple now means "you can click this", and only that** (banshee-v54.2). The
+  accent was documented as applied at the app root but never was, so controls
+  drew in the system accent, the reap and disk-tool actions drew in link blue,
+  and inert advice drew in purple. Now the accent is applied to the window,
+  Settings and the popover; actions are purple; advice is a sentence in secondary
+  text behind an arrow ("→ Reboot"). In light appearance the accent is a darker
+  purple so it is readable as text, which also changes toggles and pickers there.
 
 ### Added
 
