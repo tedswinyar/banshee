@@ -33,16 +33,19 @@ t() { local d="$1"; shift; if "$@" >/dev/null 2>&1; then PASS=$((PASS+1)); else 
 
 # check <sources-dir> — exit 0 iff every rule holds. Prints the rule that failed.
 check() {
+  # The scenes and the status item are the app target (Banshee/); the views are
+  # the BansheeUI library, so that tests can draw them (banshee-v54.5).
   local src="$1" app="$1/Banshee/BansheeApp.swift" bar="$1/Banshee/MenuBarController.swift"
-  local n
+  local ui="$1/BansheeUI" n
   [ -f "$app" ] && [ -f "$bar" ] || { echo "missing BansheeApp.swift or MenuBarController.swift"; return 2; }
+  [ -f "$ui/ContentView.swift" ] || { echo "missing BansheeUI/ContentView.swift: the views moved and this guard did not"; return 2; }
 
   n="$(command grep -c -F '.tint(Palette.accent)' "$app")"
   [ "$n" -ge 2 ] || { echo "rule 1: BansheeApp.swift applies the accent $n time(s); the window and Settings each need it"; return 1; }
   command grep -q -F '.tint(Palette.accent)' "$bar" \
     || { echo "rule 1: the popover's hosting root does not apply the accent"; return 1; }
 
-  if command grep -R -q -F 'buttonStyle(.link)' "$src/Banshee"; then
+  if command grep -R -q -F 'buttonStyle(.link)' "$ui" "$src/Banshee"; then
     echo "rule 2: .buttonStyle(.link) draws link blue, not the accent"; return 1
   fi
 
@@ -55,15 +58,15 @@ check() {
       watch > 0 && /foregroundStyle\(Palette\.accent\)/ { bad = 1 }
       { if (watch > 0) watch--; if (in_label > 0) in_label-- }
       END { exit bad ? 0 : 1 }
-    ' "$src"/Banshee/*.swift; then
+    ' "$ui"/*.swift; then
     echo "rule 3: an action label is drawn as accent text outside a Button"; return 1
   fi
 
-  n="$(command grep -R -E -l 'Palette\.band(Green|Amber|Red)' "$src/Banshee" | command grep -v -c '/ContentView.swift$')"
+  n="$(command grep -R -E -l 'Palette\.band(Green|Amber|Red)' "$ui" "$src/Banshee" | command grep -v -c '/ContentView.swift$')"
   [ "$n" -eq 0 ] || { echo "rule 4: a band colour is used outside DimensionRow.color"; return 1; }
-  n="$(command grep -c -E 'Palette\.band(Green|Amber|Red)' "$src/Banshee/ContentView.swift")"
+  n="$(command grep -c -E 'Palette\.band(Green|Amber|Red)' "$ui/ContentView.swift")"
   [ "$n" -eq 3 ] || { echo "rule 4: ContentView.swift names band colours $n times; DimensionRow.color names each once"; return 1; }
-  if command grep -q -F 'Palette.warning' "$src/Banshee/HistoryView.swift"; then
+  if command grep -q -F 'Palette.warning' "$ui/HistoryView.swift"; then
     echo "rule 4: the History chart draws a line in the warning colour"; return 1
   fi
   return 0
@@ -79,10 +82,14 @@ t "the real sources obey the colour rules" check "$SRC"
 WORK="$(mktemp -d /tmp/banshee-accent-test.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
-fresh() { rm -rf "$WORK/src"; mkdir -p "$WORK/src"; /bin/cp -Rf "$SRC/Banshee" "$WORK/src/Banshee"; }
+fresh() {
+  rm -rf "$WORK/src"; mkdir -p "$WORK/src"
+  /bin/cp -Rf "$SRC/Banshee" "$WORK/src/Banshee"
+  /bin/cp -Rf "$SRC/BansheeUI" "$WORK/src/BansheeUI"
+}
 # mutate <file> <sed-expr> — apply, and fail loudly if the file did not change.
 mutate() {
-  local f="$WORK/src/Banshee/$1" before after
+  local f="$WORK/src/$1" before after
   before="$(shasum "$f")"
   sed -i '' -e "$2" "$f"
   after="$(shasum "$f")"
@@ -91,28 +98,28 @@ mutate() {
 breaks() { ! check "$WORK/src"; }
 
 fresh
-t "mutation applied: popover tint removed" mutate MenuBarController.swift 's/\.environment(model)\.tint(Palette\.accent)/.environment(model)/'
+t "mutation applied: popover tint removed" mutate Banshee/MenuBarController.swift 's/\.environment(model)\.tint(Palette\.accent)/.environment(model)/'
 t "rule 1 catches a popover with no tint" breaks
 
 fresh
-t "mutation applied: Settings tint removed" mutate BansheeApp.swift '/SettingsView(preferences: preferences)/{n;d;}'
+t "mutation applied: Settings tint removed" mutate Banshee/BansheeApp.swift '/SettingsView(preferences: preferences)/{n;d;}'
 t "rule 1 catches a Settings scene with no tint" breaks
 
 fresh
-t "mutation applied: a link-style button" mutate ContentView.swift 's/\.buttonStyle(\.plain)/.buttonStyle(.link)/'
+t "mutation applied: a link-style button" mutate BansheeUI/ContentView.swift 's/\.buttonStyle(\.plain)/.buttonStyle(.link)/'
 t "rule 2 catches a link-style button" breaks
 
 fresh
-t "mutation applied: advice drawn in the accent again" mutate ContentView.swift 's/Text(finding\.adviceLine)/Text(finding.actionLabel)/'
-t "mutation applied: and coloured with the accent" mutate ContentView.swift '/Text(finding\.actionLabel)/{n;n;s/Palette\.textSecondary/Palette.accent/;}'
+t "mutation applied: advice drawn in the accent again" mutate BansheeUI/ContentView.swift 's/Text(finding\.adviceLine)/Text(finding.actionLabel)/'
+t "mutation applied: and coloured with the accent" mutate BansheeUI/ContentView.swift '/Text(finding\.actionLabel)/{n;n;s/Palette\.textSecondary/Palette.accent/;}'
 t "rule 3 catches accent text that is not a button" breaks
 
 fresh
-t "mutation applied: the max line borrows the warning colour" mutate HistoryView.swift 's/"max": Palette\.textSecondary/"max": Palette.warning/'
+t "mutation applied: the max line borrows the warning colour" mutate BansheeUI/HistoryView.swift 's/"max": Palette\.textSecondary/"max": Palette.warning/'
 t "rule 4 catches a chart line in the warning colour" breaks
 
 fresh
-t "mutation applied: a band colour used in the reap sheet" mutate ReapSheet.swift 's/Circle()\.fill(Palette\.textPrimary)/Circle().fill(Palette.bandAmber)/'
+t "mutation applied: a band colour used in the reap sheet" mutate BansheeUI/ReapSheet.swift 's/Circle()\.fill(Palette\.textPrimary)/Circle().fill(Palette.bandAmber)/'
 t "rule 4 catches a band colour outside the band dot" breaks
 
 echo "test-accent-applied: $PASS passed, $FAIL failed"

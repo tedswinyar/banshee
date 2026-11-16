@@ -10,13 +10,18 @@ import SwiftUI
 import BansheeCore
 import DesignKit
 
-struct MenuBarPanel: View {
+public struct MenuBarPanel: View {
+    public init() {}
+
     @Environment(PressureModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
-    private let updater = Updater.shared
+    /// The app's updater, reached through `UpdateControl` so this library does not
+    /// link Sparkle. Read each time rather than captured: the app fills it in at
+    /// launch, and an `@Observable` behind the existential is still tracked.
+    private var updater: any UpdateControlling { UpdateControl.current }
 
-    var body: some View {
+    public var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             header
 

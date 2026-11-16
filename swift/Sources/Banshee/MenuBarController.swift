@@ -19,6 +19,7 @@
 import AppKit
 import SwiftUI
 import BansheeCore
+import BansheeUI
 import DesignKit
 
 @MainActor
@@ -71,6 +72,9 @@ final class MenuBarController: NSObject {
         // should do. A semi-transient popover would stay up over other apps.
         popover.behavior = .transient
         popover.animates = true
+        // Idempotent with the app delegate's assignment: whichever runs first, the
+        // popover must never be built against the inert control.
+        UpdateControl.current = updater
         popover.contentViewController = NSHostingController(
             // The popover is hosted by AppKit, so it inherits no SwiftUI scene's
             // tint: without this its controls draw in the system accent.

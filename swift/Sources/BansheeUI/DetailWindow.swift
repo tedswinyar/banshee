@@ -14,7 +14,9 @@ private enum DetailTab: Hashable {
     case verdict, history, census, alerts
 }
 
-struct DetailWindow: View {
+public struct DetailWindow: View {
+    public init() {}
+
     private let detail = DetailModel.shared
 
     /// The selected tab, held in `@State` so it SURVIVES a re-render.
@@ -29,7 +31,7 @@ struct DetailWindow: View {
     /// here makes a re-render read the same value back instead of defaulting.
     @State private var selection: DetailTab = .verdict
 
-    var body: some View {
+    public var body: some View {
         // The macOS-14-era tabItem API, not the `Tab` builder — that arrived
         // with macOS 15 and this package's floor is 14 (Package.swift). Each tab
         // carries a `.tag` so the selection binding can address it.

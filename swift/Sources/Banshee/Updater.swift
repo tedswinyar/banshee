@@ -20,12 +20,13 @@
 // also does not update the DAEMON — see `DaemonAgreement` for how that gap is
 // surfaced after an update lands.
 
+import BansheeUI
 import Observation
 import Sparkle
 
 @MainActor
 @Observable
-final class Updater {
+final class Updater: UpdateControlling {
     static let shared = Updater()
 
     /// The display version of an update a SCHEDULED check found and Sparkle did not

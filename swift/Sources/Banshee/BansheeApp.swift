@@ -1,5 +1,6 @@
 import SwiftUI
 import BansheeCore
+import BansheeUI
 import DesignKit
 import UserNotifications
 
@@ -43,12 +44,6 @@ struct BansheeApp: App {
                 .tint(Palette.accent)
         }
     }
-}
-
-/// Window identifiers, so `openWindow(id:)` and the scene cannot drift apart on a
-/// string literal.
-enum WindowID {
-    static let detail = "banshee.detail"
 }
 
 /// Posts banners through the real notification centre.
@@ -110,7 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start Sparkle now: constructing the controller begins the scheduled
         // background update checks (banshee-u0a5-sparkle). Referencing the
         // singleton is what instantiates it; the menu item drives manual checks.
-        _ = Updater.shared
+        // The views live in BansheeUI and reach the updater through this; set it
+        // before any of them can be drawn.
+        UpdateControl.current = Updater.shared
 
         // Start polling HERE rather than from a view's `.task`. A `MenuBarExtra`
         // label is a view, but its lifecycle belongs to the status item — relying on

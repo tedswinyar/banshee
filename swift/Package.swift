@@ -36,11 +36,24 @@ let package = Package(
             path: "Sources/BansheeCore",
             swiftSettings: swift6
         ),
-        // macOS SwiftUI app.
+        // The app's VIEWS, as a library (banshee-v54.5). They lived in the
+        // executable target, which nothing can import — so no test could render
+        // a screen, and the only way to see a visual change was to launch the
+        // app on someone's desktop. Here they can be drawn offscreen by the
+        // test suite on a headless build server. No Sparkle: the views reach the
+        // updater through `UpdateControl`, which the app target fills in.
+        .target(
+            name: "BansheeUI",
+            dependencies: ["BansheeCore", "DesignKit"],
+            path: "Sources/BansheeUI",
+            swiftSettings: swift6
+        ),
+        // macOS SwiftUI app: the scenes, the AppKit status item, Sparkle.
         .executableTarget(
             name: "Banshee",
             dependencies: [
                 "BansheeCore",
+                "BansheeUI",
                 "DesignKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
@@ -51,6 +64,12 @@ let package = Package(
             name: "BansheeCoreTests",
             dependencies: ["BansheeCore"],
             path: "Tests/BansheeCoreTests",
+            swiftSettings: swift6
+        ),
+        .testTarget(
+            name: "BansheeUITests",
+            dependencies: ["BansheeUI", "BansheeCore", "DesignKit"],
+            path: "Tests/BansheeUITests",
             swiftSettings: swift6
         ),
         .testTarget(

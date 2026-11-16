@@ -65,7 +65,7 @@ struct DaemonMismatchRow: View {
                 }
             case .appBehind:
                 Button("Check for Updates…") {
-                    Updater.shared.checkForUpdates()
+                    UpdateControl.current.checkForUpdates()
                 }
                 .buttonStyle(.borderedProminent)
             case .agree:

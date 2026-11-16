@@ -1,0 +1,9 @@
+# The render gate (banshee-v54.5) draws every screen offscreen and fails when one
+# draws almost nothing. Hiding the verdict screen's content is the mutation: it
+# still compiles, still lays out, and shows a blank window.
+file: swift/Sources/BansheeUI/ContentView.swift
+test: ScreenRenderTests/testEveryScreenDrawsInLightAndDark
+---OLD---
+        .frame(minWidth: 520, minHeight: 420)
+---NEW---
+        .frame(minWidth: 520, minHeight: 420).hidden()

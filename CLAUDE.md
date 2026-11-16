@@ -38,7 +38,8 @@ invariants. See [docs/adr/0001-constellation-architecture.md](docs/adr/0001-cons
 | `banshee-api` | `rust/banshee-api/` | Axum server: `/health` (open) + keyed reads, plus a few authenticated POST action routes (reap preview/execute, backup). The sampler is the only writer of the time series — no create/update/delete of stored readings. |
 | `banshee-cli` | `rust/banshee-cli/` | `banshee` binary. Scripting-friendly: `--json`, stable exit codes (0/1/2/3/4 — see `src/main.rs` header). |
 | `banshee-mcp` | `rust/banshee-mcp/` | MCP stdio server (hand-rolled JSON-RPC, house pattern). Talks HTTP to the API. |
-| `Banshee` | `swift/Sources/Banshee/` | SwiftUI macOS app. A **client** of the daemon — it does NOT supervise or start it (ADR-0004). |
+| `Banshee` | `swift/Sources/Banshee/` | The macOS app: scenes, the AppKit status item and popover host, Sparkle. A **client** of the daemon — it does NOT supervise or start it (ADR-0004). |
+| `BansheeUI` | `swift/Sources/BansheeUI/` | The app's SwiftUI VIEWS, as a library so the test suite can draw every screen offscreen (`swift/Tests/BansheeUITests/ScreenRenderTests.swift`; `scripts/capture-screens.sh` writes them as PNGs). No Sparkle: views reach the updater through `UpdateControl`. **To see a visual change, capture it — do not launch the app on a desktop.** |
 | `BansheeCore` | `swift/Sources/BansheeCore/` | APIClient (the ONE network boundary) over the daemon's Unix socket via `UnixSocketHTTP` (ADR-0008; `URLSession` cannot), wire models, `PressureModel` + `DetailModel`, `WireDate`, `DaemonService`. At parity with the HTTP surface since P6b: all nine reads (headroom since WS3a, deltas since WS2d), cross-language-pinned against the shared fixtures. |
 | `DesignKit` | `swift/Sources/DesignKit/` | Design tokens. Views never hardcode spacing/colors (see `skills/swift-conventions.md`). |
 

@@ -8,7 +8,9 @@ import DesignKit
 import UserNotifications
 import ServiceManagement
 
-struct SettingsView: View {
+public struct SettingsView: View {
+    public init(preferences: Preferences) { self.preferences = preferences }
+
     let preferences: Preferences
     /// Mirrors of the persisted values, so the controls are bindable. `Preferences`
     /// is a value type over `UserDefaults`; the pickers write through on change.
@@ -18,7 +20,7 @@ struct SettingsView: View {
     @State private var loginItemNeedsApproval = false
     @State private var loginItemError: String?
 
-    var body: some View {
+    public var body: some View {
         Form {
             Section {
                 Picker("Show in", selection: $dockPresence) {

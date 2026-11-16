@@ -15,7 +15,7 @@ import AppKit
 import BansheeCore
 import ServiceManagement
 
-enum LoginItem {
+public enum LoginItem {
     /// True when launchd will start the app at login.
     static var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled
@@ -42,7 +42,7 @@ enum LoginItem {
     /// checkout would make a developer's throwaway build start at login. macOS shows
     /// its own "added as a login item" notice, so the user is told. Afterwards the flag
     /// is set whether or not registration succeeded, so a refusal is respected too.
-    static func registerOnFirstLaunch(preferences: Preferences) {
+    public static func registerOnFirstLaunch(preferences: Preferences) {
         guard !preferences.loginItemRegistrationAttempted else { return }
         guard Bundle.main.bundleURL.path.hasPrefix("/Applications/") else { return }
         preferences.loginItemRegistrationAttempted = true

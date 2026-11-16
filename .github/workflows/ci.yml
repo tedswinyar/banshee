@@ -46,6 +46,12 @@ jobs:
         run: ./scripts/doctor.sh
       - name: The gate
         run: make ci
+      # Every screen, drawn offscreen from the shared fixtures, light and dark —
+      # how a visual change is looked at without launching the app on anyone's
+      # desktop (scripts/capture-screens.sh). Kept ON THE BUILD SERVER by commit,
+      # newest 20, under the build user's home; nothing is uploaded.
+      - name: Capture every screen (light and dark)
+        run: ./scripts/capture-screens.sh --prune-siblings 20 "$HOME/banshee-captures/$GITHUB_SHA"
 
   promote:
     name: fast-forward main
