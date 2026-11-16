@@ -590,6 +590,28 @@ final class WireFormatTests: XCTestCase {
         XCTAssertEqual(written, #""amber""#)
     }
 
+    /// The row's trailing column names the band in WORDS beside how long it has
+    /// held (`banshee-v54.3`): the dot must not be the only cue. Four readings,
+    /// because each clause has its own way to be wrong: a red and an amber (the
+    /// word follows the band, and the duration its own unit), a plain green
+    /// (nothing to say), and a recovering green (says so, with no held time).
+    /// Mutation-proof: drop `band.rawValue` and the first two lose their word;
+    /// test `recovering` after the green guard and the last one comes back empty.
+    func testTheHeldLineNamesTheBandInWords() {
+        XCTAssertEqual(DimensionReading.stub(band: .red, heldSecs: 3_600).heldLine, "red · held 1h")
+        XCTAssertEqual(DimensionReading.stub(band: .amber, heldSecs: 86_400).heldLine, "amber · held 1d")
+        XCTAssertEqual(DimensionReading.stub(band: .green, heldSecs: 600).heldLine, "")
+        XCTAssertEqual(
+            DimensionReading.stub(band: .green, heldSecs: 600, recovering: true).heldLine, "recovering")
+    }
+
+    /// Whole units, rounded down, switching at each boundary.
+    func testDurationsSwitchUnitsAtTheirBoundaries() {
+        XCTAssertEqual(
+            [59, 60, 3_599, 3_600, 86_399, 86_400].map(DimensionReading.duration),
+            ["59s", "1m", "59m", "1h", "23h", "1d"])
+    }
+
     func testAnnouncementLineParses() {
         let url = DaemonService.parseAnnouncement(
             "banshee-api listening on http://127.0.0.1:63294\n"

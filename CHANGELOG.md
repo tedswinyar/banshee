@@ -36,6 +36,12 @@ All notable changes to Banshee. The format follows
   Settings and the popover; actions are purple; advice is a sentence in secondary
   text behind an arrow ("→ Reboot"). In light appearance the accent is a darker
   purple so it is readable as text, which also changes toggles and pickers there.
+- **Band dots are readable in light appearance, and each row says its band in
+  words** (banshee-v54.3). The dots were under 3:1 against the light window and
+  were the only cue; they now take darker values there, and the row reads "red ·
+  held 1h". The History chart's max line is neutral grey instead of the amber
+  band's orange, and the reap preview marks "will be reaped" and "spared" by
+  shape (filled dot, hollow ring) rather than by a band colour.
 
 ### Added
 

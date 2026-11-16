@@ -107,7 +107,9 @@ struct HistoryView: View {
                 y: .value(metric.axisLabel, metric.max(of: rollup)),
                 series: .value("Series", "max")
             )
-            .foregroundStyle(Palette.warning.opacity(0.55))
+            // Neutral, not the amber band's orange: on this chart orange would
+            // read as "this was in the amber band", and the max line is not a band.
+            .foregroundStyle(Palette.textSecondary)
             .lineStyle(StrokeStyle(lineWidth: 1))
 
             LineMark(
@@ -120,7 +122,7 @@ struct HistoryView: View {
         }
         .chartForegroundStyleScale([
             "avg": Palette.accent,
-            "max": Palette.warning.opacity(0.55),
+            "max": Palette.textSecondary,
         ])
         .chartLegend(position: .top, alignment: .trailing)
         .accessibilityLabel("\(metric.axisLabel) over \(model.historyWindow.label)")

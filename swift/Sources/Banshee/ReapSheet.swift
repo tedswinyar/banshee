@@ -284,8 +284,7 @@ struct ReapRow: View {
         HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
             // Color-only, therefore decorative — the accessibility label below
             // names the state in words.
-            Circle()
-                .fill(dotColor)
+            dot
                 .frame(width: Size.statusDot, height: Size.statusDot)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -310,16 +309,30 @@ struct ReapRow: View {
         .accessibilityValue(subtitle)
     }
 
-    /// Once executed, the outcome drives the colour; before that, the verdict.
-    private var dotColor: Color {
-        if let outcome {
-            switch outcome {
-            case "killed", "terminated": return Palette.success
-            case "survived": return Palette.warning
-            default: return Palette.error // "failed: …"
-            }
+    /// Before the reap runs, the two verdicts differ by SHAPE: a filled dot will
+    /// be reaped, a hollow ring is spared. Not by colour — the "will be reaped" dot
+    /// used to be the amber band's orange, which on this sheet said "this session
+    /// is in the amber band" about a thing that has no band (`banshee-v54.3`).
+    /// After it runs the dot is filled with the OUTCOME's colour, because by then
+    /// green, orange and red are real results.
+    @ViewBuilder
+    private var dot: some View {
+        if let outcomeColor {
+            Circle().fill(outcomeColor)
+        } else if verdictReap {
+            Circle().fill(Palette.textPrimary)
+        } else {
+            Circle().strokeBorder(Palette.textSecondary, lineWidth: Size.statusRing)
         }
-        return verdictReap ? Palette.warning : Palette.textSecondary
+    }
+
+    private var outcomeColor: Color? {
+        guard let outcome else { return nil }
+        switch outcome {
+        case "killed", "terminated": return Palette.success
+        case "survived": return Palette.warning
+        default: return Palette.error // "failed: …"
+        }
     }
 
     private var stateWord: String {

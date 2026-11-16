@@ -1,0 +1,8 @@
+# The system band colours are under 3:1 on the light window ground
+# (banshee-v54.3); light appearance needs its own darker values.
+file: swift/Sources/DesignKit/Tokens.swift
+test: TokenTests/testEveryBandDotClearsThreeToOneInLightAppearance
+---OLD---
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+---NEW---
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : dark

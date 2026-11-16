@@ -1,0 +1,10 @@
+# A recovering dimension is GREEN, so the recovering check must come before the
+# green guard or the column goes blank during an open episode (ADR-0009).
+file: swift/Sources/BansheeCore/Models.swift
+test: WireFormatTests/testTheHeldLineNamesTheBandInWords
+---OLD---
+        if recovering { return "recovering" }
+        guard band > .green else { return "" }
+---NEW---
+        guard band > .green else { return "" }
+        if recovering { return "recovering" }

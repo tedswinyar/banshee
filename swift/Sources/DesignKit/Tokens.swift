@@ -19,6 +19,9 @@ public enum Spacing {
 /// couples unrelated things — bump the spacing scale and the dot resizes
 /// (design M6). Sizes get their own semantic tokens.
 public enum Size {
+    /// Stroke of a HOLLOW status dot — the reap preview's "spared" row, which is
+    /// told from "will be reaped" by shape, not by a band colour.
+    public static let statusRing: CGFloat = 1.5
     /// Diameter of the band status dot.
     public static let statusDot: CGFloat = 8
     /// Reserved width of the trailing metadata (date) column, so the date
@@ -89,9 +92,31 @@ public enum Palette {
     /// daemon-mismatch row and every error message — things that are orange or
     /// red because something is wrong with the APP, not because a dimension is
     /// in that band.
-    public static let bandGreen = Color.green
-    public static let bandAmber = Color.orange
-    public static let bandRed = Color.red
+    ///
+    /// Each is the system colour in dark appearance and a DARKER value in light
+    /// (`banshee-v54.3`). The system green, orange and red measure about 1.9, 1.9
+    /// and 3.0 to 1 against the light window ground — under the 3:1 a status dot
+    /// needs (WCAG 1.4.11) — and on that ground the dot was the only thing telling
+    /// the bands apart. The light values are Apple's accessible shades; `TokenTests`
+    /// pins the ratios in both appearances.
+    public static let bandGreen = Color(nsColor: bandGreenNSColor)
+    public static let bandAmber = Color(nsColor: bandAmberNSColor)
+    public static let bandRed = Color(nsColor: bandRedNSColor)
+
+    public static let bandGreenNSColor = band(dark: .systemGreen, lightHex: 0x248A3D)
+    public static let bandAmberNSColor = band(dark: .systemOrange, lightHex: 0xB25000)
+    public static let bandRedNSColor = band(dark: .systemRed, lightHex: 0xD70015)
+
+    private static func band(dark: NSColor, lightHex: Int) -> NSColor {
+        let light = NSColor(
+            srgbRed: CGFloat((lightHex >> 16) & 0xFF) / 255,
+            green: CGFloat((lightHex >> 8) & 0xFF) / 255,
+            blue: CGFloat(lightHex & 0xFF) / 255,
+            alpha: 1)
+        return NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        }
+    }
 }
 
 public enum Typography {

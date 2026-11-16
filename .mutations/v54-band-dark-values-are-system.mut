@@ -1,0 +1,8 @@
+# Dark appearance keeps the system band colours (banshee-v54.3); using the
+# darker light shades everywhere would pass the light test and dim dark windows.
+file: swift/Sources/DesignKit/Tokens.swift
+test: TokenTests/testEveryBandDotIsTheSystemColourInDarkAppearance
+---OLD---
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+---NEW---
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? light : light

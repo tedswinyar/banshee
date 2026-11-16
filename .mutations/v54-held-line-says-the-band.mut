@@ -1,0 +1,8 @@
+# The row's trailing column names the band in words (banshee-v54.3): the dot
+# must not be the only cue.
+file: swift/Sources/BansheeCore/Models.swift
+test: WireFormatTests/testTheHeldLineNamesTheBandInWords
+---OLD---
+        return "\(band.rawValue) · held \(Self.duration(heldSecs))"
+---NEW---
+        return "held \(Self.duration(heldSecs))"

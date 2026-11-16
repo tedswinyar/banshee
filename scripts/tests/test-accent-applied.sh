@@ -18,6 +18,10 @@ set -u
 #      is, which is how the app came to have two interactive colours.
 #   3. An action label is never drawn as bare accent TEXT: advice goes through
 #      `adviceLine` in secondary text; only a Button may carry the accent.
+#   4. The band colours are for band dots and nothing else (banshee-v54.3): the
+#      `Palette.band*` tokens are named in exactly one place, `DimensionRow.color`,
+#      and the History chart does not borrow the warning colour for a line that is
+#      not a band.
 #
 # A text check can rot into a check of nothing, so each rule is also run against a
 # copy of the sources with that rule broken, and must FAIL there.
@@ -53,6 +57,14 @@ check() {
       END { exit bad ? 0 : 1 }
     ' "$src"/Banshee/*.swift; then
     echo "rule 3: an action label is drawn as accent text outside a Button"; return 1
+  fi
+
+  n="$(command grep -R -E -l 'Palette\.band(Green|Amber|Red)' "$src/Banshee" | command grep -v -c '/ContentView.swift$')"
+  [ "$n" -eq 0 ] || { echo "rule 4: a band colour is used outside DimensionRow.color"; return 1; }
+  n="$(command grep -c -E 'Palette\.band(Green|Amber|Red)' "$src/Banshee/ContentView.swift")"
+  [ "$n" -eq 3 ] || { echo "rule 4: ContentView.swift names band colours $n times; DimensionRow.color names each once"; return 1; }
+  if command grep -q -F 'Palette.warning' "$src/Banshee/HistoryView.swift"; then
+    echo "rule 4: the History chart draws a line in the warning colour"; return 1
   fi
   return 0
 }
@@ -94,6 +106,14 @@ fresh
 t "mutation applied: advice drawn in the accent again" mutate ContentView.swift 's/Text(finding\.adviceLine)/Text(finding.actionLabel)/'
 t "mutation applied: and coloured with the accent" mutate ContentView.swift '/Text(finding\.actionLabel)/{n;n;s/Palette\.textSecondary/Palette.accent/;}'
 t "rule 3 catches accent text that is not a button" breaks
+
+fresh
+t "mutation applied: the max line borrows the warning colour" mutate HistoryView.swift 's/"max": Palette\.textSecondary/"max": Palette.warning/'
+t "rule 4 catches a chart line in the warning colour" breaks
+
+fresh
+t "mutation applied: a band colour used in the reap sheet" mutate ReapSheet.swift 's/Circle()\.fill(Palette\.textPrimary)/Circle().fill(Palette.bandAmber)/'
+t "rule 4 catches a band colour outside the band dot" breaks
 
 echo "test-accent-applied: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -79,4 +79,56 @@ final class TokenTests: XCTestCase {
         XCTAssertNotEqual(dark, try accent(in: .aqua), "light and dark resolve differently")
         XCTAssertGreaterThanOrEqual(contrast(dark, grey(0x1E)), 4.5, "on a dark card")
     }
+
+    // ---- the band dots (banshee-v54.3) ---------------------------------------
+
+    private func resolved(_ color: NSColor, in name: NSAppearance.Name) throws -> NSColor {
+        let appearance = try XCTUnwrap(NSAppearance(named: name))
+        var out: NSColor?
+        appearance.performAsCurrentDrawingAppearance { out = color.usingColorSpace(.sRGB) }
+        return try XCTUnwrap(out)
+    }
+
+    private var bands: [(name: String, color: NSColor, system: NSColor)] {
+        [
+            ("green", Palette.bandGreenNSColor, .systemGreen),
+            ("amber", Palette.bandAmberNSColor, .systemOrange),
+            ("red", Palette.bandRedNSColor, .systemRed),
+        ]
+    }
+
+    /// A status dot is a graphical object: 3:1 against what it sits on (WCAG
+    /// 1.4.11). In light appearance that is the window ground and a white card.
+    /// The system colours fail it there (about 1.9, 1.9 and 3.0), which is the
+    /// defect this pins. Mutation-proof: make `band(dark:lightHex:)` return `dark`
+    /// for both appearances and green and amber fail on both grounds.
+    func testEveryBandDotClearsThreeToOneInLightAppearance() throws {
+        for band in bands {
+            let light = try resolved(band.color, in: .aqua)
+            XCTAssertGreaterThanOrEqual(contrast(light, grey(0xEA)), 3.0, "\(band.name) on the light window")
+            XCTAssertGreaterThanOrEqual(contrast(light, grey(0xFF)), 3.0, "\(band.name) on a white card")
+        }
+    }
+
+    /// Dark appearance keeps the SYSTEM colours — they pass there, and they are
+    /// what the icon's wail is drawn from. Without this the light test could be
+    /// satisfied by using the dark shades everywhere, which would dim the dots on
+    /// a dark window. Mutation-proof: return `light` for both appearances and the
+    /// equality fails for all three.
+    func testEveryBandDotIsTheSystemColourInDarkAppearance() throws {
+        for band in bands {
+            let dark = try resolved(band.color, in: .darkAqua)
+            XCTAssertEqual(dark, try resolved(band.system, in: .darkAqua), band.name)
+            XCTAssertGreaterThanOrEqual(contrast(dark, grey(0x1E)), 3.0, "\(band.name) on a dark card")
+        }
+    }
+
+    /// Three bands, three colours, in each appearance: a light value pasted into
+    /// the wrong band would still clear 3:1.
+    func testTheThreeBandsAreDistinctInEachAppearance() throws {
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            let colors = try bands.map { try resolved($0.color, in: name) }
+            XCTAssertEqual(Set(colors).count, 3, "\(name.rawValue)")
+        }
+    }
 }

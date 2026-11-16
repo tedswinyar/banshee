@@ -343,7 +343,7 @@ struct DimensionRow: View {
             Spacer(minLength: Spacing.sm)
             // minWidth pins the column's left edge so it doesn't jitter with
             // content length or Dynamic Type.
-            Text(heldLabel)
+            Text(reading.heldLine)
                 .font(Typography.caption)
                 .foregroundStyle(Palette.textSecondary)
                 .frame(minWidth: Size.metaColumn, alignment: .trailing)
@@ -352,14 +352,6 @@ struct DimensionRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(reading.label): \(reading.band.rawValue)")
         .accessibilityValue(accessibilityValue)
-    }
-
-    private var heldLabel: String {
-        // A recovering green was red a moment ago and its episode is not over
-        // (ADR-0009); that is worth the column more than a held time is.
-        if reading.recovering { return "recovering" }
-        guard reading.band > .green else { return "" }
-        return "held \(Self.duration(reading.heldSecs))"
     }
 
     private var accessibilityValue: String {
@@ -392,12 +384,7 @@ struct DimensionRow: View {
         }
     }
 
-    static func duration(_ secs: UInt64) -> String {
-        if secs < 60 { return "\(secs)s" }
-        if secs < 3600 { return "\(secs / 60)m" }
-        if secs < 86_400 { return "\(secs / 3600)h" }
-        return "\(secs / 86_400)d"
-    }
+    static func duration(_ secs: UInt64) -> String { DimensionReading.duration(secs) }
 }
 
 /// The worklist, in the order core ranked it — by MEASURED impact, not by

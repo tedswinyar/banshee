@@ -234,6 +234,29 @@ public struct DimensionReading: Codable, Identifiable, Equatable, Sendable {
         case observationGapSecs, trendPerSec, detail, advisory, pending, recovering
     }
 
+    /// A short age: "45s", "12m", "3h", "2d". Whole units, rounded down.
+    public static func duration(_ secs: UInt64) -> String {
+        if secs < 60 { return "\(secs)s" }
+        if secs < 3600 { return "\(secs / 60)m" }
+        if secs < 86_400 { return "\(secs / 3600)h" }
+        return "\(secs / 86_400)d"
+    }
+
+    /// The row's trailing column: the band in WORDS, then how long it has held —
+    /// "red · held 1h" (`banshee-v54.3`). The word is there because the dot must
+    /// not be the only cue: in light appearance amber and red are nearly equal in
+    /// luminance, and about one man in twelve cannot separate them by hue. It is
+    /// the wire's own word for the band, so it is core's, not a client's.
+    ///
+    /// Empty for a green row (nothing to say), and "recovering" for a green that
+    /// was red a moment ago and whose episode is still open (ADR-0009) — that is
+    /// worth the column more than a held time is.
+    public var heldLine: String {
+        if recovering { return "recovering" }
+        guard band > .green else { return "" }
+        return "\(band.rawValue) · held \(Self.duration(heldSecs))"
+    }
+
     // Hand-written so a daemon from before ADR-0009 (no `recovering` key) still
     // decodes: Sparkle makes app/daemon version skew inevitable, and one missing
     // key must not blank the whole verdict to "nothing is watching" — the same
