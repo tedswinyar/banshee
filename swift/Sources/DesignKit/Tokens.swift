@@ -22,6 +22,8 @@ public enum Size {
     /// Stroke of a HOLLOW status dot — the reap preview's "spared" row, which is
     /// told from "will be reaped" by shape, not by a band colour.
     public static let statusRing: CGFloat = 1.5
+    /// Side of the faint brand mark beside an empty state's words.
+    public static let emptyStateMark: CGFloat = 48
     /// Diameter of the band status dot.
     public static let statusDot: CGFloat = 8
     /// Reserved width of the trailing metadata (date) column, so the date

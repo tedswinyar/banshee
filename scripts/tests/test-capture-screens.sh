@@ -64,17 +64,17 @@ run() { # env... -> $RC, output in $OUT
 }
 
 TARGET="$WORK/out-full"
-run STUB_IMAGES=18
+run STUB_IMAGES=22
 t "a full capture succeeds" test "$RC" = 0
-t "and says how many images it wrote" grep -q '18 images' <<< "$OUT"
+t "and says how many images it wrote" grep -q '22 images' <<< "$OUT"
 
 TARGET="$WORK/out-short"
-run STUB_IMAGES=17
+run STUB_IMAGES=21
 t "a capture one image short FAILS" test "$RC" = 1
-t "and says what it expected" grep -q 'expected at least 18' <<< "$OUT"
+t "and says what it expected" grep -q 'expected at least 22' <<< "$OUT"
 
 TARGET="$WORK/out-red"
-run STUB_IMAGES=18 STUB_RC=1
+run STUB_IMAGES=22 STUB_RC=1
 t "a failed render is a failure even with every image present" test "$RC" = 1
 t "and shows the log" grep -q 'stub swift ran' <<< "$OUT"
 
@@ -87,7 +87,7 @@ mkdir -p "$old1" "$old2" "$ROOT/notes" "$ROOT/abc"
 touch -t 202601010000 "$old1"
 touch -t 202602010000 "$old2"
 touch -t 202601010000 "$ROOT/notes" "$ROOT/abc"
-OUT="$(env PATH="$WORK/bin:$PATH" STUB_IMAGES=18 bash "$REPO/scripts/capture-screens.sh" --prune-siblings 2 "$new" 2>&1)"; RC=$?
+OUT="$(env PATH="$WORK/bin:$PATH" STUB_IMAGES=22 bash "$REPO/scripts/capture-screens.sh" --prune-siblings 2 "$new" 2>&1)"; RC=$?
 t "a pruning capture succeeds" test "$RC" = 0
 t "the capture just written is kept" test -d "$new"
 t "the newer old capture is kept (2 kept)" test -d "$old2"

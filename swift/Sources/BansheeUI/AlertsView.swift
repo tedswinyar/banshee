@@ -43,13 +43,18 @@ struct AlertsView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("No alert episodes recorded.")
-                .font(Typography.rowTitle)
-            Text("An episode opens when a dimension has held red past its up delay, stays open through brief dips, and closes with one recovery notice. Quiet is an answer.")
-                .font(Typography.body)
+        HStack(alignment: .top, spacing: Spacing.md) {
+            BrandMark(size: Size.emptyStateMark)
                 .foregroundStyle(Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .opacity(0.5)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("No alert episodes recorded.")
+                    .font(Typography.rowTitle)
+                Text("An episode opens when a dimension has held red past its up delay, stays open through brief dips, and closes with one recovery notice. Quiet is an answer.")
+                    .font(Typography.body)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(Spacing.xl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)

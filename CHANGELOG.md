@@ -44,6 +44,8 @@ All notable changes to Banshee. The format follows
   shape (filled dot, hollow ring) rather than by a band colour.
 - **The update badge has a gap around it** (banshee-v54.8), so the purple dot
   reads as a badge instead of blending into the pink brain or the white skull.
+- **Empty History and Alerts carry a faint mark** (banshee-v54.4): the skull
+  under its wail, in one colour, beside the words a new install sees first.
 
 ### Added
 

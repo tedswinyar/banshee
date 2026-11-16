@@ -35,6 +35,9 @@ import DesignKit
 struct FixtureClient: APIClientProtocol {
     /// Which `pressure-<name>.json` the verdict comes from.
     let pressureFixture: String
+    /// A NEW INSTALL: no rollups, no episodes yet. The daemon answers both reads
+    /// with an empty list, which is what the History and Alerts empty states are for.
+    var newInstall = false
 
     static func data(_ name: String) throws -> Data {
         let url = URL(fileURLWithPath: #filePath)
@@ -58,11 +61,11 @@ struct FixtureClient: APIClientProtocol {
         try Self.decode([Sample].self, "samples.json")
     }
     func rollups(limit: Int?, from: Date?, to: Date?) async throws -> [Rollup] {
-        try Self.decode([Rollup].self, "rollups.json")
+        newInstall ? [] : try Self.decode([Rollup].self, "rollups.json")
     }
     func census() async throws -> Census? { try Self.decode(Census.self, "census-full.json") }
     func alerts(since: Date?, limit: Int?) async throws -> [AlertEpisode] {
-        [try Self.decode(AlertEpisode.self, "alert-episode.json")]
+        newInstall ? [] : [try Self.decode(AlertEpisode.self, "alert-episode.json")]
     }
     func deltas(vs: String?) async throws -> Deltas { try Self.decode(Deltas.self, "deltas-normal.json") }
     func stats() async throws -> Stats { try Self.decode(Stats.self, "stats.json") }
@@ -102,8 +105,8 @@ final class ScreenRenderTests: XCTestCase {
         return model
     }
 
-    private func detailModel() async -> DetailModel {
-        let model = DetailModel(client: FixtureClient(pressureFixture: "shrieking"))
+    private func detailModel(newInstall: Bool = false) async -> DetailModel {
+        let model = DetailModel(client: FixtureClient(pressureFixture: "shrieking", newInstall: newInstall))
         await model.refreshHistory()
         await model.refreshCensus()
         await model.refreshAlerts()
@@ -118,6 +121,7 @@ final class ScreenRenderTests: XCTestCase {
         let shrieking = await pressureModel("shrieking")
         let quiet = await pressureModel("quiet")
         let detail = await detailModel()
+        let newInstall = await detailModel(newInstall: true)
         let sessions = try FixtureClient.decode(SessionReapReport.self, "reap-sessions.json")
         // A throwaway defaults suite, so drawing Settings never reads or writes
         // the real preferences of whoever runs the suite.
@@ -137,6 +141,9 @@ final class ScreenRenderTests: XCTestCase {
             Screen(name: "census", size: CGSize(width: 560, height: 700),
                    view: AnyView(CensusView().environment(detail))),
             Screen(name: "alerts", size: window, view: AnyView(AlertsView().environment(detail))),
+            // A new install's first look: no rollups and no episodes yet.
+            Screen(name: "history-empty", size: window, view: AnyView(HistoryView().environment(newInstall))),
+            Screen(name: "alerts-empty", size: window, view: AnyView(AlertsView().environment(newInstall))),
             Screen(name: "reap-preview", size: CGSize(width: 460, height: 360),
                    view: AnyView(SessionCandidateList(report: sessions).padding(Spacing.lg))),
             Screen(name: "settings", size: CGSize(width: 460, height: 520),

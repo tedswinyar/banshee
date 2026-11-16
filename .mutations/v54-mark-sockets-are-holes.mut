@@ -1,0 +1,9 @@
+# The one-colour mark's eyes are holes cut out of the skull (banshee-v54.4);
+# without a socket it is a blob with one eye. An earlier form of this pin was
+# FALSE (even-odd hit-testing reported a hole that had not been drawn).
+file: swift/Sources/DesignKit/BrandMark.swift
+test: TokenTests/testTheMarkSkullHasTwoSocketsCutOutOfIt
+---OLD---
+            .subtracting(leftSocket)
+---NEW---
+            // left socket not cut

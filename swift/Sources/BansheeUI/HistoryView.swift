@@ -141,13 +141,20 @@ struct HistoryView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("No history in this window.")
-                .font(Typography.rowTitle)
-            Text("History is drawn from 5-minute buckets, each summarized as it closes; the first appears within five minutes of the daemon starting and they survive 30 days. If the daemon was just installed, history accrues from now.")
-                .font(Typography.body)
+        HStack(alignment: .top, spacing: Spacing.md) {
+            // The mark, faint and in one colour: a new install's first look at this
+            // tab is this message, and it should look like Banshee's.
+            BrandMark(size: Size.emptyStateMark)
                 .foregroundStyle(Palette.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .opacity(0.5)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("No history in this window.")
+                    .font(Typography.rowTitle)
+                Text("History is drawn from 5-minute buckets, each summarized as it closes; the first appears within five minutes of the daemon starting and they survive 30 days. If the daemon was just installed, history accrues from now.")
+                    .font(Typography.body)
+                    .foregroundStyle(Palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }

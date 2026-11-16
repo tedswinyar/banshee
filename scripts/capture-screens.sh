@@ -33,9 +33,9 @@ set -euo pipefail
 # Exit 0 only if the render tests passed AND the expected images exist.
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-# Nine screens, two appearances. Raise this when a screen is added to
+# Eleven screens, two appearances. Raise this when a screen is added to
 # ScreenRenderTests.screens(); a capture that silently drew fewer is a failure.
-EXPECTED=18
+EXPECTED=22
 
 dry_run=0
 prune=""

@@ -131,4 +131,36 @@ final class TokenTests: XCTestCase {
             XCTAssertEqual(Set(colors).count, 3, "\(name.rawValue)")
         }
     }
+
+    // ---- the one-colour mark (banshee-v54.4) ----------------------------------
+
+    /// The skull has a cranium, a jaw, and two sockets that are HOLES — the mark is
+    /// one colour, so the eyes can only be the background showing through. Checked
+    /// on the shape's own geometry in its 100-point design square.
+    ///
+    /// The first version of this test asked `contains(_:eoFill: true)` of a
+    /// four-subpath shape and passed with a socket deleted (the replay said so). It
+    /// now asks a plainly filled shape, and also pins the strip where jaw meets
+    /// cranium, which the even-odd fill had silently turned into a gap.
+    /// Mutation-proof: drop `.subtracting(leftSocket)` and the left centre is filled.
+    func testTheMarkSkullHasTwoSocketsCutOutOfIt() {
+        let skull = SkullShape().path(in: CGRect(x: 0, y: 0, width: 100, height: 100))
+        XCTAssertTrue(skull.contains(CGPoint(x: 50, y: 48)), "the cranium is filled")
+        XCTAssertTrue(skull.contains(CGPoint(x: 50, y: 73)), "the jaw is filled")
+        XCTAssertTrue(skull.contains(CGPoint(x: 50, y: 68)), "and so is where they overlap: one solid skull")
+        XCTAssertFalse(skull.contains(CGPoint(x: 44.5, y: 58)), "the left socket is a hole")
+        XCTAssertFalse(skull.contains(CGPoint(x: 55.5, y: 58)), "the right socket is a hole")
+        XCTAssertFalse(skull.contains(CGPoint(x: 5, y: 5)), "and outside is outside")
+    }
+
+    /// The wail sits OVER the skull and is wider than it, which is what makes the
+    /// shape read as the icon's and not as a face in a ring.
+    func testTheMarkWailArchesOverTheSkull() {
+        let square = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let wail = WailArcs().path(in: square).boundingRect
+        let skull = SkullShape().path(in: square).boundingRect
+        XCTAssertLessThan(wail.minY, skull.minY, "the wail starts above the skull")
+        XCTAssertLessThan(wail.minX, skull.minX, "and reaches wider on the left")
+        XCTAssertGreaterThan(wail.maxX, skull.maxX, "and on the right")
+    }
 }
