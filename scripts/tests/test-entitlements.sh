@@ -224,23 +224,32 @@ decode_never_says() {
   if printf '%s\n' "$msg" | grep -qF -- "$3"; then return 1; fi
 }
 
-# The profile here is JUNK on purpose: only the `-k` decode can produce a plist from
-# it, so a pass proves the keychain retry ran (openssl would refuse the file).
-t "no default keychain: the decode retries with -k <build keychain> and succeeds" \
-  decodes_to_good "$KC_PRESENT" "$WORK/junk.provisionprofile" "$WORK/k.plist"
-t "…having tried the plain decode first, exactly once" calls '^cms -D -i ' 1
-t "…and the keychain decode exactly once" calls '^cms -D -k ' 1
+# The order is: plain security, then openssl, then the build keychain as the LAST
+# resort — because `security cms -D -k` imports the profile's signer certificates into
+# the keychain it is given, and a decode must not write to the signing keychain when
+# anything else can read the profile (ruled 2026-11-17).
 
-# No build keychain at all (not provisioned yet, or a job that is not given one): the
-# system openssl reads the real CMS blob. `security` fails throughout.
+# The headless case as it really is: a valid profile, a build keychain that exists
+# and WOULD decode it (the stub's -k answers ok). openssl must answer first.
+t "no default keychain: /usr/bin/openssl decodes the profile" \
+  decodes_to_good "$KC_PRESENT" "$REAL_CMS" "$WORK/o1.plist"
+t "…having tried the plain decode first, exactly once" calls '^cms -D -i ' 1
+t "…and when openssl succeeds, security -k is never invoked (nothing is written to the signing keychain)" \
+  calls '^cms -D -k ' 0
+
+# No build keychain at all (not provisioned yet, or a job that is not given one).
 t "no default keychain and no build keychain: /usr/bin/openssl decodes the profile" \
   decodes_to_good "$KC_ABSENT" "$REAL_CMS" "$WORK/o.plist"
 t "…without handing security a keychain that does not exist" calls '^cms -D -k ' 0
 
+# The profile here is JUNK on purpose: openssl refuses it, so only the `-k` decode can
+# produce a plist, and a pass proves the last resort ran.
+t "openssl cannot read it: the build keychain is the last resort, and succeeds" \
+  decodes_to_good "$KC_PRESENT" "$WORK/junk.provisionprofile" "$WORK/k.plist"
+t "…after the plain decode, exactly once" calls '^cms -D -i ' 1
+t "…and the keychain decode exactly once" calls '^cms -D -k ' 1
+
 export STUB_K=locked
-t "a build keychain that cannot decode it (locked) still falls through to openssl" \
-  decodes_to_good "$KC_PRESENT" "$REAL_CMS" "$WORK/lo.plist"
-t "…after the keychain decode was tried" calls '^cms -D -k ' 1
 
 # Every path fails: the message must carry each decoder's OWN reason. The words that
 # cost the evening must not come back for a failure that is not about the file.
@@ -249,7 +258,7 @@ t_fails "when every decoder fails the profile is refused" \
 t "…and a refused decode leaves no half-written plist behind" test ! -s "$WORK/allfail.plist"
 t "…and the reason carries security's own words about the default keychain" \
   decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" 'A default keychain could not be found'
-t "…and why the build-keychain retry failed" \
+t "…and why the last-resort keychain decode failed" \
   decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" "security cms -D -k $KC_PRESENT: security: stub: the keychain is locked"
 t "…and why openssl failed" \
   decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" '/usr/bin/openssl smime -verify: Error reading S/MIME message'

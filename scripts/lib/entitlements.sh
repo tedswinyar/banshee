@@ -66,19 +66,22 @@ _banshee_profile_try() {
 # fails with "A default keychain could not be found" on a perfectly valid profile,
 # even with the build keychain unlocked and first in the search list.
 #   1. security cms -D -i <profile>            a GUI login session
-#   2. security cms -D -k <build keychain> …   headless, when that keychain exists
-#   3. /usr/bin/openssl smime -verify -noverify  no keychain at all. The SYSTEM
-#      openssl (LibreSSL) by absolute path: a launchd job's PATH is not an ssh
-#      session's, and this is the binary the fallback was verified with.
+#   2. /usr/bin/openssl smime -verify -noverify  needs no keychain and writes nothing.
+#      The SYSTEM openssl (LibreSSL) by absolute path: a launchd job's PATH is not
+#      an ssh session's, and this is the binary the fallback was verified with.
+#   3. security cms -D -k <build keychain> …   LAST RESORT, only when that keychain
+#      file exists and openssl could not read the profile.
 # This only READS what the profile says. Nothing here vouches for the profile — amfid
 # does that at launch against the embedded copy — so not building the signer's chain
 # (-noverify) gives up nothing the first decoder provided.
-# Decoders 1 and 2 are not side-effect free: `security cms -D` IMPORTS the profile's
-# signer certificates into the keychain it uses (that import is the step that fails
-# without a default keychain). After a `-k` decode the build keychain was seen holding
-# "Mac OS X Provisioning Profile Signing", the Apple WWDR CA and "Apple Root CA" beside
-# the Developer ID identity (2026-11-16): certificates only, no keys, no trust
-# settings. Decoder 3 writes nothing anywhere.
+# Why openssl comes before the build keychain (ruled 2026-11-17): `security cms -D`
+# IMPORTS the profile's signer certificates into the keychain it uses (that import is
+# the step that fails without a default keychain). After a `-k` decode the build
+# keychain was seen holding "Mac OS X Provisioning Profile Signing", the Apple WWDR CA
+# and "Apple Root CA" beside the Developer ID identity (2026-11-16): certificates
+# only, no keys, no trust settings — but a decode should not write to the SIGNING
+# keychain at all. In this order that import can happen only on the last-resort path,
+# i.e. never for a profile openssl can read.
 banshee_profile_plist() {
   local profile="$1" out="$2"
   [ -r "$profile" ] || { echo "entitlements: cannot read provisioning profile $profile" >&2; return 1; }
@@ -87,15 +90,16 @@ banshee_profile_plist() {
   err="$(mktemp)"
   if _banshee_profile_try "$out" "$err" security cms -D -i "$profile"; then rm -f "$err"; return 0; fi
   reasons="security cms -D: $(cat "$err")"
+  if _banshee_profile_try "$out" "$err" /usr/bin/openssl smime -inform der -verify -noverify -in "$profile"; then rm -f "$err"; return 0; fi
+  # openssl follows its one-line reason with an error-queue dump; the first line is it.
+  reasons="$reasons; /usr/bin/openssl smime -verify: $(sed -n '1s/ \/ .*//p' "$err")"
+  # Last resort, and the only path that can write to the build keychain (see above).
   if [ -f "$kc" ]; then
     if _banshee_profile_try "$out" "$err" security cms -D -k "$kc" -i "$profile"; then rm -f "$err"; return 0; fi
     reasons="$reasons; security cms -D -k $kc: $(cat "$err")"
   else
-    reasons="$reasons; no build keychain at $kc to retry with"
+    reasons="$reasons; no build keychain at $kc for the last resort"
   fi
-  if _banshee_profile_try "$out" "$err" /usr/bin/openssl smime -inform der -verify -noverify -in "$profile"; then rm -f "$err"; return 0; fi
-  # openssl follows its one-line reason with an error-queue dump; the first line is it.
-  reasons="$reasons; /usr/bin/openssl smime -verify: $(sed -n '1s/ \/ .*//p' "$err")"
   rm -f "$err"
   : > "$out"
   echo "entitlements: could not decode $profile as a CMS-signed provisioning profile — $reasons" >&2

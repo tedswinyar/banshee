@@ -1,0 +1,12 @@
+# `security cms -D -k` imports the profile's signer certificates into the SIGNING
+# keychain, so it may run only when openssl could not read the profile (ruled
+# 2026-11-17, banshee-zcp). With openssl's success no longer returning, the decode
+# goes on to the keychain and still "works":
+# '…and when openssl succeeds, security -k is never invoked (nothing is written to the
+# signing keychain)' fails.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+-noverify -in "$profile"; then rm -f "$err"; return 0; fi
+---NEW---
+-noverify -in "$profile"; then :; fi

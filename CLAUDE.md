@@ -438,9 +438,13 @@ class); add your own the moment one bites.
   next release refused a good profile, and the wrong message sent the time that night
   to the file instead of to the session. **Found only by running the import on the
   real build server** — no test could see it, because every decoder test ran where a
-  default keychain exists. The decode now falls back to `-k <build keychain>` and then
-  `/usr/bin/openssl smime -verify -noverify`, and a failure prints each decoder's
-  stderr. Two rules out of it: **never discard a tool's stderr and substitute your own
+  default keychain exists. The decode now falls back to `/usr/bin/openssl smime
+  -verify -noverify`, and only as a last resort to `-k <build keychain>`, and a failure
+  prints each decoder's stderr. That order is deliberate (ruled 2026-11-17):
+  `security cms -D -k` IMPORTS the profile's signer certificates into the keychain it
+  is given — the "read-only workaround" left three Apple certificates in the signing
+  keychain — so the keychain import can now only happen on the last-resort path, when
+  openssl cannot read the profile. Two rules out of it: **never discard a tool's stderr and substitute your own
   diagnosis**, and anything that touches `security` must be tried as the build user
   over ssh before a release depends on it (the test stubs `security` on `PATH` to
   reproduce the headless answer; that is a reproduction, not the proof).

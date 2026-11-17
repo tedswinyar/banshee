@@ -52,14 +52,17 @@ imports the profile's signer certificates into the default keychain, and the bui
 user — ssh-only, and the same under launchd — has none: it fails there with
 `cert import failed: A default keychain could not be found` on a perfectly valid
 profile, unlocked build keychain or not. `banshee_profile_plist` therefore tries, in
-order, `security cms -D -i <profile>` (a GUI login session), `security cms -D -k
-<build keychain> -i <profile>` when that keychain file exists (`BANSHEE_BUILD_KEYCHAIN`,
-default `~/Library/Keychains/banshee-build.keychain-db` — the one
-`unlock-build-keychain.sh` unlocks), then `/usr/bin/openssl smime -inform der -verify
--noverify` (the system LibreSSL, by absolute path, so a job's `PATH` cannot change
-which one runs). The two `security` decodes import the profile's signer certificates
-(Apple's profile-signing chain; no keys, no trust settings) into the keychain they
-use; the openssl decode writes nothing. Each result must still be a property list. When all three fail the
+order, `security cms -D -i <profile>` (a GUI login session), then `/usr/bin/openssl
+smime -inform der -verify -noverify` (the system LibreSSL, by absolute path, so a
+job's `PATH` cannot change which one runs), and only as a last resort `security cms
+-D -k <build keychain> -i <profile>` when that keychain file exists
+(`BANSHEE_BUILD_KEYCHAIN`, default `~/Library/Keychains/banshee-build.keychain-db` —
+the one `unlock-build-keychain.sh` unlocks). openssl comes before the build keychain
+on purpose: a `security` decode imports the profile's signer certificates (Apple's
+profile-signing chain; no keys, no trust settings) into the keychain it uses, the
+openssl decode writes nothing, and a decode should not write to the signing keychain.
+In this order that import can only happen on the last-resort path — never for a
+profile openssl can read. Each result must still be a property list. When all three fail the
 message carries each decoder's own stderr, so "the file is not a profile" and "this
 session cannot open a keychain" no longer read the same.
 
@@ -70,7 +73,8 @@ session cannot open a keychain" no longer read the same.
 *Distribution: Developer ID* → that App ID → the Developer ID Application certificate
 → name it → Generate → Download. On the build server, as `builder`, with the build
 keychain already created by `import-signing-material.sh` (it need not be the default
-keychain, and the build user needs no default keychain at all):
+keychain, the build user needs no default keychain at all, and the decode does not
+write to it unless openssl cannot read the profile):
 `scripts/build-server/import-provisioning-profile.sh ~/Banshee_Developer_ID.provisionprofile`
 (copies it 0600 under `~/.config/banshee-build/`, records `PROVISIONING_PROFILE` in
 release.conf, ends with `doctor.sh --release`). The app logs at launch whether it was

@@ -269,7 +269,9 @@ profile can authorise). amfid kills such a process at exec. Confirm with
 `security cms -D -i Banshee.app/Contents/embedded.provisionprofile` (what does the
 profile grant, for which `application-identifier`, until when? In an ssh session with
 no default keychain that command fails on a valid profile — use
-`/usr/bin/openssl smime -inform der -verify -noverify -in <profile>` there).
+`/usr/bin/openssl smime -inform der -verify -noverify -in <profile>` there: it is
+what the build scripts fall back to, and unlike `security cms -D -k <keychain>` it
+does not import the profile's signer certificates into a keychain).
 
 **Fix**: a build from `scripts/build-app.sh` refuses to produce this bundle — it
 requires and validates `PROVISIONING_PROFILE` on the Developer ID path and never

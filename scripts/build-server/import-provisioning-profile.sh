@@ -11,8 +11,9 @@ set -euo pipefail
 # release job's doctor --release says when). The build keychain must already exist
 # (import-signing-material.sh makes it); it does not have to be the default keychain,
 # and the build user does not need one: an ssh-only user has NO default keychain, and
-# `security cms -D` alone fails there on a valid profile, so the decode retries with
-# the build keychain and then with /usr/bin/openssl (scripts/lib/entitlements.sh,
+# `security cms -D` alone fails there on a valid profile, so the decode falls back to
+# /usr/bin/openssl, and to the build keychain only as a last resort — that decode
+# imports the profile's signer certificates into it (scripts/lib/entitlements.sh,
 # banshee-zcp). What it does:
 #   ~/.config/banshee-build/Banshee.provisionprofile   0600 copy of the profile
 #   ~/.config/banshee-build/release.conf               PROVISIONING_PROFILE= line added/replaced

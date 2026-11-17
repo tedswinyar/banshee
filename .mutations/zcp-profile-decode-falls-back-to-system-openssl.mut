@@ -1,6 +1,8 @@
-# With no build keychain (or one that cannot decode), /usr/bin/openssl is the last
-# decoder. With it removed, a real CMS blob is refused:
-# 'no default keychain and no build keychain: /usr/bin/openssl decodes the profile'.
+# The build user has no default keychain, so plain `security cms -D` fails on a valid
+# profile (2026-11-16, banshee-zcp) and /usr/bin/openssl is the decoder that answers.
+# With it removed, a real CMS blob is refused where there is no build keychain:
+# 'no default keychain and no build keychain: /usr/bin/openssl decodes the profile'
+# (and with one, the decode reaches security -k, which the never-invoked pin catches).
 file: scripts/lib/entitlements.sh
 test: test-entitlements
 ---OLD---
