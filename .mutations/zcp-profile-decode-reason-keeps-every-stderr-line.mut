@@ -1,0 +1,9 @@
+# security puts the cause on its FIRST stderr line and 'problem decoding' on the last.
+# With only the last line kept: '…and the reason carries security's own words about the
+# default keychain' fails.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+    why="$(grep -v '^[[:space:]]*$' "$err" | tr '\n' '|' | sed 's/|$//; s/|/ \/ /g')"
+---NEW---
+    why="$(tail -1 "$err")"

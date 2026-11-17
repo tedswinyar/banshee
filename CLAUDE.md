@@ -426,6 +426,24 @@ class); add your own the moment one bites.
   generated files (a home path in a `path+file:///Users/…` purl is still refused — the
   SBOM embeds the build user's), and `release.sh` re-gates the tree after the commit.
   **Every gate must run after the last write it is meant to catch.**
+- **`security cms -D` needs a DEFAULT keychain, and a headless build user has none
+  (2026-11-16, `banshee-zcp`).** Decoding a provisioning profile imports its signer
+  certificates into the default keychain. The ssh-only build user (and the launchd
+  runner job) has no default keychain, so `security cms -D -i` exits 1 with
+  `cert import failed: A default keychain could not be found` — with the build
+  keychain unlocked and first in the search list, which is a different thing. The
+  library threw that stderr away and reported the valid Developer ID profile as "not a
+  CMS-signed provisioning profile"; the same file decoded fine in a GUI login session,
+  so every run on the development machine was green. Cost: the profile import for the
+  next release refused a good profile, and the wrong message sent the time that night
+  to the file instead of to the session. **Found only by running the import on the
+  real build server** — no test could see it, because every decoder test ran where a
+  default keychain exists. The decode now falls back to `-k <build keychain>` and then
+  `/usr/bin/openssl smime -verify -noverify`, and a failure prints each decoder's
+  stderr. Two rules out of it: **never discard a tool's stderr and substitute your own
+  diagnosis**, and anything that touches `security` must be tried as the build user
+  over ssh before a release depends on it (the test stubs `security` on `PATH` to
+  reproduce the headless answer; that is a reproduction, not the proof).
 - **macOS file permissions, verified by execution (2026-08-06):** `chmod 600`
   does not remove an ACL (`chmod -N` does); `ls -l` cannot show you whether an
   ACL exists (use `ls -le`); `/bin/chmod 600 -- f` exits 1 *while still

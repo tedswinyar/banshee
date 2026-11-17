@@ -37,7 +37,7 @@ and that has two consequences `build-app.sh` enforces:
 | Developer ID | **required**, with `PROVISIONING_PROFILE` | the claim must be backed by a Developer ID provisioning profile embedded at `Contents/embedded.provisionprofile`, or amfid kills the app at launch — after codesign, notarization and stapling all passed |
 | Developer ID, `SKIP_TIME_SENSITIVE=1` | none (loud warning) | the deliberate way to ship without it; banners then do not break through Focus |
 
-Before anything is signed the profile is decoded (`security cms -D`) and refused
+Before anything is signed the profile is decoded and refused
 unless it is a Developer ID profile (`ProvisionsAllDevices`), grants the key, is for
 `<TEAM>.com.tedswinyar.banshee`, and has not expired (`scripts/lib/entitlements.sh`;
 `scripts/tests/test-entitlements.sh` pins each refusal). The entitlements actually
@@ -47,12 +47,28 @@ profile expects, and the sealed app is read back to confirm the claim landed.
 `doctor.sh --release` runs the same profile check, so the release job stops at the
 credentials step rather than after a twenty-minute build.
 
+**The decode does not need a default keychain** (banshee-zcp). `security cms -D`
+imports the profile's signer certificates into the default keychain, and the build
+user — ssh-only, and the same under launchd — has none: it fails there with
+`cert import failed: A default keychain could not be found` on a perfectly valid
+profile, unlocked build keychain or not. `banshee_profile_plist` therefore tries, in
+order, `security cms -D -i <profile>` (a GUI login session), `security cms -D -k
+<build keychain> -i <profile>` when that keychain file exists (`BANSHEE_BUILD_KEYCHAIN`,
+default `~/Library/Keychains/banshee-build.keychain-db` — the one
+`unlock-build-keychain.sh` unlocks), then `/usr/bin/openssl smime -inform der -verify
+-noverify` (the system LibreSSL, by absolute path, so a job's `PATH` cannot change
+which one runs). Each result must still be a property list. When all three fail the
+message carries each decoder's own stderr, so "the file is not a profile" and "this
+session cannot open a keychain" no longer read the same.
+
 **Making the profile** (a person, once a year — profiles expire): developer.apple.com
 → Certificates, Identifiers & Profiles → *Identifiers* → `com.tedswinyar.banshee`
 (create it as a macOS App ID with an explicit bundle id if absent) → *Capabilities*
 → tick **Time Sensitive Notifications** → Save. Then *Profiles* → **+** →
 *Distribution: Developer ID* → that App ID → the Developer ID Application certificate
-→ name it → Generate → Download. On the build server, as `builder`:
+→ name it → Generate → Download. On the build server, as `builder`, with the build
+keychain already created by `import-signing-material.sh` (it need not be the default
+keychain, and the build user needs no default keychain at all):
 `scripts/build-server/import-provisioning-profile.sh ~/Banshee_Developer_ID.provisionprofile`
 (copies it 0600 under `~/.config/banshee-build/`, records `PROVISIONING_PROFILE` in
 release.conf, ends with `doctor.sh --release`). The app logs at launch whether it was

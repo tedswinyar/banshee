@@ -1,0 +1,10 @@
+# A valid profile was reported as 'not a CMS-signed provisioning profile' while
+# security's stderr said 'A default keychain could not be found' (banshee-zcp). With
+# the captured reason replaced by a fixed string:
+# '…and the reason carries security's own words about the default keychain' fails.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  reasons="security cms -D: $(cat "$err")"
+---NEW---
+  reasons="security cms -D failed"

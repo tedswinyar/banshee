@@ -8,7 +8,12 @@ set -euo pipefail
 #   import-provisioning-profile.sh --no-conf <profile> "<signing identity>"   # from import-signing-material.sh
 #
 # Run AS THE BUILD USER on the build host, once per profile (they expire yearly; the
-# release job's doctor --release says when). What it does:
+# release job's doctor --release says when). The build keychain must already exist
+# (import-signing-material.sh makes it); it does not have to be the default keychain,
+# and the build user does not need one: an ssh-only user has NO default keychain, and
+# `security cms -D` alone fails there on a valid profile, so the decode retries with
+# the build keychain and then with /usr/bin/openssl (scripts/lib/entitlements.sh,
+# banshee-zcp). What it does:
 #   ~/.config/banshee-build/Banshee.provisionprofile   0600 copy of the profile
 #   ~/.config/banshee-build/release.conf               PROVISIONING_PROFILE= line added/replaced
 # It refuses a profile that is not Developer ID, does not grant the entitlement, is
@@ -47,7 +52,7 @@ TEAM="$(banshee_team_id_from_identity "$IDENTITY")" || die "no Team ID in signin
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
-banshee_profile_plist "$PROFILE" "$tmp" || die "not a provisioning profile: $PROFILE"
+banshee_profile_plist "$PROFILE" "$tmp" || die "cannot decode $PROFILE — each decoder's reason is on the line above"
 banshee_check_profile_plist "$tmp" "$BANSHEE_BUNDLE_ID" "$TEAM" || die "refusing $PROFILE for $TEAM.$BANSHEE_BUNDLE_ID"
 info "profile grants $BANSHEE_TIME_SENSITIVE_KEY to $TEAM.$BANSHEE_BUNDLE_ID, expires $(plutil -extract ExpirationDate raw -o - "$tmp")"
 

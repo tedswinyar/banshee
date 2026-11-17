@@ -1,0 +1,9 @@
+# A decoder that exits 0 having printed something that is not a plist has not decoded
+# a profile. With the plutil -lint check gone:
+# 'a decoder that succeeds but prints no plist is not believed' fails.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  if ! plutil -lint "$out" >/dev/null 2>&1; then
+---NEW---
+  if false; then

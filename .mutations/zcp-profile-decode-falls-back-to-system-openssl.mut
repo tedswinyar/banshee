@@ -1,0 +1,9 @@
+# With no build keychain (or one that cannot decode), /usr/bin/openssl is the last
+# decoder. With it removed, a real CMS blob is refused:
+# 'no default keychain and no build keychain: /usr/bin/openssl decodes the profile'.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  if _banshee_profile_try "$out" "$err" /usr/bin/openssl smime -inform der -verify -noverify -in "$profile"; then rm -f "$err"; return 0; fi
+---NEW---
+  if false; then rm -f "$err"; return 0; fi

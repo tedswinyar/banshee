@@ -13,7 +13,7 @@
 # that keeps a release from shipping an app that cannot start.
 #
 # Pure functions take PLISTS (XML), so the tests can hand them synthetic ones; only
-# banshee_profile_plist touches `security`, and only on a real profile.
+# banshee_profile_plist touches `security` and `openssl`, and only to READ a profile.
 
 BANSHEE_TIME_SENSITIVE_KEY="com.apple.developer.usernotifications.time-sensitive"
 # The App ID the profile must be for. build-app.sh spells its own BUNDLE_ID; the
@@ -30,16 +30,70 @@ banshee_team_id_from_identity() {
   printf '%s\n' "$team"
 }
 
+# The build user's signing keychain — the same path and override that
+# scripts/build-server/unlock-build-keychain.sh uses.
+banshee_build_keychain() {
+  printf '%s\n' "${BANSHEE_BUILD_KEYCHAIN:-$HOME/Library/Keychains/banshee-build.keychain-db}"
+}
+
+# _banshee_profile_try <out.plist> <err-file> <command…>
+# Runs one decoder with stdout to <out.plist>. Exit 0 iff it succeeded AND printed a
+# property list; otherwise <err-file> holds one line saying why.
+_banshee_profile_try() {
+  local out="$1" err="$2"; shift 2
+  if ! "$@" > "$out" 2> "$err"; then
+    # Every stderr line, joined: `security` puts the cause on the FIRST line ("cert
+    # import failed: A default keychain could not be found.") and a generic "problem
+    # decoding" on the last, so neither head nor tail alone is the reason.
+    local why
+    why="$(grep -v '^[[:space:]]*$' "$err" | tr '\n' '|' | sed 's/|$//; s/|/ \/ /g')"
+    printf '%s\n' "${why:-exit non-zero, no message}" > "$err"
+    return 1
+  fi
+  if ! plutil -lint "$out" >/dev/null 2>&1; then
+    printf 'decoded, but the content is not a property list\n' > "$err"
+    return 1
+  fi
+}
+
 # banshee_profile_plist <profile> <out.plist>
-# Decodes the CMS-signed .provisionprofile into its XML plist. Exit 1 when the file is
-# not a profile (a .cer, a .p12, an HTML download page).
+# Decodes the CMS-signed .provisionprofile into its XML plist. Exit 1 when no decoder
+# can read it (a .cer, a .p12, an HTML download page), with EACH decoder's own reason.
+#
+# Three decoders, in order, because the obvious one does not work where releases are
+# built (2026-11-16, banshee-zcp): `security cms -D` imports the signer certificates
+# into the DEFAULT keychain, and an ssh-only or launchd build user has none — it then
+# fails with "A default keychain could not be found" on a perfectly valid profile,
+# even with the build keychain unlocked and first in the search list.
+#   1. security cms -D -i <profile>            a GUI login session
+#   2. security cms -D -k <build keychain> …   headless, when that keychain exists
+#   3. /usr/bin/openssl smime -verify -noverify  no keychain at all. The SYSTEM
+#      openssl (LibreSSL) by absolute path: a launchd job's PATH is not an ssh
+#      session's, and this is the binary the fallback was verified with.
+# This only READS what the profile says. Nothing here vouches for the profile — amfid
+# does that at launch against the embedded copy — so not building the signer's chain
+# (-noverify) gives up nothing the first decoder provided.
 banshee_profile_plist() {
   local profile="$1" out="$2"
   [ -r "$profile" ] || { echo "entitlements: cannot read provisioning profile $profile" >&2; return 1; }
-  if ! security cms -D -i "$profile" > "$out" 2>/dev/null || ! plutil -lint "$out" >/dev/null 2>&1; then
-    echo "entitlements: $profile is not a CMS-signed provisioning profile (security cms -D failed)" >&2
-    return 1
+  local kc err reasons
+  kc="$(banshee_build_keychain)"
+  err="$(mktemp)"
+  if _banshee_profile_try "$out" "$err" security cms -D -i "$profile"; then rm -f "$err"; return 0; fi
+  reasons="security cms -D: $(cat "$err")"
+  if [ -f "$kc" ]; then
+    if _banshee_profile_try "$out" "$err" security cms -D -k "$kc" -i "$profile"; then rm -f "$err"; return 0; fi
+    reasons="$reasons; security cms -D -k $kc: $(cat "$err")"
+  else
+    reasons="$reasons; no build keychain at $kc to retry with"
   fi
+  if _banshee_profile_try "$out" "$err" /usr/bin/openssl smime -inform der -verify -noverify -in "$profile"; then rm -f "$err"; return 0; fi
+  # openssl follows its one-line reason with an error-queue dump; the first line is it.
+  reasons="$reasons; /usr/bin/openssl smime -verify: $(sed -n '1s/ \/ .*//p' "$err")"
+  rm -f "$err"
+  : > "$out"
+  echo "entitlements: could not decode $profile as a CMS-signed provisioning profile — $reasons" >&2
+  return 1
 }
 
 # banshee_check_profile_plist <decoded.plist> <bundle_id> <team_id>

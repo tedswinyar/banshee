@@ -16,6 +16,12 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=../lib/entitlements.sh
 . "$SCRIPT_DIR/lib/entitlements.sh"
 
+# Start from a clean env, not the caller's (CLAUDE.md → Gotchas, 2026-09-14): the
+# decoder reads the build keychain's path from the environment, and this suite also
+# runs ON the build server, inside a release job that has those variables set and a
+# real build keychain in $HOME. Every decoder case below names its own keychain path.
+unset BANSHEE_BUILD_KEYCHAIN BANSHEE_BUILD_KEYCHAIN_PASSWORD_FILE SIGNING_KEYCHAIN
+
 PASS=0
 FAIL=0
 t() {
@@ -129,12 +135,157 @@ profile "$WORK/good.plist" true true "$APP" "$FUTURE"
 t_fails "a profile with no ExpirationDate is refused" \
   banshee_check_profile_plist "$WORK/noexp.plist" com.tedswinyar.banshee TEAMID1234
 
-# Not a profile at all: a certificate, an HTML download page, nothing.
+# Not a profile at all: a certificate, an HTML download page, nothing. These two run
+# the REAL `security` and openssl; the keychain path is pinned to one that does not
+# exist so the build server's own keychain is never consulted.
+export BANSHEE_BUILD_KEYCHAIN="$WORK/no-such.keychain-db"
 printf 'not a plist' > "$WORK/junk.provisionprofile"
 t_fails "a file that is not a CMS profile is refused by the decoder" \
   banshee_profile_plist "$WORK/junk.provisionprofile" "$WORK/junk.plist"
 t_fails "a missing profile is refused by the decoder" \
   banshee_profile_plist "$WORK/does-not-exist.provisionprofile" "$WORK/none.plist"
+unset BANSHEE_BUILD_KEYCHAIN
+
+# ---------------------------------------------------------------------------
+# 2b. Decoding where there is NO DEFAULT KEYCHAIN (banshee-zcp)
+# ---------------------------------------------------------------------------
+# The build user is ssh-only: `security cms -D` fails there on a valid profile with
+# "A default keychain could not be found", and on 2026-11-16 the import reported the
+# real profile as "not a CMS-signed provisioning profile". Reproduced with a STUB
+# `security` first on PATH — no keychain on this machine is read, created or changed.
+# The stub logs every call, says what the real one said for the plain decode, and
+# answers the `-k <keychain>` decode as $STUB_K tells it to.
+STUB_BIN="$WORK/bin"; mkdir -p "$STUB_BIN"
+STUB_LOG="$WORK/security.calls"
+cat > "$STUB_BIN/security" <<'STUB_EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "$STUB_LOG"
+case "$1 $2 $3" in
+  "cms -D -i")
+    case "${STUB_PLAIN:-no-default}" in
+      ok) cat "$STUB_PLIST"; exit 0 ;;
+      garbage) echo "exit 0, and this is not a plist"; exit 0 ;;
+    esac
+    echo "security: cert import failed: A default keychain could not be found." >&2
+    echo "security: problem decoding" >&2
+    exit 1 ;;
+  "cms -D -k")
+    [ "$4" = "$STUB_KC" ] || { echo "security: stub: unexpected keychain $4" >&2; exit 1; }
+    [ "${STUB_K:-ok}" = ok ] || { echo "security: stub: the keychain is locked" >&2; exit 1; }
+    cat "$STUB_PLIST"; exit 0 ;;
+esac
+echo "security: stub: unexpected call: $*" >&2; exit 64
+STUB_EOF
+chmod +x "$STUB_BIN/security"
+export STUB_LOG STUB_PLIST="$WORK/good.plist"
+
+# A keychain FILE is all the decoder looks for; the stub stands in for its contents.
+KC_PRESENT="$WORK/present.keychain-db"; : > "$KC_PRESENT"
+KC_ABSENT="$WORK/absent.keychain-db"
+
+# A REAL CMS blob for the openssl path: good.plist signed, DER, by a throwaway
+# self-signed certificate made here with the system openssl (files only, in $WORK).
+# Without it the openssl decode could only ever be tested against junk.
+REAL_CMS="$WORK/real.provisionprofile"
+if /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=banshee-test" \
+     -keyout "$WORK/signer.key" -out "$WORK/signer.pem" >/dev/null 2>&1 \
+   && /usr/bin/openssl smime -sign -binary -nodetach -outform der \
+     -signer "$WORK/signer.pem" -inkey "$WORK/signer.key" \
+     -in "$WORK/good.plist" -out "$REAL_CMS" >/dev/null 2>&1; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "  ✗ could not build a CMS-signed test profile with /usr/bin/openssl" >&2
+fi
+
+# decode <keychain-path> <profile> <out>: the decoder with the stub `security` first
+# on PATH, a fresh call log, and the keychain path under test. A subshell, so nothing
+# leaks into the cases that use the real tools further down.
+decode() (
+  : > "$STUB_LOG"
+  export PATH="$STUB_BIN:$PATH" BANSHEE_BUILD_KEYCHAIN="$1" STUB_KC="$1"
+  banshee_profile_plist "$2" "$3"
+)
+# decodes_to_good …: succeeded AND produced exactly the plist that was signed, which
+# the pure checks then accept — the decoders must agree on bytes, not just on "ok".
+decodes_to_good() {
+  decode "$@" || return 1
+  cmp -s "$3" "$WORK/good.plist" && banshee_check_profile_plist "$3" com.tedswinyar.banshee TEAMID1234
+}
+calls() { [ "$(grep -c -- "$1" "$STUB_LOG")" = "$2" ]; }
+# decode_says <keychain> <profile> <text>: refused AND the message contains <text>.
+decode_says() {
+  local msg
+  if msg="$(decode "$1" "$2" "$WORK/says.plist" 2>&1)"; then return 1; fi
+  printf '%s\n' "$msg" | grep -qF -- "$3"
+}
+decode_never_says() {
+  local msg
+  if msg="$(decode "$1" "$2" "$WORK/says.plist" 2>&1)"; then return 1; fi
+  if printf '%s\n' "$msg" | grep -qF -- "$3"; then return 1; fi
+}
+
+# The profile here is JUNK on purpose: only the `-k` decode can produce a plist from
+# it, so a pass proves the keychain retry ran (openssl would refuse the file).
+t "no default keychain: the decode retries with -k <build keychain> and succeeds" \
+  decodes_to_good "$KC_PRESENT" "$WORK/junk.provisionprofile" "$WORK/k.plist"
+t "…having tried the plain decode first, exactly once" calls '^cms -D -i ' 1
+t "…and the keychain decode exactly once" calls '^cms -D -k ' 1
+
+# No build keychain at all (not provisioned yet, or a job that is not given one): the
+# system openssl reads the real CMS blob. `security` fails throughout.
+t "no default keychain and no build keychain: /usr/bin/openssl decodes the profile" \
+  decodes_to_good "$KC_ABSENT" "$REAL_CMS" "$WORK/o.plist"
+t "…without handing security a keychain that does not exist" calls '^cms -D -k ' 0
+
+export STUB_K=locked
+t "a build keychain that cannot decode it (locked) still falls through to openssl" \
+  decodes_to_good "$KC_PRESENT" "$REAL_CMS" "$WORK/lo.plist"
+t "…after the keychain decode was tried" calls '^cms -D -k ' 1
+
+# Every path fails: the message must carry each decoder's OWN reason. The words that
+# cost the evening must not come back for a failure that is not about the file.
+t_fails "when every decoder fails the profile is refused" \
+  decode "$KC_PRESENT" "$WORK/junk.provisionprofile" "$WORK/allfail.plist"
+t "…and a refused decode leaves no half-written plist behind" test ! -s "$WORK/allfail.plist"
+t "…and the reason carries security's own words about the default keychain" \
+  decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" 'A default keychain could not be found'
+t "…and why the build-keychain retry failed" \
+  decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" "security cms -D -k $KC_PRESENT: security: stub: the keychain is locked"
+t "…and why openssl failed" \
+  decode_says "$KC_PRESENT" "$WORK/junk.provisionprofile" '/usr/bin/openssl smime -verify: Error reading S/MIME message'
+t "…and never the old verdict on the file" \
+  decode_never_says "$KC_PRESENT" "$WORK/junk.provisionprofile" 'is not a CMS-signed provisioning profile'
+t "…and with no build keychain it says that, by path" \
+  decode_says "$KC_ABSENT" "$WORK/junk.provisionprofile" "no build keychain at $KC_ABSENT"
+unset STUB_K
+
+# The plist check survives on every path: a decoder that exits 0 having printed
+# something else has not decoded a profile.
+export STUB_PLAIN=garbage
+t_fails "a decoder that succeeds but prints no plist is not believed" \
+  decode "$KC_ABSENT" "$WORK/junk.provisionprofile" "$WORK/garbage.plist"
+t "…and the reason says so" \
+  decode_says "$KC_ABSENT" "$WORK/junk.provisionprofile" 'security cms -D: decoded, but the content is not a property list'
+export STUB_PLAIN=ok
+t "where the plain decode works (a GUI login session) it is used" \
+  decodes_to_good "$KC_PRESENT" "$WORK/junk.provisionprofile" "$WORK/plain.plist"
+t "…and nothing else is tried" calls '^cms ' 1
+unset STUB_PLAIN
+
+# The DEFAULT keychain path is the one unlock-build-keychain.sh uses. $HOME is moved
+# into the work dir for this one case; the stub refuses any other -k path.
+FAKE_HOME="$WORK/home"; mkdir -p "$FAKE_HOME/Library/Keychains"
+: > "$FAKE_HOME/Library/Keychains/banshee-build.keychain-db"
+default_keychain_decode() (
+  : > "$STUB_LOG"
+  unset BANSHEE_BUILD_KEYCHAIN
+  export HOME="$FAKE_HOME" PATH="$STUB_BIN:$PATH" STUB_KC="$FAKE_HOME/Library/Keychains/banshee-build.keychain-db"
+  banshee_profile_plist "$WORK/junk.provisionprofile" "$WORK/dk.plist" && cmp -s "$WORK/dk.plist" "$WORK/good.plist"
+)
+t "with BANSHEE_BUILD_KEYCHAIN unset the retry uses ~/Library/Keychains/banshee-build.keychain-db" \
+  default_keychain_decode
+t "the library and unlock-build-keychain.sh spell the default keychain path the same way" \
+  grep -qF 'KC="${BANSHEE_BUILD_KEYCHAIN:-$HOME/Library/Keychains/banshee-build.keychain-db}"' "$SCRIPT_DIR/build-server/unlock-build-keychain.sh"
 
 # ---------------------------------------------------------------------------
 # 3. The entitlements the app is actually sealed with

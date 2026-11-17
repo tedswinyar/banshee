@@ -1,0 +1,10 @@
+# The build user has no default keychain, so plain `security cms -D` fails on a valid
+# profile (2026-11-16, banshee-zcp). With the -k retry skipped, the case whose profile
+# only the keychain decode can read fails:
+# 'no default keychain: the decode retries with -k <build keychain> and succeeds'.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  if [ -f "$kc" ]; then
+---NEW---
+  if false; then

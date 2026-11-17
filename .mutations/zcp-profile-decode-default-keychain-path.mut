@@ -1,0 +1,9 @@
+# The -k retry must use the keychain unlock-build-keychain.sh unlocks. With another
+# default path: 'with BANSHEE_BUILD_KEYCHAIN unset the retry uses
+# ~/Library/Keychains/banshee-build.keychain-db' fails.
+file: scripts/lib/entitlements.sh
+test: test-entitlements
+---OLD---
+  printf '%s\n' "${BANSHEE_BUILD_KEYCHAIN:-$HOME/Library/Keychains/banshee-build.keychain-db}"
+---NEW---
+  printf '%s\n' "${BANSHEE_BUILD_KEYCHAIN:-$HOME/Library/Keychains/login.keychain-db}"
