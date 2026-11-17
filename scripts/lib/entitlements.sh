@@ -13,7 +13,7 @@
 # that keeps a release from shipping an app that cannot start.
 #
 # Pure functions take PLISTS (XML), so the tests can hand them synthetic ones; only
-# banshee_profile_plist touches `security` and `openssl`, and only to READ a profile.
+# banshee_profile_plist touches `security` and `openssl`, and only to decode a profile.
 
 BANSHEE_TIME_SENSITIVE_KEY="com.apple.developer.usernotifications.time-sensitive"
 # The App ID the profile must be for. build-app.sh spells its own BUNDLE_ID; the
@@ -73,6 +73,12 @@ _banshee_profile_try() {
 # This only READS what the profile says. Nothing here vouches for the profile — amfid
 # does that at launch against the embedded copy — so not building the signer's chain
 # (-noverify) gives up nothing the first decoder provided.
+# Decoders 1 and 2 are not side-effect free: `security cms -D` IMPORTS the profile's
+# signer certificates into the keychain it uses (that import is the step that fails
+# without a default keychain). After a `-k` decode the build keychain was seen holding
+# "Mac OS X Provisioning Profile Signing", the Apple WWDR CA and "Apple Root CA" beside
+# the Developer ID identity (2026-11-16): certificates only, no keys, no trust
+# settings. Decoder 3 writes nothing anywhere.
 banshee_profile_plist() {
   local profile="$1" out="$2"
   [ -r "$profile" ] || { echo "entitlements: cannot read provisioning profile $profile" >&2; return 1; }

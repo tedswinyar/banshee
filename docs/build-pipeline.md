@@ -57,7 +57,9 @@ order, `security cms -D -i <profile>` (a GUI login session), `security cms -D -k
 default `~/Library/Keychains/banshee-build.keychain-db` — the one
 `unlock-build-keychain.sh` unlocks), then `/usr/bin/openssl smime -inform der -verify
 -noverify` (the system LibreSSL, by absolute path, so a job's `PATH` cannot change
-which one runs). Each result must still be a property list. When all three fail the
+which one runs). The two `security` decodes import the profile's signer certificates
+(Apple's profile-signing chain; no keys, no trust settings) into the keychain they
+use; the openssl decode writes nothing. Each result must still be a property list. When all three fail the
 message carries each decoder's own stderr, so "the file is not a profile" and "this
 session cannot open a keychain" no longer read the same.
 
