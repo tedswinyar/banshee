@@ -1,0 +1,10 @@
+# The mark beside the empty History and Alerts states is 96 points square, twice
+# the first version (banshee-v54.4; ruled 2026-11-16 from the renders). The pin
+# measures the mark's drawn width on the offscreen render of both screens, so it
+# also fails if a view stops taking its size from this token.
+file: swift/Sources/DesignKit/Tokens.swift
+test: ScreenRenderTests/testTheEmptyStateMarkIsDrawnAtItsRuledSize
+---OLD---
+    public static let emptyStateMark: CGFloat = 96
+---NEW---
+    public static let emptyStateMark: CGFloat = 48

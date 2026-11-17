@@ -247,6 +247,77 @@ final class ScreenRenderTests: XCTestCase {
         }
     }
 
+    // ---- the empty-state mark's size (banshee-v54.4) --------------------------
+
+    /// How wide the mark is DRAWN in an empty state, in points, read off the render.
+    ///
+    /// The empty state is the tallest block of ink on its screen (the pickers above
+    /// it and the store line below it are shorter), and the mark is the first thing
+    /// in that block from the left, with clear background between it and the words.
+    /// So: find the tallest run of inked rows, then the first run of inked columns
+    /// inside it. Sampled once per point.
+    private func drawnMarkWidth(_ rep: NSBitmapImageRep) throws -> CGFloat {
+        let scale = CGFloat(rep.pixelsWide) / rep.size.width
+        let step = Int(scale)
+        let background = try XCTUnwrap(rep.colorAt(x: 1, y: 1))
+        func inked(_ x: Int, _ y: Int) -> Bool {
+            guard let c = rep.colorAt(x: x, y: y) else { return false }
+            return abs(c.redComponent - background.redComponent) > 0.08
+                || abs(c.greenComponent - background.greenComponent) > 0.08
+                || abs(c.blueComponent - background.blueComponent) > 0.08
+        }
+        let columns = Array(stride(from: 0, to: rep.pixelsWide, by: step))
+        let rows = Array(stride(from: 0, to: rep.pixelsHigh, by: step))
+
+        /// Runs of `true`, where up to `bridge` consecutive `false` do not end a run
+        /// (the space between two lines of text is not the end of the block).
+        func runs(_ flags: [Bool], bridge: Int) -> [Range<Int>] {
+            var found: [Range<Int>] = []
+            var start: Int?, last = 0
+            for (i, on) in flags.enumerated() where on {
+                if let s = start, i - last > bridge + 1 {
+                    found.append(s..<(last + 1))
+                    start = i
+                } else if start == nil {
+                    start = i
+                }
+                last = i
+            }
+            if let s = start { found.append(s..<(last + 1)) }
+            return found
+        }
+
+        let rowInked = rows.map { y in columns.contains { inked($0, y) } }
+        let block = try XCTUnwrap(
+            runs(rowInked, bridge: 8).max { $0.count < $1.count }, "the render has no ink at all")
+        let columnInked = columns.map { x in block.contains { inked(x, rows[$0]) } }
+        let mark = try XCTUnwrap(runs(columnInked, bridge: 0).first, "the empty-state block has no ink")
+        return CGFloat(mark.count)
+    }
+
+    /// The mark beside the empty History and Alerts states is drawn in a 96-point
+    /// square — twice the first version's 48, which read well but was too small in
+    /// the window (ruled 2026-11-16).
+    ///
+    /// Measured on the RENDER, not read from the token: a test of the token alone
+    /// would pass with a view that stopped using it. The mark's ink is narrower
+    /// than its square — the outer wail arc spans 62 of the 100 design units, plus
+    /// one stroke width (4.5) — so a 96-point mark draws about 64 points wide and a
+    /// 48-point one about 32.
+    /// Mutation-proof: set `Size.emptyStateMark` back to 48 and both screens fail.
+    func testTheEmptyStateMarkIsDrawnAtItsRuledSize() async throws {
+        let ruledSide: CGFloat = 96
+        let expected = ruledSide * (62 + 4.5) / 100
+        let empty = try await screens().filter { $0.name.hasSuffix("-empty") }
+        XCTAssertEqual(empty.map(\.name), ["history-empty", "alerts-empty"])
+        for screen in empty {
+            let width = try drawnMarkWidth(try draw(screen, .light))
+            XCTAssertEqual(
+                width, expected, accuracy: 3,
+                "\(screen.name): the mark is drawn \(width) pt wide, not the \(expected) of a \(ruledSide)-pt mark")
+        }
+    }
+
     /// A render with this few distinct colours is a backdrop, not a screen.
     static let colourFloor = 12
 
