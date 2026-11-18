@@ -4,6 +4,18 @@
 [advisories]
 version = 2
 yanked = "deny"
+# Every ignore carries a dated reason, a review-by date, and the bead that
+# removes it. Delete the entry the moment the dependency is gone.
+ignore = [
+    # chrono 0.4.45 <- banshee-core, banshee-api (direct dependency). The
+    # advisory is an unmaintained notice (informational), not a vulnerability;
+    # there is no patched version and no drop-in replacement (jiff and time
+    # are different APIs). chrono carries every stored and wire timestamp:
+    # DateTime<Utc> on samples, censuses, rollups and alert episodes, the
+    # RFC 3339 microsecond wire format (banshee-core/src/wire_time.rs, pinned
+    # by the shared fixtures), and the TEXT timestamp columns in SQLite.
+    { id = "RUSTSEC-2026-0543", reason = "2026-11-17 agent judgment, STAGED PENDING TED'S RULING: chrono is unmaintained (informational notice, no vulnerability attached, no patched version); no drop-in replacement, and chrono carries the wire-format and stored timestamps, so a swap is a planned migration, not a bump. Review by 2027-02-15. Migration tracked in banshee-3h3." },
+]
 
 [licenses]
 version = 2
