@@ -14,7 +14,7 @@ ignore = [
     # DateTime<Utc> on samples, censuses, rollups and alert episodes, the
     # RFC 3339 microsecond wire format (banshee-core/src/wire_time.rs, pinned
     # by the shared fixtures), and the TEXT timestamp columns in SQLite.
-    { id = "RUSTSEC-2026-0543", reason = "2026-11-17 agent judgment, STAGED PENDING TED'S RULING: chrono is unmaintained (informational notice, no vulnerability attached, no patched version); no drop-in replacement, and chrono carries the wire-format and stored timestamps, so a swap is a planned migration, not a bump. Review by 2027-02-15. Migration tracked in banshee-3h3." },
+    { id = "RUSTSEC-2026-0543", reason = "Ted's ruling 2026-11-17 (dated ignore): chrono is unmaintained (informational notice, no vulnerability attached, no patched version); no drop-in replacement, and chrono carries the wire-format and stored timestamps, so a swap is a planned migration, not a bump. Review by 2027-02-15. Migration tracked in banshee-3h3." },
 ]
 
 [licenses]
