@@ -56,14 +56,27 @@ final class MenuBarGlyphTests: XCTestCase {
 
     /// The update badge draws REAL pixels (banshee-xpu). Compared as rendered bytes,
     /// because the badge is the whole gentle reminder in the menu bar and an
-    /// invisible reminder is the failure this file exists to catch. Mutation-proof:
-    /// remove the `fill()` and the two renderings are identical.
+    /// invisible reminder is the failure this file exists to catch.
+    ///
+    /// The byte comparison alone became a FALSE PIN when the knockout ring landed
+    /// (banshee-v54.8): the ring's `.clear` fill changes the bytes by itself, so a
+    /// badge that punched its hole and never filled the dot still "rendered
+    /// differently". Two properties co-varied (the ring changes pixels, the dot
+    /// changes pixels) and the fixture could not tell them apart. So the dot is
+    /// asserted directly: its centre sits inside the cleared hole, and only the
+    /// dot's own `fill()` can make that point opaque. Mutation-proof: remove the
+    /// dot's `fill()` and the centre is transparent
+    /// (`.mutations/menubar-glyph-badge-draws.mut`).
     func testABadgedGlyphRendersDifferentlyFromAnUnbadgedOne() throws {
         let plain = try XCTUnwrap(MenuBarGlyph.image(for: "😴"))
         let badged = try XCTUnwrap(MenuBarGlyph.image(for: "😴", badged: true))
         XCTAssertNotEqual(
             plain.tiffRepresentation, badged.tiffRepresentation,
             "the badge must change what is drawn, or it is not a reminder")
+        let r = MenuBarGlyph.badgeDiameter / 2
+        XCTAssertGreaterThan(
+            alpha(try bitmap(badged), x: badged.size.width - r, y: badged.size.height - r), 0.9,
+            "the dot itself must be drawn: a hole with nothing in it is not a reminder")
     }
 
     // ---- the knockout ring (banshee-v54.8) -----------------------------------
