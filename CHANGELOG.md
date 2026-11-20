@@ -6,6 +6,8 @@ All notable changes to Banshee. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-19
+
 ### Changed
 
 - **BREAKING (wire): the middle band is `amber`, not `yellow`** (banshee-v54.1).

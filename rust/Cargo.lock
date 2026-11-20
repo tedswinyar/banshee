@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "banshee-api"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "axum",
  "banshee-core",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "banshee-cli"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "banshee-core",
  "clap",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "banshee-core"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "banshee-mcp"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "banshee-core",
  "dirs",
